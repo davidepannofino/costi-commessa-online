@@ -6,22 +6,16 @@ import {
 import {
   LayoutDashboard, FolderKanban, Users, Database, Plus, Trash2, Pencil, Upload, Download,
   FileSpreadsheet, FileText, AlertTriangle, CheckCircle2, X, ChevronRight, ChevronLeft,
-  Search, RotateCcw, Save, Eraser, Info, FileDown,
+  Search, RotateCcw, Save, Eraser, Info, FileDown, LogOut,
 } from "lucide-react";
-import { datiAPI } from "./datiAPI.js";
+import { datiAPI, suSessioneScaduta, API_BASE } from "./datiAPI.js";
+import { leggiToken, salvaToken, cancellaToken } from "./auth.js";
 
 /* ============================================================================
    CONTROLLO COSTI COMMESSA — v3
    Registra le ore per dipendente/commessa/giorno e calcola il costo del lavoro
    per commessa su un intervallo di date qualsiasi.
    ========================================================================== */
-
-/**
- * Id dell'azienda passato a datiAPI. Il backend (oggi mono-azienda, vedi
- * schema.sql) lo ignora e usa sempre la sua AZIENDA_ID configurata lato
- * server; qui resta per compatibilità di firma e per la futura Tappa 2 (login).
- */
-const AZIENDA_ID = "default";
 
 /* ---------------------------------------------------------------------------
    UTILITÀ — formati italiani, date, id
@@ -535,10 +529,101 @@ const Sezione = ({ titolo, extra, children }) => (
   </section>
 );
 
+/** Schermata iniziale (nessun token valido): accesso o registrazione di una
+ *  nuova azienda. Il backend distingue i dati solo in base al token qui ottenuto. */
+function SchermataAccesso({ alSuccesso, messaggio }) {
+  const [modo, setModo] = useState("accedi"); // "accedi" | "registrati"
+  const [nomeAzienda, setNomeAzienda] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [caricando, setCaricando] = useState(false);
+  const [errore, setErrore] = useState(messaggio || null);
+
+  const cambiaModo = (m) => { setModo(m); setErrore(null); };
+
+  const invia = async (e) => {
+    e.preventDefault();
+    setErrore(null);
+    setCaricando(true);
+    try {
+      const percorso = modo === "accedi" ? "/api/login" : "/api/registrazione";
+      const corpo = modo === "accedi" ? { email, password } : { nomeAzienda, email, password };
+      const res = await fetch(`${API_BASE}${percorso}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(corpo),
+      });
+      const dati = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErrore(dati.errore || "Non è stato possibile completare l'operazione.");
+        return;
+      }
+      salvaToken(dati.token);
+      alSuccesso();
+    } catch (e) {
+      setErrore("Impossibile contattare il server. Riprova più tardi.");
+    } finally {
+      setCaricando(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: "var(--tela)", color: "var(--txt)" }}>
+      <StileGlobale />
+      <div className="w-full max-w-sm rounded-2xl p-7" style={{ background: "var(--card)", boxShadow: "var(--ombra-lg)" }}>
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center f-display text-sm shrink-0" style={{ background: "linear-gradient(160deg,#2A313C,#1A1F27)", color: "#EDEAE2" }}>C</div>
+          <div className="f-display text-[15px]">Costi Commessa</div>
+        </div>
+
+        <div className="flex mb-6 rounded-lg p-1" style={{ background: "var(--velo)" }}>
+          <button type="button" onClick={() => cambiaModo("accedi")}
+            className="flex-1 text-sm font-medium rounded-md py-1.5 transition-colors"
+            style={modo === "accedi" ? { background: "var(--card)", color: "var(--txt)", boxShadow: "var(--ombra-xs)" } : { color: "var(--muted)" }}>
+            Accedi
+          </button>
+          <button type="button" onClick={() => cambiaModo("registrati")}
+            className="flex-1 text-sm font-medium rounded-md py-1.5 transition-colors"
+            style={modo === "registrati" ? { background: "var(--card)", color: "var(--txt)", boxShadow: "var(--ombra-xs)" } : { color: "var(--muted)" }}>
+            Registrati
+          </button>
+        </div>
+
+        <form onSubmit={invia} className="space-y-4">
+          {modo === "registrati" && (
+            <Campo etichetta="Nome azienda">
+              <input className={inputCls} value={nomeAzienda} onChange={(e) => setNomeAzienda(e.target.value)} required autoFocus />
+            </Campo>
+          )}
+          <Campo etichetta="Email">
+            <input type="email" className={inputCls} value={email} onChange={(e) => setEmail(e.target.value)} required />
+          </Campo>
+          <Campo etichetta="Password">
+            <input type="password" className={inputCls} value={password} onChange={(e) => setPassword(e.target.value)}
+              minLength={modo === "registrati" ? 8 : undefined} required />
+          </Campo>
+
+          {errore && (
+            <p className="text-sm flex items-start gap-1.5" style={{ color: "#A63A32" }}>
+              <AlertTriangle size={14} strokeWidth={1.75} className="mt-0.5 shrink-0" /> {errore}
+            </p>
+          )}
+
+          <Bottone type="submit" variante="accento" className="w-full" disabled={caricando}>
+            {caricando ? "Attendere…" : modo === "accedi" ? "Accedi" : "Crea account"}
+          </Bottone>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 /* ---------------------------------------------------------------------------
    APPLICAZIONE
 --------------------------------------------------------------------------- */
 export default function App() {
+  const [token, setToken] = useState(() => leggiToken());
+  const [messaggioAccesso, setMessaggioAccesso] = useState(null);
   const [caricamento, setCaricamento] = useState(true);
   const [dipendenti, setDipendenti] = useState([]);
   const [commesse, setCommesse] = useState([]);
@@ -569,16 +654,37 @@ export default function App() {
   --------------------------------------------------------------------- */
   const pronto = useRef(false);
 
+  /** Token non più valido (scaduto o rifiutato dal server): torna alla
+   *  schermata di accesso con un messaggio chiaro, senza dettagli tecnici. */
   useEffect(() => {
+    suSessioneScaduta(() => {
+      cancellaToken();
+      pronto.current = false;
+      setCaricamento(true);
+      setMessaggioAccesso("La sessione è scaduta: accedi di nuovo.");
+      setToken(null);
+    });
+  }, []);
+
+  const uscire = useCallback(() => {
+    cancellaToken();
+    pronto.current = false;
+    setCaricamento(true);
+    setDipendenti([]); setCommesse([]); setRegistrazioni([]); setAzienda("");
+    setMessaggioAccesso(null);
+    setToken(null);
+  }, []);
+
+  useEffect(() => {
+    if (!token) return;
     let annullato = false;
     (async () => {
-      const { dati, primoAvvio, avviso } = await datiAPI.carica(AZIENDA_ID);
+      const { dati, avviso } = await datiAPI.carica();
       if (annullato) return;
       if (avviso) notifica(avviso, "avviso");
-      if (primoAvvio || !dati) {
-        const d = creaDatiEsempio();
-        setDipendenti(d.dipendenti); setCommesse(d.commesse); setRegistrazioni(d.registrazioni);
-      } else {
+      // Un'azienda appena registrata parte sempre vuota: i dati d'esempio restano
+      // disponibili solo su richiesta esplicita (pulsante "Ricarica dati d'esempio").
+      if (dati) {
         setDipendenti(Array.isArray(dati.dipendenti) ? dati.dipendenti : []);
         setCommesse(Array.isArray(dati.commesse) ? dati.commesse : []);
         setRegistrazioni(Array.isArray(dati.registrazioni) ? dati.registrazioni : []);
@@ -588,12 +694,12 @@ export default function App() {
       setCaricamento(false);
     })();
     return () => { annullato = true; };
-  }, [notifica]);
+  }, [token, notifica]);
 
   useEffect(() => {
     if (!pronto.current) return;
     const t = setTimeout(() => {
-      datiAPI.salva(AZIENDA_ID, { dipendenti, commesse, registrazioni, azienda });
+      datiAPI.salva(null, { dipendenti, commesse, registrazioni, azienda });
     }, 600);
     return () => clearTimeout(t);
   }, [dipendenti, commesse, registrazioni, azienda]);
@@ -601,7 +707,7 @@ export default function App() {
   /** Salvataggio immediato + snapshot di sicurezza forzato, per le operazioni
    *  che cambiano molti dati in un colpo (import, svuota, ripristino). */
   const salvaSubitoConBackup = useCallback((patch) => {
-    datiAPI.salva(AZIENDA_ID, {
+    datiAPI.salva(null, {
       dipendenti: patch.dipendenti ?? dipendenti,
       commesse: patch.commesse ?? commesse,
       registrazioni: patch.registrazioni ?? registrazioni,
@@ -670,7 +776,7 @@ export default function App() {
 
   /** "Backup (JSON)": salva su un file scelto dall'utente sul PC (non più un download del browser). */
   const backupJSON = async () => {
-    const ris = await datiAPI.backupEsporta(AZIENDA_ID, { azienda, dipendenti, commesse, registrazioni });
+    const ris = await datiAPI.backupEsporta(null, { azienda, dipendenti, commesse, registrazioni });
     if (ris.ok) notifica("Backup salvato: " + ris.percorso);
     else if (!ris.annullato) notifica("Non è stato possibile salvare il backup.", "errore");
   };
@@ -744,6 +850,10 @@ export default function App() {
   const costoLive = useContatore(riep ? riep.totCosto : 0);
   const pianoConflitto = flussoImport ? flussoImport.piani[flussoImport.conflitti[flussoImport.idx]] : null;
 
+  if (!token) {
+    return <SchermataAccesso messaggio={messaggioAccesso} alSuccesso={() => { setMessaggioAccesso(null); setToken(leggiToken()); }} />;
+  }
+
   if (caricamento) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--tela)", color: "var(--txt)" }}>
@@ -774,7 +884,12 @@ export default function App() {
             </button>
           ))}
         </nav>
-        <div className="mt-auto px-6 py-5 text-xs leading-relaxed" style={{ color: "#5A616C" }}>
+        <div className="mt-auto px-3 pb-3">
+          <button onClick={uscire} className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm transition-colors btn" style={{ color: "#8B929C", fontWeight: 500 }}>
+            <LogOut size={17} strokeWidth={1.75} /> Esci
+          </button>
+        </div>
+        <div className="px-6 pb-5 text-xs leading-relaxed" style={{ color: "#5A616C" }}>
           Costo del lavoro per commessa.<br />Calcoli in piena precisione.
         </div>
       </aside>
@@ -815,6 +930,9 @@ export default function App() {
                 <Micro tono="#828A95">Ore</Micro>
                 <p className="f-mono text-[26px] md:text-[30px] font-normal leading-none mt-1" style={{ color: "#D9D6CD" }}>{riep ? fmtOre.format(riep.totOre) : "—"}</p>
               </div>
+              <button onClick={uscire} aria-label="Esci" title="Esci" className="lg:hidden p-2 rounded-lg btn tasto-scuro" style={{ color: "#8B929C" }}>
+                <LogOut size={16} strokeWidth={1.75} />
+              </button>
             </div>
           </div>
           {erroreIntervallo && (

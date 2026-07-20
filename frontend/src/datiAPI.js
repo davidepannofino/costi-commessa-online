@@ -8,12 +8,27 @@
  * separati con URL diversi: VITE_API_URL (impostata a build-time) punta al
  * backend pubblicato.
  */
-const API_BASE = import.meta.env.VITE_API_URL || "";
+import { leggiToken } from "./auth.js";
+
+export const API_BASE = import.meta.env.VITE_API_URL || "";
+
+/** Impostata da App.jsx: chiamata quando il server rifiuta il token (scaduto
+ *  o non valido), per riportare l'utente alla schermata di accesso. */
+let gestoreSessioneScaduta = null;
+export function suSessioneScaduta(fn) {
+  gestoreSessioneScaduta = fn;
+}
+
+const headerAuth = () => ({ Authorization: `Bearer ${leggiToken() || ""}` });
 
 export const datiAPI = {
   async carica() {
     try {
-      const res = await fetch(`${API_BASE}/api/stato`);
+      const res = await fetch(`${API_BASE}/api/stato`, { headers: headerAuth() });
+      if (res.status === 401) {
+        gestoreSessioneScaduta?.();
+        return { dati: null, primoAvvio: true, avviso: null };
+      }
       if (!res.ok) throw new Error(`Il server ha risposto con l'errore ${res.status}.`);
       const dati = await res.json();
       const vuoto =
@@ -34,9 +49,10 @@ export const datiAPI = {
     try {
       const res = await fetch(`${API_BASE}/api/stato`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...headerAuth() },
         body: JSON.stringify(dati),
       });
+      if (res.status === 401) { gestoreSessioneScaduta?.(); return; }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
     } catch (e) {
       console.error("Salvataggio non riuscito:", e);

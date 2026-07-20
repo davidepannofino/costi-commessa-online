@@ -1,12 +1,19 @@
 -- Schema del database — Costi Commessa
 -- Pensato per più aziende fin da subito: ogni tabella ha una colonna azienda_id.
--- Oggi si usa sempre lo stesso valore fisso ('azienda-prova'); in futuro (Tappa 2,
--- login) basterà popolare azienda_id con l'azienda dell'utente autenticato, senza
--- toccare questa struttura.
+-- Tappa 2 (login): azienda_id viene ora popolato con l'azienda dell'utente
+-- autenticato (tabella utenti), non più con un valore fisso.
 
 CREATE TABLE IF NOT EXISTS aziende (
   id   TEXT PRIMARY KEY,
   nome TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS utenti (
+  id             SERIAL PRIMARY KEY,
+  azienda_id     TEXT UNIQUE NOT NULL REFERENCES aziende(id),
+  email          TEXT UNIQUE NOT NULL,
+  password_hash  TEXT NOT NULL,
+  creato_il      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS dipendenti (
