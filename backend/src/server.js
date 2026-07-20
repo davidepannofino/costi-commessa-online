@@ -1,15 +1,18 @@
 import express from "express";
 import cors from "cors";
 import "dotenv/config";
-import { randomUUID } from "node:crypto";
+import { randomUUID, randomBytes, createHash } from "node:crypto";
 import { pool } from "./db.js";
 import { cifraPassword, verificaPassword, generaToken, richiedeAuth } from "./auth.js";
+import { inviaEmailResetPassword } from "./email.js";
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const FRONTEND_URL = process.env.FRONTEND_URL || "https://costi-commessa-frontend.onrender.com";
+const SCADENZA_RESET_MS = 60 * 60 * 1000; // 1 ora
 
 app.get("/api/salute", (req, res) => res.json({ ok: true }));
 
@@ -71,6 +74,75 @@ app.post("/api/login", async (req, res) => {
   } catch (e) {
     console.error(e);
     res.status(500).json({ errore: "Impossibile effettuare l'accesso." });
+  }
+});
+
+/**
+ * Se l'email esiste, genera un token di reset e manda l'email con il link.
+ * La risposta è sempre la stessa, esista o meno l'email: non deve mai
+ * rivelare se un indirizzo è registrato nel sistema.
+ */
+app.post("/api/password-dimenticata", async (req, res) => {
+  const { email = "" } = req.body || {};
+  const mail = String(email).trim().toLowerCase();
+  const rispostaGenerica = { ok: true, messaggio: "Se l'indirizzo esiste, riceverai un'email con le istruzioni." };
+
+  if (!EMAIL_RE.test(mail)) return res.json(rispostaGenerica);
+
+  try {
+    const utente = await pool.query("SELECT id FROM utenti WHERE email = $1", [mail]);
+    if (utente.rows.length > 0) {
+      const token = randomBytes(32).toString("hex");
+      const tokenHash = createHash("sha256").update(token).digest("hex");
+      const scadeIl = new Date(Date.now() + SCADENZA_RESET_MS);
+      await pool.query(
+        "INSERT INTO reset_password (utente_id, token_hash, scade_il) VALUES ($1, $2, $3)",
+        [utente.rows[0].id, tokenHash, scadeIl]
+      );
+      const link = `${FRONTEND_URL}/?token=${token}`;
+      inviaEmailResetPassword(mail, link).catch((e) => console.error("Invio email di reset non riuscito:", e));
+    }
+  } catch (e) {
+    console.error(e);
+    // La risposta resta identica anche in caso di errore interno: stessa regola di non-rivelazione.
+  }
+
+  res.json(rispostaGenerica);
+});
+
+/** Verifica il token di reset e, se valido e non scaduto/usato, aggiorna la password. */
+app.post("/api/reset-password", async (req, res) => {
+  const { token = "", password = "" } = req.body || {};
+  if (String(password).length < 8) {
+    return res.status(400).json({ errore: "La password deve avere almeno 8 caratteri." });
+  }
+  const tokenHash = createHash("sha256").update(String(token)).digest("hex");
+
+  const client = await pool.connect();
+  try {
+    const ris = await client.query(
+      "SELECT id, utente_id, scade_il, usato FROM reset_password WHERE token_hash = $1",
+      [tokenHash]
+    );
+    const riga = ris.rows[0];
+    if (!riga) return res.status(400).json({ errore: "Il link non è valido." });
+    if (riga.usato) return res.status(400).json({ errore: "Questo link è già stato usato. Richiedi un nuovo reset." });
+    if (new Date(riga.scade_il) < new Date()) {
+      return res.status(400).json({ errore: "Il link è scaduto. Richiedi un nuovo reset." });
+    }
+
+    const hash = await cifraPassword(password);
+    await client.query("BEGIN");
+    await client.query("UPDATE utenti SET password_hash = $1 WHERE id = $2", [hash, riga.utente_id]);
+    await client.query("UPDATE reset_password SET usato = true WHERE id = $1", [riga.id]);
+    await client.query("COMMIT");
+    res.json({ ok: true });
+  } catch (e) {
+    await client.query("ROLLBACK");
+    console.error(e);
+    res.status(500).json({ errore: "Impossibile reimpostare la password." });
+  } finally {
+    client.release();
   }
 });
 

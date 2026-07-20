@@ -541,7 +541,22 @@ function SchermataAccesso({ alSuccesso, messaggio }) {
   // stessi colori usati altrove per gli avvisi), "errore" per credenziali/validazione (tono rosso).
   const [messaggioForm, setMessaggioForm] = useState(messaggio ? { testo: messaggio, tipo: "avviso" } : null);
 
-  const cambiaModo = (m) => { setModo(m); setMessaggioForm(null); };
+  // Sotto-flusso "Password dimenticata?", raggiungibile solo da modo === "accedi".
+  const [vistaRecupero, setVistaRecupero] = useState(false);
+  const [emailRecupero, setEmailRecupero] = useState("");
+  const [caricandoRecupero, setCaricandoRecupero] = useState(false);
+  const [messaggioRecupero, setMessaggioRecupero] = useState(null);
+  const [inviatoRecupero, setInviatoRecupero] = useState(false);
+
+  const cambiaModo = (m) => { setModo(m); setMessaggioForm(null); setVistaRecupero(false); };
+
+  const apriRecupero = () => {
+    setVistaRecupero(true);
+    setEmailRecupero(email);
+    setMessaggioRecupero(null);
+    setInviatoRecupero(false);
+  };
+  const chiudiRecupero = () => { setVistaRecupero(false); setMessaggioRecupero(null); };
 
   const invia = async (e) => {
     e.preventDefault();
@@ -566,6 +581,27 @@ function SchermataAccesso({ alSuccesso, messaggio }) {
       setMessaggioForm({ testo: "Impossibile contattare il server. Riprova più tardi.", tipo: "errore" });
     } finally {
       setCaricando(false);
+    }
+  };
+
+  /** Richiesta di reset: la risposta del server è sempre generica (nessuna
+   *  distinzione visibile tra email esistente o meno), quindi qui mostriamo
+   *  sempre la stessa conferma, indipendentemente dall'esito. */
+  const inviaRecupero = async (e) => {
+    e.preventDefault();
+    setMessaggioRecupero(null);
+    setCaricandoRecupero(true);
+    try {
+      await fetch(`${API_BASE}/api/password-dimenticata`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: emailRecupero }),
+      });
+      setInviatoRecupero(true);
+    } catch (e) {
+      setMessaggioRecupero({ testo: "Impossibile contattare il server. Riprova più tardi.", tipo: "errore" });
+    } finally {
+      setCaricandoRecupero(false);
     }
   };
 
@@ -617,72 +653,205 @@ function SchermataAccesso({ alSuccesso, messaggio }) {
           </div>
 
           <div className="rounded-2xl p-7" style={{ background: "var(--card)", boxShadow: "var(--ombra-lg)" }}>
-            <p className="f-display text-xl mb-1">{modo === "accedi" ? "Bentornato" : "Crea il tuo account"}</p>
-            <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>
-              {modo === "accedi" ? "Accedi per continuare a gestire i costi delle tue commesse." : "Un account per azienda: dati separati e al sicuro."}
-            </p>
+            {vistaRecupero ? (
+              <>
+                <p className="f-display text-xl mb-1">Recupera la password</p>
+                <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>
+                  Inserisci l'email del tuo account: se esiste, ti mandiamo un link per reimpostare la password.
+                </p>
 
-            <div className="relative flex mb-6 rounded-lg p-1" style={{ background: "var(--velo)" }}>
-              <div className="absolute top-1 bottom-1 rounded-md transition-transform duration-300 ease-out"
-                style={{ width: "calc(50% - 4px)", left: 4, background: "var(--card)", boxShadow: "var(--ombra-xs)", transform: modo === "registrati" ? "translateX(100%)" : "translateX(0)" }} />
-              <button type="button" onClick={() => cambiaModo("accedi")}
-                className="relative z-10 flex-1 text-sm font-medium rounded-md py-1.5 transition-colors"
-                style={{ color: modo === "accedi" ? "var(--txt)" : "var(--muted)" }}>
-                Accedi
-              </button>
-              <button type="button" onClick={() => cambiaModo("registrati")}
-                className="relative z-10 flex-1 text-sm font-medium rounded-md py-1.5 transition-colors"
-                style={{ color: modo === "registrati" ? "var(--txt)" : "var(--muted)" }}>
-                Registrati
-              </button>
-            </div>
-
-            <form onSubmit={invia} className="space-y-4">
-              {modo === "registrati" && (
-                <Campo etichetta="Nome azienda">
-                  <div className="relative">
-                    <Building2 size={15} strokeWidth={1.75} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--muted)" }} />
-                    <input className={inputCls + " pl-9"} value={nomeAzienda} onChange={(e) => setNomeAzienda(e.target.value)} placeholder="es. Rossi Costruzioni S.r.l." required autoFocus />
-                  </div>
-                </Campo>
-              )}
-              <Campo etichetta="Email">
-                <div className="relative">
-                  <Mail size={15} strokeWidth={1.75} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--muted)" }} />
-                  <input type="email" className={inputCls + " pl-9"} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="nome@azienda.it" required />
-                </div>
-              </Campo>
-              <Campo etichetta="Password">
-                <div className="relative">
-                  <Lock size={15} strokeWidth={1.75} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--muted)" }} />
-                  <input type="password" className={inputCls + " pl-9"} value={password} onChange={(e) => setPassword(e.target.value)}
-                    placeholder={modo === "registrati" ? "Almeno 8 caratteri" : "••••••••"}
-                    minLength={modo === "registrati" ? 8 : undefined} required />
-                </div>
-              </Campo>
-
-              {messaggioForm && (
-                messaggioForm.tipo === "avviso" ? (
+                {inviatoRecupero ? (
                   <div className="flex items-start gap-2.5 rounded-xl px-3.5 py-3 text-sm anim-pop" style={{ background: "var(--velo-accento)", border: "1px solid rgba(154,120,58,.18)", color: "#7C6027" }}>
-                    <AlertTriangle size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" /> {messaggioForm.testo}
+                    <CheckCircle2 size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
+                    Controlla la tua email: se l'indirizzo esiste, riceverai a breve un link per reimpostare la password.
                   </div>
                 ) : (
-                  <div className="flex items-start gap-2.5 rounded-xl px-3.5 py-3 text-sm anim-pop" style={{ background: "rgba(166,58,50,.07)", border: "1px solid rgba(166,58,50,.2)", color: "#A63A32" }}>
-                    <AlertTriangle size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" /> {messaggioForm.testo}
-                  </div>
-                )
-              )}
+                  <form onSubmit={inviaRecupero} className="space-y-4">
+                    <Campo etichetta="Email">
+                      <div className="relative">
+                        <Mail size={15} strokeWidth={1.75} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--muted)" }} />
+                        <input type="email" className={inputCls + " pl-9"} value={emailRecupero} onChange={(e) => setEmailRecupero(e.target.value)} placeholder="nome@azienda.it" required autoFocus />
+                      </div>
+                    </Campo>
 
-              <Bottone type="submit" variante="accento" className="w-full" disabled={caricando}>
-                {caricando ? <Loader2 size={15} strokeWidth={1.75} className="animate-spin" /> : <ArrowRight size={15} strokeWidth={1.75} />}
-                {caricando ? "Attendere…" : modo === "accedi" ? "Accedi" : "Crea account"}
-              </Bottone>
-            </form>
+                    {messaggioRecupero && (
+                      <div className="flex items-start gap-2.5 rounded-xl px-3.5 py-3 text-sm anim-pop" style={{ background: "rgba(166,58,50,.07)", border: "1px solid rgba(166,58,50,.2)", color: "#A63A32" }}>
+                        <AlertTriangle size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" /> {messaggioRecupero.testo}
+                      </div>
+                    )}
+
+                    <Bottone type="submit" variante="accento" className="w-full" disabled={caricandoRecupero}>
+                      {caricandoRecupero ? <Loader2 size={15} strokeWidth={1.75} className="animate-spin" /> : <ArrowRight size={15} strokeWidth={1.75} />}
+                      {caricandoRecupero ? "Invio…" : "Invia link di reset"}
+                    </Bottone>
+                  </form>
+                )}
+
+                <button type="button" onClick={chiudiRecupero} className="text-xs mt-5 block mx-auto btn" style={{ color: "var(--muted)" }}>
+                  ← Torna al login
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="f-display text-xl mb-1">{modo === "accedi" ? "Bentornato" : "Crea il tuo account"}</p>
+                <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>
+                  {modo === "accedi" ? "Accedi per continuare a gestire i costi delle tue commesse." : "Un account per azienda: dati separati e al sicuro."}
+                </p>
+
+                <div className="relative flex mb-6 rounded-lg p-1" style={{ background: "var(--velo)" }}>
+                  <div className="absolute top-1 bottom-1 rounded-md transition-transform duration-300 ease-out"
+                    style={{ width: "calc(50% - 4px)", left: 4, background: "var(--card)", boxShadow: "var(--ombra-xs)", transform: modo === "registrati" ? "translateX(100%)" : "translateX(0)" }} />
+                  <button type="button" onClick={() => cambiaModo("accedi")}
+                    className="relative z-10 flex-1 text-sm font-medium rounded-md py-1.5 transition-colors"
+                    style={{ color: modo === "accedi" ? "var(--txt)" : "var(--muted)" }}>
+                    Accedi
+                  </button>
+                  <button type="button" onClick={() => cambiaModo("registrati")}
+                    className="relative z-10 flex-1 text-sm font-medium rounded-md py-1.5 transition-colors"
+                    style={{ color: modo === "registrati" ? "var(--txt)" : "var(--muted)" }}>
+                    Registrati
+                  </button>
+                </div>
+
+                <form onSubmit={invia} className="space-y-4">
+                  {modo === "registrati" && (
+                    <Campo etichetta="Nome azienda">
+                      <div className="relative">
+                        <Building2 size={15} strokeWidth={1.75} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--muted)" }} />
+                        <input className={inputCls + " pl-9"} value={nomeAzienda} onChange={(e) => setNomeAzienda(e.target.value)} placeholder="es. Rossi Costruzioni S.r.l." required autoFocus />
+                      </div>
+                    </Campo>
+                  )}
+                  <Campo etichetta="Email">
+                    <div className="relative">
+                      <Mail size={15} strokeWidth={1.75} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--muted)" }} />
+                      <input type="email" className={inputCls + " pl-9"} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="nome@azienda.it" required />
+                    </div>
+                  </Campo>
+                  <Campo etichetta="Password">
+                    <div className="relative">
+                      <Lock size={15} strokeWidth={1.75} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--muted)" }} />
+                      <input type="password" className={inputCls + " pl-9"} value={password} onChange={(e) => setPassword(e.target.value)}
+                        placeholder={modo === "registrati" ? "Almeno 8 caratteri" : "••••••••"}
+                        minLength={modo === "registrati" ? 8 : undefined} required />
+                    </div>
+                  </Campo>
+
+                  {modo === "accedi" && (
+                    <button type="button" onClick={apriRecupero} className="text-xs -mt-2 btn" style={{ color: "var(--muted)" }}>
+                      Password dimenticata?
+                    </button>
+                  )}
+
+                  {messaggioForm && (
+                    messaggioForm.tipo === "avviso" ? (
+                      <div className="flex items-start gap-2.5 rounded-xl px-3.5 py-3 text-sm anim-pop" style={{ background: "var(--velo-accento)", border: "1px solid rgba(154,120,58,.18)", color: "#7C6027" }}>
+                        <AlertTriangle size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" /> {messaggioForm.testo}
+                      </div>
+                    ) : (
+                      <div className="flex items-start gap-2.5 rounded-xl px-3.5 py-3 text-sm anim-pop" style={{ background: "rgba(166,58,50,.07)", border: "1px solid rgba(166,58,50,.2)", color: "#A63A32" }}>
+                        <AlertTriangle size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" /> {messaggioForm.testo}
+                      </div>
+                    )
+                  )}
+
+                  <Bottone type="submit" variante="accento" className="w-full" disabled={caricando}>
+                    {caricando ? <Loader2 size={15} strokeWidth={1.75} className="animate-spin" /> : <ArrowRight size={15} strokeWidth={1.75} />}
+                    {caricando ? "Attendere…" : modo === "accedi" ? "Accedi" : "Crea account"}
+                  </Bottone>
+                </form>
+              </>
+            )}
           </div>
 
           <p className="text-center text-xs mt-5" style={{ color: "var(--muted)" }}>
             Costo del lavoro per commessa. Calcoli in piena precisione.
           </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Pagina raggiunta dal link nell'email di reset (?token=... sulla root):
+ *  imposta una nuova password, poi torna alla schermata di accesso. */
+function PaginaResetPassword({ token, alSuccesso }) {
+  const [password, setPassword] = useState("");
+  const [conferma, setConferma] = useState("");
+  const [caricando, setCaricando] = useState(false);
+  const [messaggioForm, setMessaggioForm] = useState(null); // { testo, tipo: "errore" }
+
+  const invia = async (e) => {
+    e.preventDefault();
+    setMessaggioForm(null);
+    if (password.length < 8) {
+      setMessaggioForm({ testo: "La password deve avere almeno 8 caratteri.", tipo: "errore" });
+      return;
+    }
+    if (password !== conferma) {
+      setMessaggioForm({ testo: "Le due password non coincidono.", tipo: "errore" });
+      return;
+    }
+    setCaricando(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/reset-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, password }),
+      });
+      const dati = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setMessaggioForm({ testo: dati.errore || "Non è stato possibile reimpostare la password.", tipo: "errore" });
+        return;
+      }
+      alSuccesso("Password aggiornata: accedi con la nuova password.");
+    } catch (e) {
+      setMessaggioForm({ testo: "Impossibile contattare il server. Riprova più tardi.", tipo: "errore" });
+    } finally {
+      setCaricando(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: "var(--tela)", color: "var(--txt)" }}>
+      <StileGlobale />
+      <div className="w-full max-w-sm">
+        <div className="flex items-center gap-3 mb-8 justify-center">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center f-display text-sm shrink-0" style={{ background: "linear-gradient(160deg,#2A313C,#1A1F27)", color: "#EDEAE2" }}>C</div>
+          <div className="f-display text-[15px]">Costi Commessa</div>
+        </div>
+
+        <div className="rounded-2xl p-7" style={{ background: "var(--card)", boxShadow: "var(--ombra-lg)" }}>
+          <p className="f-display text-xl mb-1">Imposta una nuova password</p>
+          <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>Scegli una nuova password per il tuo account.</p>
+
+          <form onSubmit={invia} className="space-y-4">
+            <Campo etichetta="Nuova password">
+              <div className="relative">
+                <Lock size={15} strokeWidth={1.75} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--muted)" }} />
+                <input type="password" className={inputCls + " pl-9"} value={password} onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Almeno 8 caratteri" minLength={8} required autoFocus />
+              </div>
+            </Campo>
+            <Campo etichetta="Conferma nuova password">
+              <div className="relative">
+                <Lock size={15} strokeWidth={1.75} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--muted)" }} />
+                <input type="password" className={inputCls + " pl-9"} value={conferma} onChange={(e) => setConferma(e.target.value)}
+                  placeholder="Ripeti la password" minLength={8} required />
+              </div>
+            </Campo>
+
+            {messaggioForm && (
+              <div className="flex items-start gap-2.5 rounded-xl px-3.5 py-3 text-sm anim-pop" style={{ background: "rgba(166,58,50,.07)", border: "1px solid rgba(166,58,50,.2)", color: "#A63A32" }}>
+                <AlertTriangle size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" /> {messaggioForm.testo}
+              </div>
+            )}
+
+            <Bottone type="submit" variante="accento" className="w-full" disabled={caricando}>
+              {caricando ? <Loader2 size={15} strokeWidth={1.75} className="animate-spin" /> : <ArrowRight size={15} strokeWidth={1.75} />}
+              {caricando ? "Attendere…" : "Imposta la nuova password"}
+            </Bottone>
+          </form>
         </div>
       </div>
     </div>
@@ -695,6 +864,8 @@ function SchermataAccesso({ alSuccesso, messaggio }) {
 export default function App() {
   const [token, setToken] = useState(() => leggiToken());
   const [messaggioAccesso, setMessaggioAccesso] = useState(null);
+  // Link dell'email di reset password: "/?token=...". Letto una sola volta all'avvio.
+  const [tokenReset, setTokenReset] = useState(() => new URLSearchParams(window.location.search).get("token"));
   const [caricamento, setCaricamento] = useState(true);
   const [dipendenti, setDipendenti] = useState([]);
   const [commesse, setCommesse] = useState([]);
@@ -920,6 +1091,19 @@ export default function App() {
 
   const costoLive = useContatore(riep ? riep.totCosto : 0);
   const pianoConflitto = flussoImport ? flussoImport.piani[flussoImport.conflitti[flussoImport.idx]] : null;
+
+  if (tokenReset) {
+    return (
+      <PaginaResetPassword
+        token={tokenReset}
+        alSuccesso={(msg) => {
+          window.history.replaceState({}, "", window.location.pathname);
+          setTokenReset(null);
+          setMessaggioAccesso(msg);
+        }}
+      />
+    );
+  }
 
   if (!token) {
     return <SchermataAccesso messaggio={messaggioAccesso} alSuccesso={() => { setMessaggioAccesso(null); setToken(leggiToken()); }} />;

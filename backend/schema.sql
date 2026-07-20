@@ -16,6 +16,18 @@ CREATE TABLE IF NOT EXISTS utenti (
   creato_il      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Token per "password dimenticata": si salva solo l'hash del token (mai il
+-- valore mandato via email), scade dopo 1 ora, "usato" blocca il riutilizzo.
+CREATE TABLE IF NOT EXISTS reset_password (
+  id          SERIAL PRIMARY KEY,
+  utente_id   INTEGER NOT NULL REFERENCES utenti(id) ON DELETE CASCADE,
+  token_hash  TEXT UNIQUE NOT NULL,
+  scade_il    TIMESTAMPTZ NOT NULL,
+  usato       BOOLEAN NOT NULL DEFAULT false,
+  creato_il   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_reset_password_token ON reset_password(token_hash);
+
 CREATE TABLE IF NOT EXISTS dipendenti (
   id             TEXT PRIMARY KEY,
   azienda_id     TEXT NOT NULL REFERENCES aziende(id),
