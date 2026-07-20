@@ -166,6 +166,46 @@ function calcolaRiepilogo({ registrazioni, dipendenti, commesse, dal, al }) {
 // === CALC-END ===
 
 /* ---------------------------------------------------------------------------
+   ANDAMENTO NEL TEMPO — aggregazione su più mesi
+   Non duplica né reimplementa la logica di calcolo: chiama calcolaRiepilogo
+   UNA VOLTA per ciascun mese solare intero e ne aggrega i risultati.
+   Il mese solare è l'unità naturale perché le tariffe sono per definizione
+   mensili (lordo del mese / ore del mese, calcolate su TUTTE le registrazioni):
+   di conseguenza la somma dei mesi coincide sempre con il totale del periodo
+   corrispondente, senza scarti di arrotondamento introdotti qui.
+--------------------------------------------------------------------------- */
+const MAX_MESI_ANDAMENTO = 12;
+const fmtMeseBreve = (ym) => { const [y, m] = ym.split("-"); return `${MESI[+m - 1].slice(0, 3)} ${y.slice(2)}`; };
+
+/**
+ * Serie storiche per i grafici di andamento, calcolate in un solo passaggio:
+ *  - mesi:        [{ mese, costo, ore }] per gli ultimi MAX_MESI_ANDAMENTO mesi con dati
+ *  - perCommessa: Map(commessaId -> [{ mese, costo, ore }]) per il dettaglio commessa
+ * Chi la usa deve memoizzarla (useMemo) sui dati sottostanti: è l'unico punto
+ * in cui si paga il costo di più riepiloghi.
+ */
+function calcolaSerieMensile({ registrazioni, dipendenti, commesse }) {
+  const mesiConDati = [...new Set(registrazioni.map((r) => r.data.slice(0, 7)))].sort();
+  const mesi = mesiConDati.slice(-MAX_MESI_ANDAMENTO);
+
+  const serie = [];
+  const perCommessa = new Map();
+
+  for (const mese of mesi) {
+    const dal = mese + "-01";
+    const al = mese + "-" + String(ultimoGiornoMese(mese)).padStart(2, "0");
+    const r = calcolaRiepilogo({ registrazioni, dipendenti, commesse, dal, al });
+    serie.push({ mese, costo: r.totCosto, ore: r.totOre });
+    for (const riga of r.righe) {
+      const id = riga.commessa.id;
+      if (!perCommessa.has(id)) perCommessa.set(id, []);
+      perCommessa.get(id).push({ mese, costo: riga.costo, ore: riga.ore });
+    }
+  }
+  return { mesi: serie, perCommessa };
+}
+
+/* ---------------------------------------------------------------------------
    DATI D'ESEMPIO — luglio 2026, estratti dal file Excel reale.
    Sono SOLO dimostrativi: l'utente può cancellarli con "Svuota tutto".
 --------------------------------------------------------------------------- */
@@ -1365,6 +1405,15 @@ export default function App() {
     return calcolaRiepilogo({ registrazioni, dipendenti, commesse, dal, al });
   }, [registrazioni, dipendenti, commesse, dal, al, erroreIntervallo]);
 
+  /** Serie storiche per i grafici di andamento. Calcolata una sola volta e
+   *  condivisa fra Dashboard e pannello di dettaglio: dipende solo dai dati,
+   *  non dall'intervallo selezionato, quindi non si ricalcola quando si
+   *  cambiano le date o si naviga fra le viste. */
+  const serieMensile = useMemo(
+    () => calcolaSerieMensile({ registrazioni, dipendenti, commesse }),
+    [registrazioni, dipendenti, commesse]
+  );
+
   const meseIntero = dal && al && meseDi(dal) === meseDi(al) && dal.slice(8) === "01" && al.slice(8) === String(ultimoGiornoMese(meseDi(al))).padStart(2, "0");
   const vaiMese = (ym) => { setDal(ym + "-01"); setAl(ym + "-" + String(ultimoGiornoMese(ym)).padStart(2, "0")); };
   const scorriMese = (delta) => vaiMese(spostaMese(meseIntero ? meseDi(dal) : meseDi(dal || oggiISO()), delta));
@@ -1649,7 +1698,7 @@ export default function App() {
             </div>
           )}
 
-          {vista === "dashboard" && <Dashboard riep={riep} dal={dal} al={al} dipendenti={dipendenti} vaiCommesse={() => setVista("commesse")} vaiDati={() => setVista("dati")} haDati={registrazioni.length > 0} apri={setDettaglio} />}
+          {vista === "dashboard" && <Dashboard riep={riep} dal={dal} al={al} dipendenti={dipendenti} serieMensile={serieMensile} vaiCommesse={() => setVista("commesse")} vaiDati={() => setVista("dati")} haDati={registrazioni.length > 0} apri={setDettaglio} />}
           {vista === "commesse" && <VistaCommesse riep={riep} dal={dal} al={al} apri={setDettaglio} esportaCsv={() => riep && esportaCSV(riep.righe, riep.totOre, riep.totCosto, dal, al)} esportaXlsx={() => riep && esportaXLSX(riep.righe, riep.totOre, riep.totCosto, dal, al)} esportaTutto={() => esportaCompletoXLSX({ dipendenti, commesse, registrazioni }, dal, al)} stampa={stampaPDF} vaiDati={() => setVista("dati")} />}
           {vista === "dipendenti" && <VistaDipendenti dipendenti={dipendenti} setDipendenti={setDipendenti} riep={riep} elimina={eliminaDipendente} notifica={notifica} />}
           {vista === "dati" && (
@@ -1678,7 +1727,7 @@ export default function App() {
         ))}
       </nav>
 
-      {dettaglio && <PannelloDettaglio riga={dettaglio} riep={riep} dal={dal} al={al} onChiudi={() => setDettaglio(null)} />}
+      {dettaglio && <PannelloDettaglio riga={dettaglio} riep={riep} dal={dal} al={al} serieMensile={serieMensile} onChiudi={() => setDettaglio(null)} />}
 
       {/* conflitto d'import: sostituisci / salta / annulla tutto */}
       {pianoConflitto && (
@@ -1748,7 +1797,7 @@ export default function App() {
 /* ---------------------------------------------------------------------------
    DASHBOARD
 --------------------------------------------------------------------------- */
-function Dashboard({ riep, dal, al, dipendenti, vaiCommesse, vaiDati, haDati, apri }) {
+function Dashboard({ riep, dal, al, dipendenti, serieMensile, vaiCommesse, vaiDati, haDati, apri }) {
   if (!riep) return null;
   const { righe, totCosto, totOre } = riep;
   const top = righe[0];
@@ -1769,6 +1818,19 @@ function Dashboard({ riep, dal, al, dipendenti, vaiCommesse, vaiDati, haDati, ap
         azione={<Bottone onClick={vaiDati}><Plus size={14} strokeWidth={1.75} /> Vai a Dati</Bottone>} />
     );
   }
+
+  // Serie storica (già memoizzata in App): indipendente dall'intervallo selezionato.
+  const mesiSerie = serieMensile?.mesi ?? [];
+  const datiMesi = mesiSerie.map((m) => ({
+    mese: fmtMeseBreve(m.mese),
+    costo: Math.round(m.costo * 100) / 100,
+    ore: Math.round(m.ore * 100) / 100,
+  }));
+  const ultimoMese = mesiSerie[mesiSerie.length - 1];
+  const penultimoMese = mesiSerie[mesiSerie.length - 2];
+  const variazione = penultimoMese && penultimoMese.costo > 0
+    ? (ultimoMese.costo - penultimoMese.costo) / penultimoMese.costo
+    : null;
 
   const datiBarre = righe.map((r) => ({ nome: r.commessa.codice, costo: Math.round(r.costo * 100) / 100, riga: r }));
   const datiGiorni = [...riep.perGiorno.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1))
@@ -1870,6 +1932,83 @@ function Dashboard({ riep, dal, al, dipendenti, vaiCommesse, vaiDati, haDati, ap
           )}
         </div>
       </div>
+
+      {/* ---- andamento mensile: storico, NON legato all'intervallo scelto ---- */}
+      <section className="rounded-2xl p-6" style={{ background: "var(--card)", boxShadow: "var(--ombra-sm)" }}>
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-5">
+          <h2 className="f-display text-lg">Andamento mensile</h2>
+          <p className="text-xs" style={{ color: "var(--muted)" }}>
+            {datiMesi.length >= 2
+              ? `Ultimi ${datiMesi.length} mesi con ore registrate · indipendente dall'intervallo scelto`
+              : "Storico completo, indipendente dall'intervallo scelto"}
+          </p>
+        </div>
+
+        {datiMesi.length < 2 ? (
+          <div className="flex flex-col items-center justify-center text-center py-12 px-6 rounded-xl" style={{ background: "var(--tela)" }}>
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3.5" style={{ background: "var(--velo-accento)" }}>
+              <Clock size={18} strokeWidth={1.75} style={{ color: "var(--accent)" }} />
+            </div>
+            <p className="f-display text-base mb-1.5" style={{ color: "var(--txt)" }}>Servono almeno due mesi di dati per vedere l'andamento</p>
+            <p className="text-sm max-w-sm leading-relaxed" style={{ color: "var(--muted)" }}>
+              {datiMesi.length === 1
+                ? `Al momento c'è un solo mese con ore registrate (${fmtMese(mesiSerie[0].mese)}). Appena ne arriverà un altro, qui comparirà il confronto nel tempo.`
+                : "Registra o importa le ore di almeno due mesi diversi per confrontare come cambia il costo del lavoro."}
+            </p>
+          </div>
+        ) : (
+          <>
+            {variazione !== null && (
+              <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>
+                {fmtMese(ultimoMese.mese)}: <span className="f-mono" style={{ color: "var(--euro)" }}>{euro(ultimoMese.costo)}</span>
+                {" · "}
+                <span className="f-mono" style={{ color: variazione > 0 ? "#A6753A" : variazione < 0 ? "#1E7350" : "var(--muted)" }}>
+                  {variazione > 0 ? "▲" : variazione < 0 ? "▼" : "="} {fmtPerc.format(Math.abs(variazione) * 100)}%
+                </span>
+                {" rispetto a "}{fmtMese(penultimoMese.mese)}
+              </p>
+            )}
+
+            <div className="grid lg:grid-cols-2 gap-x-8 gap-y-7">
+              <div>
+                <Micro>Costo per mese</Micro>
+                <div className="mt-3" style={{ height: 190 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={datiMesi} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                      <CartesianGrid stroke="var(--hairline)" vertical={false} />
+                      <XAxis dataKey="mese" tick={{ fontSize: 10.5, fontFamily: "'IBM Plex Mono', monospace", fill: "#9AA0A8" }} minTickGap={4} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 10.5, fontFamily: "'IBM Plex Mono', monospace", fill: "#9AA0A8" }} tickFormatter={(v) => fmtOre.format(v)} width={54} axisLine={false} tickLine={false} />
+                      <Tooltip formatter={(v) => [euro(v), "Costo del mese"]}
+                        contentStyle={{ borderRadius: 10, border: "1px solid var(--hairline)", boxShadow: "var(--ombra-md)", fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, padding: "8px 12px" }}
+                        cursor={{ fill: "rgba(23,27,34,.04)" }} />
+                      <Bar dataKey="costo" radius={[2, 2, 0, 0]} maxBarSize={38}>
+                        {datiMesi.map((_, i) => <Cell key={i} fill={i === datiMesi.length - 1 ? "var(--accent)" : "#454C57"} />)}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div>
+                <Micro>Ore per mese</Micro>
+                <div className="mt-3" style={{ height: 190 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={datiMesi} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                      <CartesianGrid stroke="var(--hairline)" vertical={false} />
+                      <XAxis dataKey="mese" tick={{ fontSize: 10.5, fontFamily: "'IBM Plex Mono', monospace", fill: "#9AA0A8" }} minTickGap={4} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 10.5, fontFamily: "'IBM Plex Mono', monospace", fill: "#9AA0A8" }} tickFormatter={(v) => fmtOre.format(v)} width={46} axisLine={false} tickLine={false} />
+                      <Tooltip formatter={(v) => [fmtOre.format(v) + " h", "Ore del mese"]}
+                        contentStyle={{ borderRadius: 10, border: "1px solid var(--hairline)", boxShadow: "var(--ombra-md)", fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, padding: "8px 12px" }}
+                        cursor={{ fill: "rgba(23,27,34,.04)" }} />
+                      <Bar dataKey="ore" radius={[2, 2, 0, 0]} maxBarSize={38} fill="#8A9099" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </section>
     </div>
   );
 }
@@ -1972,13 +2111,22 @@ function VistaCommesse({ riep, dal, al, apri, esportaCsv, esportaXlsx, esportaTu
   );
 }
 
-function PannelloDettaglio({ riga, riep, dal, al, onChiudi }) {
+function PannelloDettaglio({ riga, riep, dal, al, serieMensile, onChiudi }) {
   useEffect(() => {
     const h = (e) => e.key === "Escape" && onChiudi();
     window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h);
   }, [onChiudi]);
   const quota = riep && riep.totCosto > 0 ? riga.costo / riep.totCosto : 0;
   const maxDip = riga.dipendenti.length ? Math.max(...riga.dipendenti.map((d) => d.costo)) : 0;
+
+  // Storico di QUESTA commessa, estratto dalla serie già calcolata in App:
+  // nessun ricalcolo qui, solo una lettura dalla mappa per id.
+  const serieCommessa = serieMensile?.perCommessa.get(riga.commessa.id) ?? [];
+  const datiCommessa = serieCommessa.map((m) => ({
+    mese: fmtMeseBreve(m.mese),
+    costo: Math.round(m.costo * 100) / 100,
+    ore: Math.round(m.ore * 100) / 100,
+  }));
   return (
     <div className="fixed inset-0 z-40 noprint" role="dialog" aria-modal="true" aria-label={"Dettaglio commessa " + riga.commessa.codice}>
       <div className="absolute inset-0 anim-velo" style={{ background: "rgba(18,21,26,.4)", backdropFilter: "blur(2px)" }} onClick={onChiudi} />
@@ -2015,6 +2163,40 @@ function PannelloDettaglio({ riga, riep, dal, al, onChiudi }) {
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* storico della commessa: tutti i mesi in cui ha avuto ore, non solo l'intervallo */}
+          <div>
+            <h4 className="f-display text-base mb-1">Andamento di questa commessa</h4>
+            <p className="text-xs mb-4" style={{ color: "var(--muted)" }}>
+              Costo mese per mese da quando ha ore registrate, indipendente dall'intervallo scelto.
+            </p>
+            {datiCommessa.length < 2 ? (
+              <p className="text-sm leading-relaxed rounded-xl px-4 py-3.5" style={{ background: "var(--tela)", color: "var(--muted)" }}>
+                {datiCommessa.length === 1
+                  ? `Questa commessa ha ore in un solo mese (${fmtMese(serieCommessa[0].mese)}): non c'è ancora un andamento da confrontare.`
+                  : "Nessuna ora registrata su questa commessa nello storico disponibile."}
+              </p>
+            ) : (
+              <div style={{ height: 170 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={datiCommessa} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="gradCostoCommessa" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.22} />
+                        <stop offset="100%" stopColor="var(--accent)" stopOpacity={0.02} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid stroke="var(--hairline)" vertical={false} />
+                    <XAxis dataKey="mese" tick={{ fontSize: 10.5, fontFamily: "'IBM Plex Mono', monospace", fill: "#9AA0A8" }} minTickGap={4} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 10.5, fontFamily: "'IBM Plex Mono', monospace", fill: "#9AA0A8" }} tickFormatter={(v) => fmtOre.format(v)} width={54} axisLine={false} tickLine={false} />
+                    <Tooltip formatter={(v) => [euro(v), "Costo del mese"]}
+                      contentStyle={{ borderRadius: 10, border: "1px solid var(--hairline)", boxShadow: "var(--ombra-md)", fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, padding: "8px 12px" }} />
+                    <Area type="monotone" dataKey="costo" stroke="var(--accent)" strokeWidth={1.75} fill="url(#gradCostoCommessa)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           </div>
         </div>
       </div>
