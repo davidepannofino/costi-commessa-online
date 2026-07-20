@@ -95,6 +95,18 @@ export const datiAPI = {
     return dati.url;
   },
 
+  /** Apre il portale Stripe per gestire un abbonamento già attivo (metodo di
+   *  pagamento, fatture, disdetta). Ritorna l'URL a cui reindirizzare. */
+  async avviaPortale() {
+    const res = await fetch(`${API_BASE}/api/abbonamento/portale`, {
+      method: "POST",
+      headers: headerAuth(),
+    });
+    if (!res.ok) throw new Error("Impossibile aprire la gestione dell'abbonamento.");
+    const dati = await res.json();
+    return dati.url;
+  },
+
   /** Scarica un backup JSON tramite il browser (al posto del salvataggio su file nativo). */
   async backupEsporta(_aziendaId, dati) {
     try {

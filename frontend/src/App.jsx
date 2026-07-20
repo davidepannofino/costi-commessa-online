@@ -7,7 +7,7 @@ import {
   LayoutDashboard, FolderKanban, Users, Database, Plus, Trash2, Pencil, Upload, Download,
   FileSpreadsheet, FileText, AlertTriangle, CheckCircle2, X, ChevronRight, ChevronLeft,
   Search, RotateCcw, Save, Eraser, Info, FileDown, LogOut, Mail, Lock, Building2, ArrowRight, Loader2,
-  Clock, Sparkles,
+  Clock, Sparkles, Eye, EyeOff, CreditCard, Gift, PartyPopper,
 } from "lucide-react";
 import { datiAPI, suSessioneScaduta, suAbbonamentoRichiesto, API_BASE } from "./datiAPI.js";
 import { leggiToken, salvaToken, cancellaToken } from "./auth.js";
@@ -470,6 +470,38 @@ const Campo = ({ etichetta, children, errore }) => (
 );
 const inputCls = "w-full rounded-lg px-3 py-2 text-sm outline-none transition-shadow campo";
 
+/** Campo password con lucchetto a sinistra e occhio/occhio-barrato a destra
+ *  per alternare testo in chiaro e puntini, come su qualunque sito moderno. */
+function CampoPassword({ value, onChange, placeholder, minLength, required, autoFocus, autoComplete }) {
+  const [mostra, setMostra] = useState(false);
+  return (
+    <div className="relative">
+      <Lock size={15} strokeWidth={1.75} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--muted)" }} />
+      <input
+        type={mostra ? "text" : "password"}
+        className={inputCls + " pl-9 pr-9"}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        minLength={minLength}
+        required={required}
+        autoFocus={autoFocus}
+        autoComplete={autoComplete}
+      />
+      <button
+        type="button"
+        onClick={() => setMostra((m) => !m)}
+        className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-md btn"
+        style={{ color: "var(--muted)" }}
+        aria-label={mostra ? "Nascondi password" : "Mostra password"}
+        tabIndex={-1}
+      >
+        {mostra ? <EyeOff size={15} strokeWidth={1.75} /> : <Eye size={15} strokeWidth={1.75} />}
+      </button>
+    </div>
+  );
+}
+
 function Bottone({ variante = "primario", className = "", ...p }) {
   const stile = {
     primario: { background: "var(--ink)", color: "#F6F4EE" },
@@ -577,7 +609,7 @@ function SchermataAccesso({ alSuccesso, messaggio }) {
         return;
       }
       salvaToken(dati.token);
-      alSuccesso();
+      alSuccesso(modo === "registrati");
     } catch (e) {
       setMessaggioForm({ testo: "Impossibile contattare il server. Riprova più tardi.", tipo: "errore" });
     } finally {
@@ -613,12 +645,13 @@ function SchermataAccesso({ alSuccesso, messaggio }) {
       <StileGlobale />
 
       {/* ================= PANNELLO DESCRITTIVO (solo desktop) ================= */}
-      <div className="hidden lg:flex lg:w-[45%] xl:w-[40%] relative flex-col justify-between overflow-hidden noprint superficie-scura px-12 py-14">
+      <div className="hidden lg:flex lg:w-[45%] xl:w-[40%] relative flex-col justify-between overflow-hidden noprint superficie-scura px-12 py-14 xl:px-16">
         {/* forme geometriche di sfondo, puramente decorative */}
         <div aria-hidden="true" className="absolute inset-0 pointer-events-none">
           <div className="absolute rounded-full" style={{ width: 340, height: 340, top: -130, right: -110, border: "1px solid rgba(255,255,255,.06)" }} />
           <div className="absolute rounded-full" style={{ width: 220, height: 220, top: -40, right: -60, border: "1px solid rgba(196,162,101,.14)" }} />
           <div className="absolute" style={{ width: 200, height: 200, bottom: 40, left: -70, border: "1px solid rgba(255,255,255,.05)", borderRadius: 44, transform: "rotate(18deg)" }} />
+          <div className="absolute" style={{ width: 120, height: 120, top: "38%", left: -50, border: "1px solid rgba(255,255,255,.045)", borderRadius: 30, transform: "rotate(-12deg)" }} />
         </div>
 
         <div className="relative flex items-center gap-3">
@@ -627,7 +660,10 @@ function SchermataAccesso({ alSuccesso, messaggio }) {
         </div>
 
         <div className="relative">
-          <p className="f-display text-[30px] xl:text-[34px] leading-[1.15] mb-5" style={{ color: "#F0EDE5" }}>
+          <p className="text-[11px] font-semibold uppercase mb-4" style={{ letterSpacing: ".14em", color: "var(--accent-chiaro)" }}>
+            Costo del lavoro, sotto controllo
+          </p>
+          <p className="f-display text-[30px] xl:text-[36px] leading-[1.16] mb-5" style={{ color: "#F0EDE5" }}>
             Il costo del lavoro,<br />commessa per commessa.
           </p>
           <p className="text-sm leading-relaxed max-w-sm" style={{ color: "#9BA1AB" }}>
@@ -635,7 +671,7 @@ function SchermataAccesso({ alSuccesso, messaggio }) {
           </p>
 
           {/* grafico decorativo astratto (nessun dato reale) */}
-          <div className="mt-10 flex items-end gap-2.5 h-24" aria-hidden="true">
+          <div className="mt-11 flex items-end gap-2.5 h-24" aria-hidden="true">
             {barreDecorative.map((h, i) => (
               <div key={i} className="flex-1 rounded-t-md anim-barra" style={{ height: `${h}%`, background: i === 3 ? "var(--accent-chiaro)" : "rgba(255,255,255,.10)" }} />
             ))}
@@ -653,9 +689,9 @@ function SchermataAccesso({ alSuccesso, messaggio }) {
             <div className="f-display text-[15px]">Costi Commessa</div>
           </div>
 
-          <div className="rounded-2xl p-7" style={{ background: "var(--card)", boxShadow: "var(--ombra-lg)" }}>
+          <div className="rounded-2xl p-6 sm:p-7" style={{ background: "var(--card)", boxShadow: "var(--ombra-lg)" }}>
             {vistaRecupero ? (
-              <>
+              <div key="recupero" className="anim-vista">
                 <p className="f-display text-xl mb-1">Recupera la password</p>
                 <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>
                   Inserisci l'email del tuo account: se esiste, ti mandiamo un link per reimpostare la password.
@@ -691,15 +727,15 @@ function SchermataAccesso({ alSuccesso, messaggio }) {
                 <button type="button" onClick={chiudiRecupero} className="text-xs mt-5 block mx-auto btn" style={{ color: "var(--muted)" }}>
                   ← Torna al login
                 </button>
-              </>
+              </div>
             ) : (
-              <>
+              <div key={modo} className="anim-vista">
                 <p className="f-display text-xl mb-1">{modo === "accedi" ? "Bentornato" : "Crea il tuo account"}</p>
                 <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>
                   {modo === "accedi" ? "Accedi per continuare a gestire i costi delle tue commesse." : "Un account per azienda: dati separati e al sicuro."}
                 </p>
 
-                <div className="relative flex mb-6 rounded-lg p-1" style={{ background: "var(--velo)" }}>
+                <div className="relative flex mb-5 rounded-lg p-1" style={{ background: "var(--velo)" }}>
                   <div className="absolute top-1 bottom-1 rounded-md transition-transform duration-300 ease-out"
                     style={{ width: "calc(50% - 4px)", left: 4, background: "var(--card)", boxShadow: "var(--ombra-xs)", transform: modo === "registrati" ? "translateX(100%)" : "translateX(0)" }} />
                   <button type="button" onClick={() => cambiaModo("accedi")}
@@ -713,6 +749,13 @@ function SchermataAccesso({ alSuccesso, messaggio }) {
                     Registrati
                   </button>
                 </div>
+
+                {modo === "registrati" && (
+                  <div className="flex items-start gap-2.5 rounded-xl px-3.5 py-3 text-xs leading-relaxed mb-5" style={{ background: "var(--velo-accento)", border: "1px solid rgba(154,120,58,.18)", color: "#7C6027" }}>
+                    <Gift size={14} strokeWidth={1.75} className="mt-0.5 shrink-0" />
+                    <span><strong>14 giorni di prova gratuita</strong>, poi 29 €/mese. Nessuna carta richiesta per iniziare — disdici quando vuoi.</span>
+                  </div>
+                )}
 
                 <form onSubmit={invia} className="space-y-4">
                   {modo === "registrati" && (
@@ -730,12 +773,14 @@ function SchermataAccesso({ alSuccesso, messaggio }) {
                     </div>
                   </Campo>
                   <Campo etichetta="Password">
-                    <div className="relative">
-                      <Lock size={15} strokeWidth={1.75} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--muted)" }} />
-                      <input type="password" className={inputCls + " pl-9"} value={password} onChange={(e) => setPassword(e.target.value)}
-                        placeholder={modo === "registrati" ? "Almeno 8 caratteri" : "••••••••"}
-                        minLength={modo === "registrati" ? 8 : undefined} required />
-                    </div>
+                    <CampoPassword
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder={modo === "registrati" ? "Almeno 8 caratteri" : "••••••••"}
+                      minLength={modo === "registrati" ? 8 : undefined}
+                      required
+                      autoComplete={modo === "registrati" ? "new-password" : "current-password"}
+                    />
                   </Campo>
 
                   {modo === "accedi" && (
@@ -761,7 +806,7 @@ function SchermataAccesso({ alSuccesso, messaggio }) {
                     {caricando ? "Attendere…" : modo === "accedi" ? "Accedi" : "Crea account"}
                   </Bottone>
                 </form>
-              </>
+              </div>
             )}
           </div>
 
@@ -828,18 +873,10 @@ function PaginaResetPassword({ token, alSuccesso }) {
 
           <form onSubmit={invia} className="space-y-4">
             <Campo etichetta="Nuova password">
-              <div className="relative">
-                <Lock size={15} strokeWidth={1.75} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--muted)" }} />
-                <input type="password" className={inputCls + " pl-9"} value={password} onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Almeno 8 caratteri" minLength={8} required autoFocus />
-              </div>
+              <CampoPassword value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Almeno 8 caratteri" minLength={8} required autoFocus autoComplete="new-password" />
             </Campo>
             <Campo etichetta="Conferma nuova password">
-              <div className="relative">
-                <Lock size={15} strokeWidth={1.75} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--muted)" }} />
-                <input type="password" className={inputCls + " pl-9"} value={conferma} onChange={(e) => setConferma(e.target.value)}
-                  placeholder="Ripeti la password" minLength={8} required />
-              </div>
+              <CampoPassword value={conferma} onChange={(e) => setConferma(e.target.value)} placeholder="Ripeti la password" minLength={8} required autoComplete="new-password" />
             </Campo>
 
             {messaggioForm && (
@@ -932,6 +969,89 @@ function VerificaPagamento() {
   );
 }
 
+/** Sezione "Abbonamento", raggiungibile in ogni momento dalla sidebar: stato
+ *  attuale, giorni di prova rimanenti, prezzo, e un pulsante che porta al
+ *  checkout (se non attivo) o al portale Stripe per gestire il pagamento
+ *  (se già attivo). */
+function VistaAbbonamento({ info }) {
+  const [caricando, setCaricando] = useState(false);
+  const [errore, setErrore] = useState(null);
+
+  const vai = async (azione) => {
+    setErrore(null);
+    setCaricando(true);
+    try {
+      const url = azione === "portale" ? await datiAPI.avviaPortale() : await datiAPI.avviaCheckout();
+      window.location.href = url;
+    } catch (e) {
+      setErrore("Non è stato possibile completare l'operazione. Riprova tra poco.");
+      setCaricando(false);
+    }
+  };
+
+  const STATI = {
+    esente: { etichetta: "Accesso illimitato", colore: "#1E7350", icona: Sparkles },
+    attivo: { etichetta: "Abbonamento attivo", colore: "#1E7350", icona: CheckCircle2 },
+    prova: { etichetta: "Prova gratuita", colore: "var(--accent)", icona: Clock },
+    scaduto: { etichetta: "Prova terminata", colore: "#A63A32", icona: AlertTriangle },
+  };
+  const s = STATI[info?.stato] || STATI.prova;
+  const Icona = s.icona;
+
+  return (
+    <div className="max-w-lg">
+      <Sezione titolo="Abbonamento">
+        {!info ? (
+          <p className="text-sm" style={{ color: "var(--muted)" }}>Caricamento…</p>
+        ) : (
+          <>
+            <div className="flex items-center gap-3.5 mb-6">
+              <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{ background: "var(--velo-accento)" }}>
+                <Icona size={20} strokeWidth={1.75} style={{ color: s.colore }} />
+              </div>
+              <div>
+                <p className="f-display text-base" style={{ color: "var(--txt)" }}>{s.etichetta}</p>
+                {info.stato === "prova" && (
+                  <p className="text-sm" style={{ color: "var(--muted)" }}>
+                    {info.giorniProvaRestanti === 1 ? "Ultimo giorno" : `${info.giorniProvaRestanti} giorni rimanenti`}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-xl px-5 py-4 mb-5" style={{ background: "var(--velo)" }}>
+              <p className="f-mono text-2xl font-medium" style={{ color: "var(--txt)" }}>
+                29 €<span className="text-sm font-normal" style={{ color: "var(--muted)" }}> / mese</span>
+              </p>
+              <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>Fatturazione mensile ricorrente. Disdici quando vuoi.</p>
+            </div>
+
+            {errore && (
+              <div className="flex items-start gap-2.5 rounded-xl px-3.5 py-3 text-sm mb-5" style={{ background: "rgba(166,58,50,.07)", border: "1px solid rgba(166,58,50,.2)", color: "#A63A32" }}>
+                <AlertTriangle size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" /> {errore}
+              </div>
+            )}
+
+            {info.stato === "esente" ? (
+              <p className="text-sm" style={{ color: "var(--muted)" }}>Il tuo account ha accesso completo e illimitato, senza bisogno di abbonamento.</p>
+            ) : info.stato === "attivo" ? (
+              <Bottone variante="fantasma" onClick={() => vai("portale")} disabled={caricando}>
+                {caricando ? <Loader2 size={14} strokeWidth={1.75} className="animate-spin" /> : <CreditCard size={14} strokeWidth={1.75} />}
+                {caricando ? "Un attimo…" : "Gestisci abbonamento"}
+              </Bottone>
+            ) : (
+              <Bottone variante="accento" onClick={() => vai("checkout")} disabled={caricando}>
+                {caricando ? <Loader2 size={14} strokeWidth={1.75} className="animate-spin" /> : <ArrowRight size={14} strokeWidth={1.75} />}
+                {caricando ? "Un attimo…" : "Abbonati ora"}
+              </Bottone>
+            )}
+          </>
+        )}
+      </Sezione>
+    </div>
+  );
+}
+
 /* ---------------------------------------------------------------------------
    APPLICAZIONE
 --------------------------------------------------------------------------- */
@@ -948,6 +1068,7 @@ export default function App() {
   const [abbonamentoInfo, setAbbonamentoInfo] = useState(null); // { stato, giorniProvaRestanti, haAccesso }
   const [bloccatoAbbonamento, setBloccatoAbbonamento] = useState(false);
   const [versioneAccesso, setVersioneAccesso] = useState(0); // incrementato per forzare un ricaricamento dati
+  const [mostraBenvenuto, setMostraBenvenuto] = useState(false); // solo subito dopo una registrazione riuscita
   const [caricamento, setCaricamento] = useState(true);
   const [dipendenti, setDipendenti] = useState([]);
   const [commesse, setCommesse] = useState([]);
@@ -1212,6 +1333,7 @@ export default function App() {
     { id: "commesse", nome: "Commesse", icona: FolderKanban },
     { id: "dipendenti", nome: "Dipendenti", icona: Users },
     { id: "dati", nome: "Dati", icona: Database },
+    { id: "abbonamento", nome: "Abbonamento", icona: CreditCard },
   ];
 
   const costoLive = useContatore(riep ? riep.totCosto : 0);
@@ -1231,7 +1353,16 @@ export default function App() {
   }
 
   if (!token) {
-    return <SchermataAccesso messaggio={messaggioAccesso} alSuccesso={() => { setMessaggioAccesso(null); setToken(leggiToken()); }} />;
+    return (
+      <SchermataAccesso
+        messaggio={messaggioAccesso}
+        alSuccesso={(appenaRegistrato) => {
+          setMessaggioAccesso(null);
+          if (appenaRegistrato) setMostraBenvenuto(true);
+          setToken(leggiToken());
+        }}
+      />
+    );
   }
 
   if (verificandoPagamento) {
@@ -1273,14 +1404,28 @@ export default function App() {
           ))}
         </nav>
         <div className="mt-auto px-3 pb-3">
-          {abbonamentoInfo?.stato === "prova" && (
-            <div className="mb-2 px-3.5 py-2.5 rounded-lg flex items-center gap-2 text-xs" style={{ background: "rgba(255,255,255,.05)", color: "#B8A47C" }}>
-              <Clock size={14} strokeWidth={1.75} className="shrink-0" />
-              {abbonamentoInfo.giorniProvaRestanti === 1
-                ? "Ultimo giorno di prova"
-                : `${abbonamentoInfo.giorniProvaRestanti} giorni di prova rimanenti`}
-            </div>
-          )}
+          {abbonamentoInfo?.stato === "prova" && (() => {
+            const urgente = abbonamentoInfo.giorniProvaRestanti <= 3;
+            return (
+              <button
+                onClick={() => setVista("abbonamento")}
+                className="w-full mb-2 px-3.5 py-2.5 rounded-lg text-left btn"
+                style={urgente
+                  ? { background: "var(--velo-accento)", border: "1px solid rgba(196,162,101,.3)" }
+                  : { background: "rgba(255,255,255,.05)" }}
+              >
+                <div className="flex items-center gap-2 text-xs font-medium" style={{ color: urgente ? "var(--accent-chiaro)" : "#B8A47C" }}>
+                  <Clock size={14} strokeWidth={1.75} className="shrink-0" />
+                  {abbonamentoInfo.giorniProvaRestanti === 1
+                    ? "Ultimo giorno di prova"
+                    : `${abbonamentoInfo.giorniProvaRestanti} giorni di prova rimanenti`}
+                </div>
+                {urgente && (
+                  <div className="text-[11px] mt-0.5 ml-5" style={{ color: "#9BA1AB" }}>Abbonati ora →</div>
+                )}
+              </button>
+            );
+          })()}
           <button onClick={uscire} className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm transition-colors btn" style={{ color: "#8B929C", fontWeight: 500 }}>
             <LogOut size={17} strokeWidth={1.75} /> Esci
           </button>
@@ -1360,11 +1505,12 @@ export default function App() {
               esportaTutto={() => esportaCompletoXLSX({ dipendenti, commesse, registrazioni }, dal, al)}
             />
           )}
+          {vista === "abbonamento" && <VistaAbbonamento info={abbonamentoInfo} />}
         </main>
       </div>
 
       {/* ---- navigazione mobile ---- */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 grid grid-cols-4 noprint superficie-scura" style={{ borderTop: "1px solid rgba(255,255,255,.07)" }} aria-label="Navigazione">
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 grid grid-cols-5 noprint superficie-scura" style={{ borderTop: "1px solid rgba(255,255,255,.07)" }} aria-label="Navigazione">
         {NAV.map(({ id, nome, icona: Icona }) => (
           <button key={id} onClick={() => setVista(id)} className="flex flex-col items-center gap-1 py-2.5 btn"
             style={{ color: vista === id ? "var(--accent-chiaro)" : "#8B929C" }}>
@@ -1401,6 +1547,26 @@ export default function App() {
             <Bottone variante="fantasma" onClick={() => setConferma(null)}>Annulla</Bottone>
             <Bottone variante="pericolo" onClick={() => { conferma.onOk(); setConferma(null); }}><Trash2 size={14} strokeWidth={1.75} /> Elimina</Bottone>
           </div>
+        </Modale>
+      )}
+
+      {mostraBenvenuto && (
+        <Modale titolo="Benvenuto in Costi Commessa" onChiudi={() => setMostraBenvenuto(false)}>
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-4" style={{ background: "var(--velo-accento)" }}>
+            <PartyPopper size={18} strokeWidth={1.75} style={{ color: "var(--accent)" }} />
+          </div>
+          <p className="text-sm leading-relaxed mb-3" style={{ color: "var(--txt)" }}>
+            Il tuo account è pronto: hai <strong>14 giorni di prova gratuita</strong>, senza nessuna carta da inserire.
+          </p>
+          <p className="text-sm leading-relaxed mb-3" style={{ color: "var(--muted)" }}>
+            In questo periodo puoi registrare ore per dipendente e commessa, vedere il costo del lavoro in tempo reale ed esportare i report in Excel.
+          </p>
+          <p className="text-sm leading-relaxed mb-6" style={{ color: "var(--muted)" }}>
+            Alla scadenza della prova, potrai abbonarti per 29 €/mese per continuare — disdici quando vuoi, dalla sezione "Abbonamento" nella barra laterale.
+          </p>
+          <Bottone variante="accento" className="w-full" onClick={() => setMostraBenvenuto(false)}>
+            Ho capito, iniziamo
+          </Bottone>
         </Modale>
       )}
 

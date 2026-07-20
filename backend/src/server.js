@@ -239,6 +239,26 @@ app.post("/api/abbonamento/checkout", richiedeAuth, async (req, res) => {
   }
 });
 
+/** Apre il portale Stripe (pagina ospitata da Stripe) dove un'azienda con
+ *  abbonamento attivo può aggiornare il metodo di pagamento, vedere le
+ *  fatture o disdire. */
+app.post("/api/abbonamento/portale", richiedeAuth, async (req, res) => {
+  try {
+    const ris = await pool.query("SELECT stripe_customer_id FROM aziende WHERE id = $1", [req.aziendaId]);
+    const customerId = ris.rows[0]?.stripe_customer_id;
+    if (!customerId) return res.status(400).json({ errore: "Nessun abbonamento da gestire." });
+
+    const session = await stripe.billingPortal.sessions.create({
+      customer: customerId,
+      return_url: `${FRONTEND_URL}/`,
+    });
+    res.json({ url: session.url });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ errore: "Impossibile aprire la gestione dell'abbonamento." });
+  }
+});
+
 /**
  * Restituisce l'intero stato dell'azienda autenticata (dipendenti, commesse,
  * registrazioni, nome azienda). Rispecchia la forma che il frontend già usa
