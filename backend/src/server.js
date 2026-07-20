@@ -5,14 +5,51 @@ import { randomUUID, randomBytes, createHash } from "node:crypto";
 import { pool } from "./db.js";
 import { cifraPassword, verificaPassword, generaToken, richiedeAuth } from "./auth.js";
 import { inviaEmailResetPassword } from "./email.js";
+import { stripe, PREZZO_MENSILE_CENTESIMI } from "./stripe.js";
+import { richiedeAbbonamentoAttivo, statoAbbonamentoDi } from "./abbonamento.js";
 
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: "10mb" }));
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const FRONTEND_URL = process.env.FRONTEND_URL || "https://costi-commessa-frontend.onrender.com";
 const SCADENZA_RESET_MS = 60 * 60 * 1000; // 1 ora
+
+/**
+ * Webhook Stripe: DEVE stare prima di express.json() perché la verifica della
+ * firma richiede il corpo grezzo (byte per byte), non il JSON già parsato.
+ * Aggiorna stato_abbonamento in base allo stato reale dell'abbonamento su
+ * Stripe: Stripe stessa riflette qui i tentativi di riaddebito falliti,
+ * quindi non serve ascoltare separatamente gli eventi di pagamento.
+ */
+app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async (req, res) => {
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body, req.headers["stripe-signature"], process.env.STRIPE_WEBHOOK_SECRET);
+  } catch (e) {
+    console.error("Firma webhook Stripe non valida:", e.message);
+    return res.status(400).send(`Webhook Error: ${e.message}`);
+  }
+
+  try {
+    const tipiSottoscrizione = ["customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted"];
+    if (tipiSottoscrizione.includes(event.type)) {
+      const subscription = event.data.object;
+      const statoStripe = event.type === "customer.subscription.deleted" ? "canceled" : subscription.status;
+      const nuovoStato = ["active", "trialing"].includes(statoStripe) ? "attivo" : "scaduto";
+      await pool.query(
+        "UPDATE aziende SET stato_abbonamento = $1, stripe_subscription_id = $2 WHERE stripe_customer_id = $3",
+        [nuovoStato, subscription.id, subscription.customer]
+      );
+    }
+    res.json({ received: true });
+  } catch (e) {
+    console.error("Errore elaborando il webhook Stripe:", e);
+    res.status(500).json({ errore: "Errore interno." });
+  }
+});
+
+app.use(express.json({ limit: "10mb" }));
 
 app.get("/api/salute", (req, res) => res.json({ ok: true }));
 
@@ -146,13 +183,69 @@ app.post("/api/reset-password", async (req, res) => {
   }
 });
 
+/** Stato dell'abbonamento dell'azienda del token (esente / attivo / prova / scaduto). */
+app.get("/api/abbonamento/stato", richiedeAuth, async (req, res) => {
+  try {
+    const info = await statoAbbonamentoDi(req.aziendaId);
+    if (!info) return res.status(404).json({ errore: "Azienda non trovata." });
+    res.json(info);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ errore: "Impossibile leggere lo stato dell'abbonamento." });
+  }
+});
+
+/** Crea una sessione di Stripe Checkout (pagina ospitata da Stripe: il numero
+ *  di carta non passa mai dal nostro backend) per l'abbonamento mensile. */
+app.post("/api/abbonamento/checkout", richiedeAuth, async (req, res) => {
+  try {
+    const ris = await pool.query(
+      "SELECT stripe_customer_id, u.email FROM aziende a JOIN utenti u ON u.azienda_id = a.id WHERE a.id = $1",
+      [req.aziendaId]
+    );
+    const riga = ris.rows[0];
+    if (!riga) return res.status(404).json({ errore: "Azienda non trovata." });
+
+    let customerId = riga.stripe_customer_id;
+    if (!customerId) {
+      const customer = await stripe.customers.create({ email: riga.email, metadata: { aziendaId: req.aziendaId } });
+      customerId = customer.id;
+      await pool.query("UPDATE aziende SET stripe_customer_id = $1 WHERE id = $2", [customerId, req.aziendaId]);
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "subscription",
+      customer: customerId,
+      line_items: [
+        {
+          price_data: {
+            currency: "eur",
+            product_data: { name: "Abbonamento Costi Commessa" },
+            unit_amount: PREZZO_MENSILE_CENTESIMI,
+            recurring: { interval: "month" },
+          },
+          quantity: 1,
+        },
+      ],
+      success_url: `${FRONTEND_URL}/?abbonamento=successo`,
+      cancel_url: `${FRONTEND_URL}/?abbonamento=annullato`,
+      metadata: { aziendaId: req.aziendaId },
+    });
+
+    res.json({ url: session.url });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ errore: "Impossibile avviare il pagamento." });
+  }
+});
+
 /**
  * Restituisce l'intero stato dell'azienda autenticata (dipendenti, commesse,
  * registrazioni, nome azienda). Rispecchia la forma che il frontend già usa
  * internamente, così il resto dell'app non deve cambiare. L'azienda è sempre
  * quella del token verificato da richiedeAuth, mai un valore mandato dal client.
  */
-app.get("/api/stato", richiedeAuth, async (req, res) => {
+app.get("/api/stato", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) => {
   const aziendaId = req.aziendaId;
   try {
     const [azRes, dipRes, comRes, regRes] = await Promise.all([
@@ -200,7 +293,7 @@ app.get("/api/stato", richiedeAuth, async (req, res) => {
  * già in locale, solo che ora scrive su un database condiviso). L'azienda è
  * sempre quella del token verificato da richiedeAuth, mai un id mandato dal client.
  */
-app.put("/api/stato", richiedeAuth, async (req, res) => {
+app.put("/api/stato", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) => {
   const aziendaId = req.aziendaId;
   const { dipendenti = [], commesse = [], registrazioni = [], azienda = "" } = req.body || {};
   if (!Array.isArray(dipendenti) || !Array.isArray(commesse) || !Array.isArray(registrazioni)) {

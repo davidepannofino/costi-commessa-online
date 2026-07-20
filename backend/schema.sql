@@ -7,6 +7,13 @@ CREATE TABLE IF NOT EXISTS aziende (
   id   TEXT PRIMARY KEY,
   nome TEXT NOT NULL
 );
+-- Tappa 3 (abbonamento): stato dell'abbonamento Stripe di ogni azienda.
+-- "prova" finché non passano 14 giorni da utenti.creato_il o non si abbona;
+-- "attivo" mentre l'abbonamento Stripe è in regola; "scaduto" se il
+-- pagamento fallisce o l'azienda disdice.
+ALTER TABLE aziende ADD COLUMN IF NOT EXISTS stato_abbonamento TEXT NOT NULL DEFAULT 'prova';
+ALTER TABLE aziende ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT UNIQUE;
+ALTER TABLE aziende ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT UNIQUE;
 
 CREATE TABLE IF NOT EXISTS utenti (
   id             SERIAL PRIMARY KEY,

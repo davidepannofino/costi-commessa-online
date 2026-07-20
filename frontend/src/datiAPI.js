@@ -19,6 +19,15 @@ export function suSessioneScaduta(fn) {
   gestoreSessioneScaduta = fn;
 }
 
+/** Impostata da App.jsx: chiamata quando il server rifiuta l'accesso ai dati
+ *  perché la prova è scaduta e non c'è un abbonamento attivo (402). A
+ *  differenza della sessione scaduta, il token resta valido: si mostra solo
+ *  la schermata di abbonamento richiesto, senza fare logout. */
+let gestoreAbbonamentoRichiesto = null;
+export function suAbbonamentoRichiesto(fn) {
+  gestoreAbbonamentoRichiesto = fn;
+}
+
 const headerAuth = () => ({ Authorization: `Bearer ${leggiToken() || ""}` });
 
 export const datiAPI = {
@@ -27,6 +36,10 @@ export const datiAPI = {
       const res = await fetch(`${API_BASE}/api/stato`, { headers: headerAuth() });
       if (res.status === 401) {
         gestoreSessioneScaduta?.();
+        return { dati: null, primoAvvio: true, avviso: null };
+      }
+      if (res.status === 402) {
+        gestoreAbbonamentoRichiesto?.();
         return { dati: null, primoAvvio: true, avviso: null };
       }
       if (!res.ok) throw new Error(`Il server ha risposto con l'errore ${res.status}.`);
@@ -53,10 +66,33 @@ export const datiAPI = {
         body: JSON.stringify(dati),
       });
       if (res.status === 401) { gestoreSessioneScaduta?.(); return; }
+      if (res.status === 402) { gestoreAbbonamentoRichiesto?.(); return; }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
     } catch (e) {
       console.error("Salvataggio non riuscito:", e);
     }
+  },
+
+  /** Stato dell'abbonamento dell'azienda loggata (giorni di prova, se attivo, ecc.). */
+  async statoAbbonamento() {
+    try {
+      const res = await fetch(`${API_BASE}/api/abbonamento/stato`, { headers: headerAuth() });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (e) {
+      return null;
+    }
+  },
+
+  /** Avvia il pagamento: ritorna l'URL di Stripe Checkout a cui reindirizzare. */
+  async avviaCheckout() {
+    const res = await fetch(`${API_BASE}/api/abbonamento/checkout`, {
+      method: "POST",
+      headers: headerAuth(),
+    });
+    if (!res.ok) throw new Error("Impossibile avviare il pagamento.");
+    const dati = await res.json();
+    return dati.url;
   },
 
   /** Scarica un backup JSON tramite il browser (al posto del salvataggio su file nativo). */

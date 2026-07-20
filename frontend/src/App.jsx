@@ -7,8 +7,9 @@ import {
   LayoutDashboard, FolderKanban, Users, Database, Plus, Trash2, Pencil, Upload, Download,
   FileSpreadsheet, FileText, AlertTriangle, CheckCircle2, X, ChevronRight, ChevronLeft,
   Search, RotateCcw, Save, Eraser, Info, FileDown, LogOut, Mail, Lock, Building2, ArrowRight, Loader2,
+  Clock, Sparkles,
 } from "lucide-react";
-import { datiAPI, suSessioneScaduta, API_BASE } from "./datiAPI.js";
+import { datiAPI, suSessioneScaduta, suAbbonamentoRichiesto, API_BASE } from "./datiAPI.js";
 import { leggiToken, salvaToken, cancellaToken } from "./auth.js";
 
 /* ============================================================================
@@ -858,6 +859,79 @@ function PaginaResetPassword({ token, alSuccesso }) {
   );
 }
 
+/** Schermata mostrata quando la prova di 14 giorni è scaduta e non c'è un
+ *  abbonamento attivo: spiega il prezzo e porta a Stripe Checkout. Il login
+ *  resta valido — solo l'accesso ai dati è bloccato (deciso lato server). */
+function PaginaAbbonamento({ onUscire }) {
+  const [caricando, setCaricando] = useState(false);
+  const [errore, setErrore] = useState(null);
+
+  const abbonati = async () => {
+    setErrore(null);
+    setCaricando(true);
+    try {
+      const url = await datiAPI.avviaCheckout();
+      window.location.href = url;
+    } catch (e) {
+      setErrore("Non è stato possibile avviare il pagamento. Riprova tra poco.");
+      setCaricando(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: "var(--tela)", color: "var(--txt)" }}>
+      <StileGlobale />
+      <div className="w-full max-w-md">
+        <div className="flex items-center gap-3 mb-8 justify-center">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center f-display text-sm shrink-0" style={{ background: "linear-gradient(160deg,#2A313C,#1A1F27)", color: "#EDEAE2" }}>C</div>
+          <div className="f-display text-[15px]">Costi Commessa</div>
+        </div>
+
+        <div className="rounded-2xl p-8 text-center" style={{ background: "var(--card)", boxShadow: "var(--ombra-lg)" }}>
+          <div className="w-11 h-11 rounded-xl flex items-center justify-center mx-auto mb-4" style={{ background: "var(--velo-accento)" }}>
+            <Sparkles size={20} strokeWidth={1.75} style={{ color: "var(--accent)" }} />
+          </div>
+          <p className="f-display text-xl mb-2">Il periodo di prova è terminato</p>
+          <p className="text-sm mb-6 leading-relaxed" style={{ color: "var(--muted)" }}>
+            Hai usato liberamente Costi Commessa per 14 giorni. Per continuare ad accedere ai tuoi dati, attiva l'abbonamento mensile.
+          </p>
+
+          <div className="rounded-xl px-5 py-4 mb-6" style={{ background: "var(--velo)" }}>
+            <p className="f-mono text-[28px] font-medium" style={{ color: "var(--txt)" }}>29 €<span className="text-sm font-normal" style={{ color: "var(--muted)" }}> / mese</span></p>
+            <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>Disdici quando vuoi, senza vincoli.</p>
+          </div>
+
+          {errore && (
+            <div className="flex items-start gap-2.5 rounded-xl px-3.5 py-3 text-sm anim-pop mb-4 text-left" style={{ background: "rgba(166,58,50,.07)", border: "1px solid rgba(166,58,50,.2)", color: "#A63A32" }}>
+              <AlertTriangle size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" /> {errore}
+            </div>
+          )}
+
+          <Bottone variante="accento" className="w-full" onClick={abbonati} disabled={caricando}>
+            {caricando ? <Loader2 size={15} strokeWidth={1.75} className="animate-spin" /> : <ArrowRight size={15} strokeWidth={1.75} />}
+            {caricando ? "Un attimo…" : "Abbonati ora"}
+          </Bottone>
+          <button type="button" onClick={onUscire} className="text-xs mt-5 btn" style={{ color: "var(--muted)" }}>
+            Esci e torna più tardi
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Schermata di attesa dopo il ritorno da Stripe Checkout: il webhook può
+ *  arrivare con qualche secondo di ritardo rispetto al redirect del browser. */
+function VerificaPagamento() {
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center gap-4 px-4" style={{ background: "var(--tela)", color: "var(--txt)" }}>
+      <StileGlobale />
+      <Loader2 size={22} strokeWidth={1.75} className="animate-spin" style={{ color: "var(--accent)" }} />
+      <p className="text-sm" style={{ color: "var(--muted)" }}>Stiamo confermando il pagamento…</p>
+    </div>
+  );
+}
+
 /* ---------------------------------------------------------------------------
    APPLICAZIONE
 --------------------------------------------------------------------------- */
@@ -866,6 +940,14 @@ export default function App() {
   const [messaggioAccesso, setMessaggioAccesso] = useState(null);
   // Link dell'email di reset password: "/?token=...". Letto una sola volta all'avvio.
   const [tokenReset, setTokenReset] = useState(() => new URLSearchParams(window.location.search).get("token"));
+  // Ritorno da Stripe Checkout: "/?abbonamento=successo|annullato". Il webhook
+  // può arrivare con qualche secondo di ritardo rispetto al redirect del browser.
+  const [verificandoPagamento, setVerificandoPagamento] = useState(
+    () => new URLSearchParams(window.location.search).get("abbonamento") === "successo"
+  );
+  const [abbonamentoInfo, setAbbonamentoInfo] = useState(null); // { stato, giorniProvaRestanti, haAccesso }
+  const [bloccatoAbbonamento, setBloccatoAbbonamento] = useState(false);
+  const [versioneAccesso, setVersioneAccesso] = useState(0); // incrementato per forzare un ricaricamento dati
   const [caricamento, setCaricamento] = useState(true);
   const [dipendenti, setDipendenti] = useState([]);
   const [commesse, setCommesse] = useState([]);
@@ -908,21 +990,64 @@ export default function App() {
     });
   }, []);
 
+  /** Prova scaduta e nessun abbonamento attivo: il token resta valido (non è
+   *  un logout), si mostra solo la schermata di abbonamento richiesto. */
+  useEffect(() => {
+    suAbbonamentoRichiesto(() => {
+      pronto.current = true;
+      setCaricamento(false);
+      setBloccatoAbbonamento(true);
+    });
+  }, []);
+
   const uscire = useCallback(() => {
     cancellaToken();
     pronto.current = false;
     setCaricamento(true);
     setDipendenti([]); setCommesse([]); setRegistrazioni([]); setAzienda("");
     setMessaggioAccesso(null);
+    setBloccatoAbbonamento(false);
     setToken(null);
   }, []);
 
+  // Pulisce subito il parametro "?abbonamento=" dall'URL (non serve più dopo averlo letto).
   useEffect(() => {
-    if (!token) return;
+    if (new URLSearchParams(window.location.search).has("abbonamento")) {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
+  /** Dopo il ritorno da Stripe, il webhook può metterci qualche secondo:
+   *  ricontrolla lo stato ogni 1,5s per un massimo di ~10s prima di arrendersi. */
+  useEffect(() => {
+    if (!token || !verificandoPagamento) return;
+    let annullato = false;
+    let tentativi = 0;
+    const controlla = async () => {
+      const info = await datiAPI.statoAbbonamento();
+      if (annullato) return;
+      tentativi += 1;
+      if (info?.haAccesso) {
+        setAbbonamentoInfo(info);
+        setBloccatoAbbonamento(false);
+        setVerificandoPagamento(false);
+        setVersioneAccesso((v) => v + 1);
+        return;
+      }
+      if (tentativi >= 7) { setVerificandoPagamento(false); return; }
+      setTimeout(controlla, 1500);
+    };
+    controlla();
+    return () => { annullato = true; };
+  }, [token, verificandoPagamento]);
+
+  useEffect(() => {
+    if (!token || verificandoPagamento) return;
     let annullato = false;
     (async () => {
-      const { dati, avviso } = await datiAPI.carica();
+      const [{ dati, avviso }, infoAbbonamento] = await Promise.all([datiAPI.carica(), datiAPI.statoAbbonamento()]);
       if (annullato) return;
+      if (infoAbbonamento) setAbbonamentoInfo(infoAbbonamento);
       if (avviso) notifica(avviso, "avviso");
       // Un'azienda appena registrata parte sempre vuota: i dati d'esempio restano
       // disponibili solo su richiesta esplicita (pulsante "Ricarica dati d'esempio").
@@ -936,7 +1061,7 @@ export default function App() {
       setCaricamento(false);
     })();
     return () => { annullato = true; };
-  }, [token, notifica]);
+  }, [token, notifica, verificandoPagamento, versioneAccesso]);
 
   useEffect(() => {
     if (!pronto.current) return;
@@ -1109,6 +1234,14 @@ export default function App() {
     return <SchermataAccesso messaggio={messaggioAccesso} alSuccesso={() => { setMessaggioAccesso(null); setToken(leggiToken()); }} />;
   }
 
+  if (verificandoPagamento) {
+    return <VerificaPagamento />;
+  }
+
+  if (bloccatoAbbonamento) {
+    return <PaginaAbbonamento onUscire={uscire} />;
+  }
+
   if (caricamento) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--tela)", color: "var(--txt)" }}>
@@ -1140,6 +1273,14 @@ export default function App() {
           ))}
         </nav>
         <div className="mt-auto px-3 pb-3">
+          {abbonamentoInfo?.stato === "prova" && (
+            <div className="mb-2 px-3.5 py-2.5 rounded-lg flex items-center gap-2 text-xs" style={{ background: "rgba(255,255,255,.05)", color: "#B8A47C" }}>
+              <Clock size={14} strokeWidth={1.75} className="shrink-0" />
+              {abbonamentoInfo.giorniProvaRestanti === 1
+                ? "Ultimo giorno di prova"
+                : `${abbonamentoInfo.giorniProvaRestanti} giorni di prova rimanenti`}
+            </div>
+          )}
           <button onClick={uscire} className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm transition-colors btn" style={{ color: "#8B929C", fontWeight: 500 }}>
             <LogOut size={17} strokeWidth={1.75} /> Esci
           </button>
