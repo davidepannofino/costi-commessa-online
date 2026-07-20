@@ -1797,6 +1797,105 @@ export default function App() {
 /* ---------------------------------------------------------------------------
    DASHBOARD
 --------------------------------------------------------------------------- */
+/**
+ * Storico mensile: costo e ore per mese, indipendente dall'intervallo
+ * selezionato. È un componente a sé proprio perché deve restare visibile
+ * anche quando l'intervallo scelto non ha ore — in quel caso è l'unica cosa
+ * che dice all'utente dove sono davvero i suoi dati.
+ * Non usa hook: la serie arriva già memoizzata da App, qui si fanno solo map.
+ */
+function AndamentoMensile({ serieMensile }) {
+  const mesiSerie = serieMensile?.mesi ?? [];
+  const datiMesi = mesiSerie.map((m) => ({
+    mese: fmtMeseBreve(m.mese),
+    costo: Math.round(m.costo * 100) / 100,
+    ore: Math.round(m.ore * 100) / 100,
+  }));
+  const ultimoMese = mesiSerie[mesiSerie.length - 1];
+  const penultimoMese = mesiSerie[mesiSerie.length - 2];
+  const variazione = penultimoMese && penultimoMese.costo > 0
+    ? (ultimoMese.costo - penultimoMese.costo) / penultimoMese.costo
+    : null;
+
+  return (
+    <section className="rounded-2xl p-6" style={{ background: "var(--card)", boxShadow: "var(--ombra-sm)" }}>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-5">
+        <h2 className="f-display text-lg">Andamento mensile</h2>
+        <p className="text-xs" style={{ color: "var(--muted)" }}>
+          {datiMesi.length >= 2
+            ? `Ultimi ${datiMesi.length} mesi con ore registrate · indipendente dall'intervallo scelto`
+            : "Storico completo, indipendente dall'intervallo scelto"}
+        </p>
+      </div>
+
+      {datiMesi.length < 2 ? (
+        <div className="flex flex-col items-center justify-center text-center py-12 px-6 rounded-xl" style={{ background: "var(--tela)" }}>
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3.5" style={{ background: "var(--velo-accento)" }}>
+            <Clock size={18} strokeWidth={1.75} style={{ color: "var(--accent)" }} />
+          </div>
+          <p className="f-display text-base mb-1.5" style={{ color: "var(--txt)" }}>Servono almeno due mesi di dati per vedere l'andamento</p>
+          <p className="text-sm max-w-sm leading-relaxed" style={{ color: "var(--muted)" }}>
+            {datiMesi.length === 1
+              ? `Al momento c'è un solo mese con ore registrate (${fmtMese(mesiSerie[0].mese)}). Appena ne arriverà un altro, qui comparirà il confronto nel tempo.`
+              : "Registra o importa le ore di almeno due mesi diversi per confrontare come cambia il costo del lavoro."}
+          </p>
+        </div>
+      ) : (
+        <>
+          {variazione !== null && (
+            <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>
+              {fmtMese(ultimoMese.mese)}: <span className="f-mono" style={{ color: "var(--euro)" }}>{euro(ultimoMese.costo)}</span>
+              {" · "}
+              <span className="f-mono" style={{ color: variazione > 0 ? "#A6753A" : variazione < 0 ? "#1E7350" : "var(--muted)" }}>
+                {variazione > 0 ? "▲" : variazione < 0 ? "▼" : "="} {fmtPerc.format(Math.abs(variazione) * 100)}%
+              </span>
+              {" rispetto a "}{fmtMese(penultimoMese.mese)}
+            </p>
+          )}
+
+          <div className="grid lg:grid-cols-2 gap-x-8 gap-y-7">
+            <div>
+              <Micro>Costo per mese</Micro>
+              <div className="mt-3" style={{ height: 190 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={datiMesi} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                    <CartesianGrid stroke="var(--hairline)" vertical={false} />
+                    <XAxis dataKey="mese" tick={{ fontSize: 10.5, fontFamily: "'IBM Plex Mono', monospace", fill: "#9AA0A8" }} minTickGap={4} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 10.5, fontFamily: "'IBM Plex Mono', monospace", fill: "#9AA0A8" }} tickFormatter={(v) => fmtOre.format(v)} width={54} axisLine={false} tickLine={false} />
+                    <Tooltip formatter={(v) => [euro(v), "Costo del mese"]}
+                      contentStyle={{ borderRadius: 10, border: "1px solid var(--hairline)", boxShadow: "var(--ombra-md)", fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, padding: "8px 12px" }}
+                      cursor={{ fill: "rgba(23,27,34,.04)" }} />
+                    <Bar dataKey="costo" radius={[2, 2, 0, 0]} maxBarSize={38}>
+                      {datiMesi.map((_, i) => <Cell key={i} fill={i === datiMesi.length - 1 ? "var(--accent)" : "#454C57"} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div>
+              <Micro>Ore per mese</Micro>
+              <div className="mt-3" style={{ height: 190 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={datiMesi} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                    <CartesianGrid stroke="var(--hairline)" vertical={false} />
+                    <XAxis dataKey="mese" tick={{ fontSize: 10.5, fontFamily: "'IBM Plex Mono', monospace", fill: "#9AA0A8" }} minTickGap={4} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 10.5, fontFamily: "'IBM Plex Mono', monospace", fill: "#9AA0A8" }} tickFormatter={(v) => fmtOre.format(v)} width={46} axisLine={false} tickLine={false} />
+                    <Tooltip formatter={(v) => [fmtOre.format(v) + " h", "Ore del mese"]}
+                      contentStyle={{ borderRadius: 10, border: "1px solid var(--hairline)", boxShadow: "var(--ombra-md)", fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, padding: "8px 12px" }}
+                      cursor={{ fill: "rgba(23,27,34,.04)" }} />
+                    <Bar dataKey="ore" radius={[2, 2, 0, 0]} maxBarSize={38} fill="#8A9099" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
 function Dashboard({ riep, dal, al, dipendenti, serieMensile, vaiCommesse, vaiDati, haDati, apri }) {
   if (!riep) return null;
   const { righe, totCosto, totOre } = riep;
@@ -1812,25 +1911,18 @@ function Dashboard({ riep, dal, al, dipendenti, serieMensile, vaiCommesse, vaiDa
   }, [righe]);
 
   if (righe.length === 0) {
+    // L'intervallo scelto non ha ore, ma lo storico può comunque esistere (in
+    // altri mesi): l'andamento mensile resta visibile e indica all'utente dove
+    // sono davvero i suoi dati, invece di lasciare la Dashboard tutta vuota.
     return (
-      <StatoVuoto icona={LayoutDashboard} titolo="Nessuna ora nell'intervallo"
-        testo={haDati ? "Cambia l'intervallo di date con le frecce in alto oppure registra nuove ore." : "Non ci sono ancora dati. Registra le prime ore, importa il file Excel o ricarica i dati d'esempio dalla sezione Dati."}
-        azione={<Bottone onClick={vaiDati}><Plus size={14} strokeWidth={1.75} /> Vai a Dati</Bottone>} />
+      <div className="space-y-10">
+        <StatoVuoto icona={LayoutDashboard} titolo="Nessuna ora nell'intervallo"
+          testo={haDati ? "Cambia l'intervallo di date con le frecce in alto oppure registra nuove ore." : "Non ci sono ancora dati. Registra le prime ore, importa il file Excel o ricarica i dati d'esempio dalla sezione Dati."}
+          azione={<Bottone onClick={vaiDati}><Plus size={14} strokeWidth={1.75} /> Vai a Dati</Bottone>} />
+        {haDati && <AndamentoMensile serieMensile={serieMensile} />}
+      </div>
     );
   }
-
-  // Serie storica (già memoizzata in App): indipendente dall'intervallo selezionato.
-  const mesiSerie = serieMensile?.mesi ?? [];
-  const datiMesi = mesiSerie.map((m) => ({
-    mese: fmtMeseBreve(m.mese),
-    costo: Math.round(m.costo * 100) / 100,
-    ore: Math.round(m.ore * 100) / 100,
-  }));
-  const ultimoMese = mesiSerie[mesiSerie.length - 1];
-  const penultimoMese = mesiSerie[mesiSerie.length - 2];
-  const variazione = penultimoMese && penultimoMese.costo > 0
-    ? (ultimoMese.costo - penultimoMese.costo) / penultimoMese.costo
-    : null;
 
   const datiBarre = righe.map((r) => ({ nome: r.commessa.codice, costo: Math.round(r.costo * 100) / 100, riga: r }));
   const datiGiorni = [...riep.perGiorno.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1))
@@ -1933,82 +2025,7 @@ function Dashboard({ riep, dal, al, dipendenti, serieMensile, vaiCommesse, vaiDa
         </div>
       </div>
 
-      {/* ---- andamento mensile: storico, NON legato all'intervallo scelto ---- */}
-      <section className="rounded-2xl p-6" style={{ background: "var(--card)", boxShadow: "var(--ombra-sm)" }}>
-        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-5">
-          <h2 className="f-display text-lg">Andamento mensile</h2>
-          <p className="text-xs" style={{ color: "var(--muted)" }}>
-            {datiMesi.length >= 2
-              ? `Ultimi ${datiMesi.length} mesi con ore registrate · indipendente dall'intervallo scelto`
-              : "Storico completo, indipendente dall'intervallo scelto"}
-          </p>
-        </div>
-
-        {datiMesi.length < 2 ? (
-          <div className="flex flex-col items-center justify-center text-center py-12 px-6 rounded-xl" style={{ background: "var(--tela)" }}>
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3.5" style={{ background: "var(--velo-accento)" }}>
-              <Clock size={18} strokeWidth={1.75} style={{ color: "var(--accent)" }} />
-            </div>
-            <p className="f-display text-base mb-1.5" style={{ color: "var(--txt)" }}>Servono almeno due mesi di dati per vedere l'andamento</p>
-            <p className="text-sm max-w-sm leading-relaxed" style={{ color: "var(--muted)" }}>
-              {datiMesi.length === 1
-                ? `Al momento c'è un solo mese con ore registrate (${fmtMese(mesiSerie[0].mese)}). Appena ne arriverà un altro, qui comparirà il confronto nel tempo.`
-                : "Registra o importa le ore di almeno due mesi diversi per confrontare come cambia il costo del lavoro."}
-            </p>
-          </div>
-        ) : (
-          <>
-            {variazione !== null && (
-              <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>
-                {fmtMese(ultimoMese.mese)}: <span className="f-mono" style={{ color: "var(--euro)" }}>{euro(ultimoMese.costo)}</span>
-                {" · "}
-                <span className="f-mono" style={{ color: variazione > 0 ? "#A6753A" : variazione < 0 ? "#1E7350" : "var(--muted)" }}>
-                  {variazione > 0 ? "▲" : variazione < 0 ? "▼" : "="} {fmtPerc.format(Math.abs(variazione) * 100)}%
-                </span>
-                {" rispetto a "}{fmtMese(penultimoMese.mese)}
-              </p>
-            )}
-
-            <div className="grid lg:grid-cols-2 gap-x-8 gap-y-7">
-              <div>
-                <Micro>Costo per mese</Micro>
-                <div className="mt-3" style={{ height: 190 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={datiMesi} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-                      <CartesianGrid stroke="var(--hairline)" vertical={false} />
-                      <XAxis dataKey="mese" tick={{ fontSize: 10.5, fontFamily: "'IBM Plex Mono', monospace", fill: "#9AA0A8" }} minTickGap={4} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 10.5, fontFamily: "'IBM Plex Mono', monospace", fill: "#9AA0A8" }} tickFormatter={(v) => fmtOre.format(v)} width={54} axisLine={false} tickLine={false} />
-                      <Tooltip formatter={(v) => [euro(v), "Costo del mese"]}
-                        contentStyle={{ borderRadius: 10, border: "1px solid var(--hairline)", boxShadow: "var(--ombra-md)", fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, padding: "8px 12px" }}
-                        cursor={{ fill: "rgba(23,27,34,.04)" }} />
-                      <Bar dataKey="costo" radius={[2, 2, 0, 0]} maxBarSize={38}>
-                        {datiMesi.map((_, i) => <Cell key={i} fill={i === datiMesi.length - 1 ? "var(--accent)" : "#454C57"} />)}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              <div>
-                <Micro>Ore per mese</Micro>
-                <div className="mt-3" style={{ height: 190 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={datiMesi} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-                      <CartesianGrid stroke="var(--hairline)" vertical={false} />
-                      <XAxis dataKey="mese" tick={{ fontSize: 10.5, fontFamily: "'IBM Plex Mono', monospace", fill: "#9AA0A8" }} minTickGap={4} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 10.5, fontFamily: "'IBM Plex Mono', monospace", fill: "#9AA0A8" }} tickFormatter={(v) => fmtOre.format(v)} width={46} axisLine={false} tickLine={false} />
-                      <Tooltip formatter={(v) => [fmtOre.format(v) + " h", "Ore del mese"]}
-                        contentStyle={{ borderRadius: 10, border: "1px solid var(--hairline)", boxShadow: "var(--ombra-md)", fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, padding: "8px 12px" }}
-                        cursor={{ fill: "rgba(23,27,34,.04)" }} />
-                      <Bar dataKey="ore" radius={[2, 2, 0, 0]} maxBarSize={38} fill="#8A9099" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            </div>
-          </>
-        )}
-      </section>
+      <AndamentoMensile serieMensile={serieMensile} />
     </div>
   );
 }
