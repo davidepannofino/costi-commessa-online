@@ -6,7 +6,7 @@ import {
 import {
   LayoutDashboard, FolderKanban, Users, Database, Plus, Trash2, Pencil, Upload, Download,
   FileSpreadsheet, FileText, AlertTriangle, CheckCircle2, X, ChevronRight, ChevronLeft,
-  Search, RotateCcw, Save, Eraser, Info, FileDown, LogOut,
+  Search, RotateCcw, Save, Eraser, Info, FileDown, LogOut, Mail, Lock, Building2, ArrowRight, Loader2,
 } from "lucide-react";
 import { datiAPI, suSessioneScaduta, API_BASE } from "./datiAPI.js";
 import { leggiToken, salvaToken, cancellaToken } from "./auth.js";
@@ -537,13 +537,15 @@ function SchermataAccesso({ alSuccesso, messaggio }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [caricando, setCaricando] = useState(false);
-  const [errore, setErrore] = useState(messaggio || null);
+  // { testo, tipo: "avviso" | "errore" } — "avviso" per la sessione scaduta (tono ambra,
+  // stessi colori usati altrove per gli avvisi), "errore" per credenziali/validazione (tono rosso).
+  const [messaggioForm, setMessaggioForm] = useState(messaggio ? { testo: messaggio, tipo: "avviso" } : null);
 
-  const cambiaModo = (m) => { setModo(m); setErrore(null); };
+  const cambiaModo = (m) => { setModo(m); setMessaggioForm(null); };
 
   const invia = async (e) => {
     e.preventDefault();
-    setErrore(null);
+    setMessaggioForm(null);
     setCaricando(true);
     try {
       const percorso = modo === "accedi" ? "/api/login" : "/api/registrazione";
@@ -555,64 +557,133 @@ function SchermataAccesso({ alSuccesso, messaggio }) {
       });
       const dati = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setErrore(dati.errore || "Non è stato possibile completare l'operazione.");
+        setMessaggioForm({ testo: dati.errore || "Non è stato possibile completare l'operazione.", tipo: "errore" });
         return;
       }
       salvaToken(dati.token);
       alSuccesso();
     } catch (e) {
-      setErrore("Impossibile contattare il server. Riprova più tardi.");
+      setMessaggioForm({ testo: "Impossibile contattare il server. Riprova più tardi.", tipo: "errore" });
     } finally {
       setCaricando(false);
     }
   };
 
+  const barreDecorative = [38, 62, 46, 82, 54, 70, 34];
+
   return (
-    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: "var(--tela)", color: "var(--txt)" }}>
+    <div className="min-h-screen flex" style={{ background: "var(--tela)", color: "var(--txt)" }}>
       <StileGlobale />
-      <div className="w-full max-w-sm rounded-2xl p-7" style={{ background: "var(--card)", boxShadow: "var(--ombra-lg)" }}>
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center f-display text-sm shrink-0" style={{ background: "linear-gradient(160deg,#2A313C,#1A1F27)", color: "#EDEAE2" }}>C</div>
-          <div className="f-display text-[15px]">Costi Commessa</div>
+
+      {/* ================= PANNELLO DESCRITTIVO (solo desktop) ================= */}
+      <div className="hidden lg:flex lg:w-[45%] xl:w-[40%] relative flex-col justify-between overflow-hidden noprint superficie-scura px-12 py-14">
+        {/* forme geometriche di sfondo, puramente decorative */}
+        <div aria-hidden="true" className="absolute inset-0 pointer-events-none">
+          <div className="absolute rounded-full" style={{ width: 340, height: 340, top: -130, right: -110, border: "1px solid rgba(255,255,255,.06)" }} />
+          <div className="absolute rounded-full" style={{ width: 220, height: 220, top: -40, right: -60, border: "1px solid rgba(196,162,101,.14)" }} />
+          <div className="absolute" style={{ width: 200, height: 200, bottom: 40, left: -70, border: "1px solid rgba(255,255,255,.05)", borderRadius: 44, transform: "rotate(18deg)" }} />
         </div>
 
-        <div className="flex mb-6 rounded-lg p-1" style={{ background: "var(--velo)" }}>
-          <button type="button" onClick={() => cambiaModo("accedi")}
-            className="flex-1 text-sm font-medium rounded-md py-1.5 transition-colors"
-            style={modo === "accedi" ? { background: "var(--card)", color: "var(--txt)", boxShadow: "var(--ombra-xs)" } : { color: "var(--muted)" }}>
-            Accedi
-          </button>
-          <button type="button" onClick={() => cambiaModo("registrati")}
-            className="flex-1 text-sm font-medium rounded-md py-1.5 transition-colors"
-            style={modo === "registrati" ? { background: "var(--card)", color: "var(--txt)", boxShadow: "var(--ombra-xs)" } : { color: "var(--muted)" }}>
-            Registrati
-          </button>
+        <div className="relative flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg flex items-center justify-center f-display text-base shrink-0" style={{ background: "linear-gradient(160deg,#2A313C,#1A1F27)", color: "var(--accent-chiaro)", border: "1px solid rgba(255,255,255,.08)" }}>C</div>
+          <div className="f-display text-[15px]" style={{ color: "#EDEAE2" }}>Costi Commessa</div>
         </div>
 
-        <form onSubmit={invia} className="space-y-4">
-          {modo === "registrati" && (
-            <Campo etichetta="Nome azienda">
-              <input className={inputCls} value={nomeAzienda} onChange={(e) => setNomeAzienda(e.target.value)} required autoFocus />
-            </Campo>
-          )}
-          <Campo etichetta="Email">
-            <input type="email" className={inputCls} value={email} onChange={(e) => setEmail(e.target.value)} required />
-          </Campo>
-          <Campo etichetta="Password">
-            <input type="password" className={inputCls} value={password} onChange={(e) => setPassword(e.target.value)}
-              minLength={modo === "registrati" ? 8 : undefined} required />
-          </Campo>
+        <div className="relative">
+          <p className="f-display text-[30px] xl:text-[34px] leading-[1.15] mb-5" style={{ color: "#F0EDE5" }}>
+            Il costo del lavoro,<br />commessa per commessa.
+          </p>
+          <p className="text-sm leading-relaxed max-w-sm" style={{ color: "#9BA1AB" }}>
+            Registra le ore, calcola il costo esatto per ogni commessa e ogni dipendente, esporta il report. Ogni azienda con i propri dati, separati e al sicuro.
+          </p>
 
-          {errore && (
-            <p className="text-sm flex items-start gap-1.5" style={{ color: "#A63A32" }}>
-              <AlertTriangle size={14} strokeWidth={1.75} className="mt-0.5 shrink-0" /> {errore}
+          {/* grafico decorativo astratto (nessun dato reale) */}
+          <div className="mt-10 flex items-end gap-2.5 h-24" aria-hidden="true">
+            {barreDecorative.map((h, i) => (
+              <div key={i} className="flex-1 rounded-t-md anim-barra" style={{ height: `${h}%`, background: i === 3 ? "var(--accent-chiaro)" : "rgba(255,255,255,.10)" }} />
+            ))}
+          </div>
+        </div>
+
+        <p className="relative text-xs" style={{ color: "#5A616C" }}>Calcoli in piena precisione. Ogni azienda, dati isolati.</p>
+      </div>
+
+      {/* ================= FORM ================= */}
+      <div className="flex-1 flex items-center justify-center px-4 py-10">
+        <div className="w-full max-w-sm">
+          <div className="flex items-center gap-3 mb-8 lg:hidden">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center f-display text-sm shrink-0" style={{ background: "linear-gradient(160deg,#2A313C,#1A1F27)", color: "#EDEAE2" }}>C</div>
+            <div className="f-display text-[15px]">Costi Commessa</div>
+          </div>
+
+          <div className="rounded-2xl p-7" style={{ background: "var(--card)", boxShadow: "var(--ombra-lg)" }}>
+            <p className="f-display text-xl mb-1">{modo === "accedi" ? "Bentornato" : "Crea il tuo account"}</p>
+            <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>
+              {modo === "accedi" ? "Accedi per continuare a gestire i costi delle tue commesse." : "Un account per azienda: dati separati e al sicuro."}
             </p>
-          )}
 
-          <Bottone type="submit" variante="accento" className="w-full" disabled={caricando}>
-            {caricando ? "Attendere…" : modo === "accedi" ? "Accedi" : "Crea account"}
-          </Bottone>
-        </form>
+            <div className="relative flex mb-6 rounded-lg p-1" style={{ background: "var(--velo)" }}>
+              <div className="absolute top-1 bottom-1 rounded-md transition-transform duration-300 ease-out"
+                style={{ width: "calc(50% - 4px)", left: 4, background: "var(--card)", boxShadow: "var(--ombra-xs)", transform: modo === "registrati" ? "translateX(100%)" : "translateX(0)" }} />
+              <button type="button" onClick={() => cambiaModo("accedi")}
+                className="relative z-10 flex-1 text-sm font-medium rounded-md py-1.5 transition-colors"
+                style={{ color: modo === "accedi" ? "var(--txt)" : "var(--muted)" }}>
+                Accedi
+              </button>
+              <button type="button" onClick={() => cambiaModo("registrati")}
+                className="relative z-10 flex-1 text-sm font-medium rounded-md py-1.5 transition-colors"
+                style={{ color: modo === "registrati" ? "var(--txt)" : "var(--muted)" }}>
+                Registrati
+              </button>
+            </div>
+
+            <form onSubmit={invia} className="space-y-4">
+              {modo === "registrati" && (
+                <Campo etichetta="Nome azienda">
+                  <div className="relative">
+                    <Building2 size={15} strokeWidth={1.75} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--muted)" }} />
+                    <input className={inputCls + " pl-9"} value={nomeAzienda} onChange={(e) => setNomeAzienda(e.target.value)} placeholder="es. Rossi Costruzioni S.r.l." required autoFocus />
+                  </div>
+                </Campo>
+              )}
+              <Campo etichetta="Email">
+                <div className="relative">
+                  <Mail size={15} strokeWidth={1.75} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--muted)" }} />
+                  <input type="email" className={inputCls + " pl-9"} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="nome@azienda.it" required />
+                </div>
+              </Campo>
+              <Campo etichetta="Password">
+                <div className="relative">
+                  <Lock size={15} strokeWidth={1.75} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--muted)" }} />
+                  <input type="password" className={inputCls + " pl-9"} value={password} onChange={(e) => setPassword(e.target.value)}
+                    placeholder={modo === "registrati" ? "Almeno 8 caratteri" : "••••••••"}
+                    minLength={modo === "registrati" ? 8 : undefined} required />
+                </div>
+              </Campo>
+
+              {messaggioForm && (
+                messaggioForm.tipo === "avviso" ? (
+                  <div className="flex items-start gap-2.5 rounded-xl px-3.5 py-3 text-sm anim-pop" style={{ background: "var(--velo-accento)", border: "1px solid rgba(154,120,58,.18)", color: "#7C6027" }}>
+                    <AlertTriangle size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" /> {messaggioForm.testo}
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-2.5 rounded-xl px-3.5 py-3 text-sm anim-pop" style={{ background: "rgba(166,58,50,.07)", border: "1px solid rgba(166,58,50,.2)", color: "#A63A32" }}>
+                    <AlertTriangle size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" /> {messaggioForm.testo}
+                  </div>
+                )
+              )}
+
+              <Bottone type="submit" variante="accento" className="w-full" disabled={caricando}>
+                {caricando ? <Loader2 size={15} strokeWidth={1.75} className="animate-spin" /> : <ArrowRight size={15} strokeWidth={1.75} />}
+                {caricando ? "Attendere…" : modo === "accedi" ? "Accedi" : "Crea account"}
+              </Bottone>
+            </form>
+          </div>
+
+          <p className="text-center text-xs mt-5" style={{ color: "var(--muted)" }}>
+            Costo del lavoro per commessa. Calcoli in piena precisione.
+          </p>
+        </div>
       </div>
     </div>
   );
