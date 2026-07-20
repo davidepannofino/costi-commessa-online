@@ -107,6 +107,21 @@ export const datiAPI = {
     return dati.url;
   },
 
+  /** Statistiche di riepilogo per il pannello admin (403 se l'utente non è admin). */
+  async adminStatistiche() {
+    const res = await fetch(`${API_BASE}/api/admin/statistiche`, { headers: headerAuth() });
+    if (!res.ok) return null;
+    return await res.json();
+  },
+
+  /** Elenco di riepilogo di tutte le aziende, per il pannello admin (403 se non admin). */
+  async adminAziende() {
+    const res = await fetch(`${API_BASE}/api/admin/aziende`, { headers: headerAuth() });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const dati = await res.json();
+    return dati.aziende;
+  },
+
   /** Scarica un backup JSON tramite il browser (al posto del salvataggio su file nativo). */
   async backupEsporta(_aziendaId, dati) {
     try {

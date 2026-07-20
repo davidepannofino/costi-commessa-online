@@ -7,6 +7,7 @@ import { cifraPassword, verificaPassword, generaToken, richiedeAuth } from "./au
 import { inviaEmailResetPassword } from "./email.js";
 import { stripe, PREZZO_MENSILE_CENTESIMI } from "./stripe.js";
 import { richiedeAbbonamentoAttivo, statoAbbonamentoDi } from "./abbonamento.js";
+import { adminRouter, richiedeAdmin } from "./admin.js";
 
 const app = express();
 app.use(cors());
@@ -258,6 +259,14 @@ app.post("/api/abbonamento/portale", richiedeAuth, async (req, res) => {
     res.status(500).json({ errore: "Impossibile aprire la gestione dell'abbonamento." });
   }
 });
+
+/**
+ * Pannello di amministrazione: sola lettura, solo dati di riepilogo su TUTTE
+ * le aziende (mai password né dati operativi). Sezione separata da /api/stato:
+ * richiedeAdmin verifica sempre lato server l'email del token contro l'elenco
+ * admin, indipendentemente da qualunque flag mandato dal frontend.
+ */
+app.use("/api/admin", richiedeAuth, richiedeAdmin, adminRouter);
 
 /**
  * Restituisce l'intero stato dell'azienda autenticata (dipendenti, commesse,

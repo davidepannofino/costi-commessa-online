@@ -7,7 +7,7 @@ import {
   LayoutDashboard, FolderKanban, Users, Database, Plus, Trash2, Pencil, Upload, Download,
   FileSpreadsheet, FileText, AlertTriangle, CheckCircle2, X, ChevronRight, ChevronLeft,
   Search, RotateCcw, Save, Eraser, Info, FileDown, LogOut, Mail, Lock, Building2, ArrowRight, Loader2,
-  Clock, Sparkles, Eye, EyeOff, CreditCard, Gift, PartyPopper,
+  Clock, Sparkles, Eye, EyeOff, CreditCard, Gift, PartyPopper, ShieldCheck,
 } from "lucide-react";
 import { datiAPI, suSessioneScaduta, suAbbonamentoRichiesto, API_BASE } from "./datiAPI.js";
 import { leggiToken, salvaToken, cancellaToken } from "./auth.js";
@@ -1052,6 +1052,136 @@ function VistaAbbonamento({ info }) {
   );
 }
 
+const ETICHETTE_STATO_ADMIN = { prova: "Prova", attivo: "Attivo", scaduto: "Scaduto", esente: "Esente" };
+const COLORI_STATO_ADMIN = { prova: "var(--accent)", attivo: "#1E7350", scaduto: "#A63A32", esente: "#1E7350" };
+
+/** Pannello di amministrazione, visibile solo a chi il server riconosce come
+ *  admin (voce di navigazione già filtrata, controllo reale sulle rotte
+ *  /api/admin/*). Sola lettura: nessuna azione qui modifica dati di altre
+ *  aziende. */
+function VistaAdmin() {
+  const [caricando, setCaricando] = useState(true);
+  const [errore, setErrore] = useState(null);
+  const [statistiche, setStatistiche] = useState(null);
+  const [aziende, setAziende] = useState([]);
+  const [ordina, setOrdina] = useState({ campo: "registratoIl", disc: true });
+
+  useEffect(() => {
+    let annullato = false;
+    (async () => {
+      setCaricando(true);
+      setErrore(null);
+      try {
+        const [stats, elenco] = await Promise.all([datiAPI.adminStatistiche(), datiAPI.adminAziende()]);
+        if (annullato) return;
+        setStatistiche(stats);
+        setAziende(elenco);
+      } catch (e) {
+        if (!annullato) setErrore("Impossibile caricare i dati di amministrazione. Riprova tra poco.");
+      } finally {
+        if (!annullato) setCaricando(false);
+      }
+    })();
+    return () => { annullato = true; };
+  }, []);
+
+  const clic = (campo) => setOrdina((o) => ({ campo, disc: o.campo === campo ? !o.disc : true }));
+  const freccia = (campo) => (ordina.campo === campo ? (ordina.disc ? " ↓" : " ↑") : "");
+
+  const righe = useMemo(() => {
+    const valore = (a) => (ordina.campo === "nome" ? a.nome.toLowerCase()
+      : ordina.campo === "email" ? a.email.toLowerCase()
+      : ordina.campo === "stato" ? a.stato
+      : a.registratoIl);
+    return [...aziende].sort((a, b) => {
+      const va = valore(a), vb = valore(b);
+      const c = va < vb ? -1 : va > vb ? 1 : 0;
+      return ordina.disc ? -c : c;
+    });
+  }, [aziende, ordina]);
+
+  const schede = statistiche ? [
+    ["Totale aziende", statistiche.totale],
+    ["In prova", statistiche.inProva],
+    ["Attive", statistiche.attive],
+    ["Scadute", statistiche.scadute],
+    ["Nuove ultimi 7 giorni", statistiche.nuoveUltimi7Giorni],
+  ] : [];
+
+  return (
+    <div className="space-y-8">
+      <div>
+        <Micro>Amministrazione</Micro>
+        <h1 className="f-display text-[26px] mt-1" style={{ letterSpacing: "-0.01em" }}>Aziende registrate</h1>
+      </div>
+
+      {errore && (
+        <div className="flex items-start gap-2.5 rounded-xl px-4 py-3 text-sm" style={{ background: "rgba(166,58,50,.07)", border: "1px solid rgba(166,58,50,.2)", color: "#A63A32" }}>
+          <AlertTriangle size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" /> {errore}
+        </div>
+      )}
+
+      {caricando ? (
+        <p className="text-sm" style={{ color: "var(--muted)" }}>Caricamento…</p>
+      ) : (
+        <>
+          {schede.length > 0 && (
+            <div className="rounded-2xl grid grid-cols-2 xl:grid-cols-5 overflow-hidden" style={{ background: "var(--card)", boxShadow: "var(--ombra-sm)" }}>
+              {schede.map(([e, v], i) => (
+                <div key={e} className="px-6 py-5" style={{ borderLeft: i > 0 ? "1px solid var(--hairline)" : "none" }}>
+                  <Micro>{e}</Micro>
+                  <p className="f-mono text-[22px] mt-2 leading-none" style={{ color: "var(--txt)" }}>{v}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {aziende.length === 0 ? (
+            <StatoVuoto icona={Building2} titolo="Nessuna azienda registrata" testo="Non appena qualcuno si registrerà, comparirà qui." />
+          ) : (
+            <div className="rounded-2xl overflow-hidden" style={{ background: "var(--card)", boxShadow: "var(--ombra-sm)" }}>
+              <div className="px-6 py-4 flex items-center justify-between gap-3" style={{ borderBottom: "1px solid var(--hairline)" }}>
+                <p className="text-[13px] f-mono" style={{ color: "var(--muted)" }}>{righe.length} aziende</p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left">
+                      {[["nome", "Azienda", ""], ["email", "Email", "hidden sm:table-cell"], ["registratoIl", "Registrata il", "text-right"], ["stato", "Stato", "text-right"], [null, "Prova", "text-right hidden md:table-cell"]].map(([campo, nome, cls]) => (
+                        <th key={nome} className={`px-6 py-3.5 text-[11px] font-semibold uppercase ${cls} ${campo ? "cursor-pointer select-none" : ""}`}
+                          style={{ letterSpacing: ".1em", color: "var(--muted)" }} onClick={campo ? () => clic(campo) : undefined}>
+                          {nome}{campo ? freccia(campo) : ""}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {righe.map((a) => (
+                      <tr key={a.id} style={{ borderTop: "1px solid var(--hairline)" }}>
+                        <td className="px-6 py-4 font-medium">{a.nome}</td>
+                        <td className="px-6 py-4 hidden sm:table-cell" style={{ color: "var(--muted)" }}>{a.email}</td>
+                        <td className="px-6 py-4 f-mono text-right">{fmtData(String(a.registratoIl).slice(0, 10))}</td>
+                        <td className="px-6 py-4 text-right">
+                          <span className="text-xs font-medium px-2 py-1 rounded-md" style={{ color: COLORI_STATO_ADMIN[a.stato] || "var(--txt)", background: "var(--velo)" }}>
+                            {ETICHETTE_STATO_ADMIN[a.stato] || a.stato}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 f-mono text-right hidden md:table-cell" style={{ color: "var(--muted)" }}>
+                          {a.stato === "prova" ? `${a.giorniProvaRestanti} g` : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 /* ---------------------------------------------------------------------------
    APPLICAZIONE
 --------------------------------------------------------------------------- */
@@ -1069,6 +1199,7 @@ export default function App() {
   const [bloccatoAbbonamento, setBloccatoAbbonamento] = useState(false);
   const [versioneAccesso, setVersioneAccesso] = useState(0); // incrementato per forzare un ricaricamento dati
   const [mostraBenvenuto, setMostraBenvenuto] = useState(false); // solo subito dopo una registrazione riuscita
+  const [isAdmin, setIsAdmin] = useState(false); // deciso SEMPRE dal server (403 su /api/admin/* se non lo sei)
   const [caricamento, setCaricamento] = useState(true);
   const [dipendenti, setDipendenti] = useState([]);
   const [commesse, setCommesse] = useState([]);
@@ -1128,8 +1259,33 @@ export default function App() {
     setDipendenti([]); setCommesse([]); setRegistrazioni([]); setAzienda("");
     setMessaggioAccesso(null);
     setBloccatoAbbonamento(false);
+    setIsAdmin(false);
     setToken(null);
   }, []);
+
+  /** Mostra la voce "Amministrazione" solo se il server conferma che l'utente
+   *  è admin (chiamando /api/admin/statistiche, che risponde 403 altrimenti).
+   *  Indipendente dallo stato dell'abbonamento: non è la sezione operativa. */
+  useEffect(() => {
+    if (!token) { setIsAdmin(false); return; }
+    let annullato = false;
+    (async () => {
+      const stats = await datiAPI.adminStatistiche();
+      if (!annullato) setIsAdmin(!!stats);
+    })();
+    return () => { annullato = true; };
+  }, [token]);
+
+  /** Se qualcosa porta la vista su "admin" senza che l'utente lo sia (es. uno
+   *  stato rimasto da una sessione precedente), si torna alla dashboard con un
+   *  messaggio chiaro invece di un errore tecnico: il controllo che conta resta
+   *  comunque quello lato server sulle rotte /api/admin/*. */
+  useEffect(() => {
+    if (vista === "admin" && !isAdmin) {
+      setVista("dashboard");
+      notifica("Non hai accesso a questa sezione.", "avviso");
+    }
+  }, [vista, isAdmin, notifica]);
 
   // Pulisce subito il parametro "?abbonamento=" dall'URL (non serve più dopo averlo letto).
   useEffect(() => {
@@ -1334,6 +1490,7 @@ export default function App() {
     { id: "dipendenti", nome: "Dipendenti", icona: Users },
     { id: "dati", nome: "Dati", icona: Database },
     { id: "abbonamento", nome: "Abbonamento", icona: CreditCard },
+    ...(isAdmin ? [{ id: "admin", nome: "Amministrazione", icona: ShieldCheck }] : []),
   ];
 
   const costoLive = useContatore(riep ? riep.totCosto : 0);
@@ -1506,11 +1663,12 @@ export default function App() {
             />
           )}
           {vista === "abbonamento" && <VistaAbbonamento info={abbonamentoInfo} />}
+          {vista === "admin" && isAdmin && <VistaAdmin />}
         </main>
       </div>
 
       {/* ---- navigazione mobile ---- */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 grid grid-cols-5 noprint superficie-scura" style={{ borderTop: "1px solid rgba(255,255,255,.07)" }} aria-label="Navigazione">
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 grid noprint superficie-scura" style={{ borderTop: "1px solid rgba(255,255,255,.07)", gridTemplateColumns: `repeat(${NAV.length}, minmax(0, 1fr))` }} aria-label="Navigazione">
         {NAV.map(({ id, nome, icona: Icona }) => (
           <button key={id} onClick={() => setVista(id)} className="flex flex-col items-center gap-1 py-2.5 btn"
             style={{ color: vista === id ? "var(--accent-chiaro)" : "#8B929C" }}>
