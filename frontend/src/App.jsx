@@ -7,7 +7,7 @@ import {
   LayoutDashboard, FolderKanban, Users, Database, Plus, Trash2, Pencil, Upload, Download,
   FileSpreadsheet, FileText, AlertTriangle, CheckCircle2, X, ChevronRight, ChevronLeft,
   Search, RotateCcw, Save, Eraser, Info, FileDown, LogOut, Mail, Lock, Building2, ArrowRight, Loader2,
-  Clock, Sparkles, Eye, EyeOff, CreditCard, Gift, PartyPopper, ShieldCheck,
+  Clock, Sparkles, Eye, EyeOff, CreditCard, Gift, PartyPopper, ShieldCheck, FileImage,
 } from "lucide-react";
 import { datiAPI, suSessioneScaduta, suAbbonamentoRichiesto, API_BASE } from "./datiAPI.js";
 import { leggiToken, salvaToken, cancellaToken } from "./auth.js";
@@ -26,6 +26,12 @@ const fmtNum4 = new Intl.NumberFormat("it-IT", { minimumFractionDigits: 4, maxim
 const fmtOre = new Intl.NumberFormat("it-IT", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 const fmtPerc = new Intl.NumberFormat("it-IT", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const euro = (v) => fmtNum.format(v) + " €";
+/** Dimensione di un file in unità leggibili (kB sotto il megabyte).
+ *  Una cifra decimale al massimo: "1,7 MB" e "100 MB", non "100,00 MB". */
+const fmtMB = new Intl.NumberFormat("it-IT", { minimumFractionDigits: 0, maximumFractionDigits: 1 });
+const fmtDimensione = (byte) => (byte >= 1024 * 1024
+  ? fmtMB.format(byte / (1024 * 1024)) + " MB"
+  : Math.max(1, Math.round(byte / 1024)) + " kB");
 const fmtData = (iso) => {
   if (!iso) return "—";
   const [y, m, d] = iso.split("-");
@@ -1369,6 +1375,8 @@ export default function App() {
   const [commesse, setCommesse] = useState([]);
   const [registrazioni, setRegistrazioni] = useState([]);
   const [materiali, setMateriali] = useState([]); // voci di costo materiale (rotte /api/materiali)
+  const [allegati, setAllegati] = useState([]); // documenti DDT: solo metadati, i file si scaricano a richiesta
+  const [spazioAllegati, setSpazioAllegati] = useState(null); // { usatoAzienda, quotaAzienda, maxFile }
   const [vista, setVista] = useState("dashboard");
   const [dal, setDal] = useState("2026-07-01");
   const [al, setAl] = useState("2026-07-31");
@@ -1421,7 +1429,7 @@ export default function App() {
     cancellaToken();
     pronto.current = false;
     setCaricamento(true);
-    setDipendenti([]); setCommesse([]); setRegistrazioni([]); setMateriali([]); setAzienda("");
+    setDipendenti([]); setCommesse([]); setRegistrazioni([]); setMateriali([]); setAllegati([]); setAzienda("");
     setMessaggioAccesso(null);
     setBloccatoAbbonamento(false);
     setIsAdmin(false);
@@ -1498,6 +1506,8 @@ export default function App() {
         setCommesse(Array.isArray(dati.commesse) ? dati.commesse : []);
         setRegistrazioni(Array.isArray(dati.registrazioni) ? dati.registrazioni : []);
         setMateriali(Array.isArray(dati.materiali) ? dati.materiali : []);
+        setAllegati(Array.isArray(dati.allegati) ? dati.allegati : []);
+        if (dati.spazioAllegati) setSpazioAllegati(dati.spazioAllegati);
         if (typeof dati.azienda === "string") setAzienda(dati.azienda);
       }
       pronto.current = true;
@@ -1583,13 +1593,14 @@ export default function App() {
   });
   const eliminaCommessa = (com) => setConferma({
     titolo: "Eliminare la commessa?",
-    testo: `Verranno eliminate anche tutte le ore registrate e i materiali della commessa ${com.codice}. L'operazione non si può annullare.`,
+    testo: `Verranno eliminate anche tutte le ore registrate, i materiali e i documenti della commessa ${com.codice}. L'operazione non si può annullare.`,
     onOk: () => {
       setCommesse((c) => c.filter((x) => x.id !== com.id));
       setRegistrazioni((r) => r.filter((x) => x.commessaId !== com.id));
-      // I materiali della commessa spariscono anche sul server (cascata sulla
-      // chiave esterna): qui si allinea subito la copia locale.
+      // Materiali e documenti della commessa spariscono anche sul server
+      // (cascata sulla chiave esterna): qui si allinea subito la copia locale.
       setMateriali((m) => m.filter((x) => x.commessaId !== com.id));
+      setAllegati((a) => a.filter((x) => x.commessaId !== com.id));
       setDettaglio(null);
       notifica(`Commessa ${com.codice} eliminata.`);
     },
@@ -1660,11 +1671,61 @@ export default function App() {
     }
   };
 
+  /* --- documenti (DDT): archivio, nessuna lettura del contenuto ---
+     Come i materiali, passano dalle loro rotte e non dal salvataggio
+     automatico. Il file viaggia una volta sola: qui si tengono solo i
+     metadati, il contenuto si riscarica quando si apre il documento. */
+  const caricaAllegato = async (commessaId, file) => {
+    try {
+      const { allegato, spazio } = await datiAPI.caricaAllegato(commessaId, file);
+      setAllegati((a) => [allegato, ...a]);
+      if (spazio) setSpazioAllegati(spazio);
+      notifica(`Documento allegato: ${allegato.nomeFile} (${fmtDimensione(allegato.dimensione)}).`);
+      return { ok: true, allegato };
+    } catch (e) {
+      notifica(e.message, "errore");
+      return { ok: false, errore: e.message };
+    }
+  };
+  const apriAllegato = async (allegato) => {
+    try {
+      const { url } = await datiAPI.apriAllegato(allegato.id);
+      // Si apre da una URL locale al browser: il documento non passa mai da un
+      // indirizzo pubblico. La finestra si prende il blob, poi lo si libera.
+      const finestra = window.open(url, "_blank", "noopener");
+      if (!finestra) {
+        // Il browser ha bloccato la finestra: si ripiega sul salvataggio.
+        const a = document.createElement("a");
+        a.href = url; a.download = allegato.nomeFile;
+        document.body.appendChild(a); a.click(); a.remove();
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      return { ok: true };
+    } catch (e) {
+      notifica(e.message, "errore");
+      return { ok: false, errore: e.message };
+    }
+  };
+  const eliminaAllegato = (allegato) => setConferma({
+    titolo: "Eliminare il documento?",
+    testo: `"${allegato.nomeFile}" verrà eliminato dall'archivio. L'operazione non si può annullare.`,
+    onOk: async () => {
+      try {
+        const ris = await datiAPI.eliminaAllegato(allegato.id);
+        setAllegati((a) => a.filter((x) => x.id !== allegato.id));
+        if (ris?.spazio) setSpazioAllegati(ris.spazio);
+        notifica("Documento eliminato.");
+      } catch (e) {
+        notifica(e.message, "errore");
+      }
+    },
+  });
+
   const svuotaTutto = () => setConferma({
     titolo: "Svuotare tutti i dati?",
-    testo: "Dipendenti, commesse, registrazioni e materiali verranno cancellati. Prima di procedere puoi scaricare un backup dalla sezione Dati.",
+    testo: "Dipendenti, commesse, registrazioni, materiali e documenti allegati verranno cancellati. Prima di procedere puoi scaricare un backup dalla sezione Dati.",
     onOk: () => {
-      setDipendenti([]); setCommesse([]); setRegistrazioni([]); setMateriali([]); setDettaglio(null);
+      setDipendenti([]); setCommesse([]); setRegistrazioni([]); setMateriali([]); setAllegati([]); setDettaglio(null);
       salvaSubitoConBackup({ dipendenti: [], commesse: [], registrazioni: [], materiali: [] });
       notifica("Tutti i dati sono stati cancellati.");
     },
@@ -1678,9 +1739,15 @@ export default function App() {
   };
 
   /** "Backup (JSON)": salva su un file scelto dall'utente sul PC (non più un download del browser).
-   *  Include anche i materiali, altrimenti un backup/ripristino li perderebbe. */
+   *  Include anche i materiali, altrimenti un backup/ripristino li perderebbe.
+   *  Dei documenti allegati salva solo l'ELENCO (nome, tipo, dimensione, data):
+   *  i file veri restano nell'archivio, metterli qui dentro renderebbe il
+   *  backup enorme e impossibile da scaricare. Serve come inventario. */
   const backupJSON = async () => {
-    const ris = await datiAPI.backupEsporta(null, { azienda, dipendenti, commesse, registrazioni, materiali });
+    const ris = await datiAPI.backupEsporta(null, {
+      azienda, dipendenti, commesse, registrazioni, materiali,
+      allegati: allegati.map((a) => ({ ...a, nota: "solo riferimento: il file resta nell'archivio dell'app" })),
+    });
     if (ris.ok) notifica("Backup salvato: " + ris.percorso);
     else if (!ris.annullato) notifica("Non è stato possibile salvare il backup.", "errore");
   };
@@ -1952,7 +2019,9 @@ export default function App() {
         <PannelloDettaglio
           riga={costi.righe.find((r) => r.commessa.id === dettaglio.commessa.id) || { ...dettaglio, costoManodopera: dettaglio.costo ?? 0, costoMateriali: 0, costoTotale: dettaglio.costo ?? 0, voci: [] }}
           riep={riep} costi={costi} dal={dal} al={al} serieMensile={serieMensile}
+          allegati={allegati} spazioAllegati={spazioAllegati}
           onAggiungiMateriale={aggiungiMateriale} onAggiornaMateriale={aggiornaMateriale} onEliminaMateriale={eliminaMateriale}
+          onCaricaAllegato={caricaAllegato} onApriAllegato={apriAllegato} onEliminaAllegato={eliminaAllegato}
           onChiudi={() => setDettaglio(null)} />
       )}
 
@@ -2419,7 +2488,9 @@ function VistaCommesse({ riep, costi, dal, al, apri, esportaCsv, esportaXlsx, es
   );
 }
 
-function PannelloDettaglio({ riga, riep, costi, dal, al, serieMensile, onAggiungiMateriale, onAggiornaMateriale, onEliminaMateriale, onChiudi }) {
+function PannelloDettaglio({ riga, riep, costi, dal, al, serieMensile, allegati, spazioAllegati,
+  onAggiungiMateriale, onAggiornaMateriale, onEliminaMateriale,
+  onCaricaAllegato, onApriAllegato, onEliminaAllegato, onChiudi }) {
   useEffect(() => {
     const h = (e) => e.key === "Escape" && onChiudi();
     window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h);
@@ -2487,6 +2558,12 @@ function PannelloDettaglio({ riga, riep, costi, dal, al, serieMensile, onAggiung
           <SezioneMateriali
             commessa={riga.commessa} voci={riga.voci} totale={riga.costoMateriali} dal={dal} al={al}
             onAggiungi={onAggiungiMateriale} onAggiorna={onAggiornaMateriale} onElimina={onEliminaMateriale} />
+
+          <SezioneDocumenti
+            commessa={riga.commessa}
+            allegati={allegati.filter((a) => a.commessaId === riga.commessa.id)}
+            spazio={spazioAllegati}
+            onCarica={onCaricaAllegato} onApri={onApriAllegato} onElimina={onEliminaAllegato} />
 
           {/* storico della commessa: tutti i mesi in cui ha avuto ore, non solo l'intervallo */}
           <div>
@@ -2652,6 +2729,112 @@ function SezioneMateriali({ commessa, voci, totale, dal, al, onAggiungi, onAggio
             </li>
           ))}
         </ul>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Documenti (DDT) di una commessa: caricamento, elenco, apertura, eliminazione.
+ * In questo passo il documento viene solo archiviato e collegato: nessuna
+ * lettura del contenuto. Il collegamento è per id della commessa, quindi
+ * rinominarla non stacca nulla.
+ * A differenza dei materiali l'elenco NON è filtrato per intervallo di date:
+ * un archivio di documenti serve tutto, sempre.
+ */
+function SezioneDocumenti({ commessa, allegati, spazio, onCarica, onApri, onElimina }) {
+  const refFile = useRef();
+  const [inCaricamento, setInCaricamento] = useState(null); // nome del file in corso
+  const [inApertura, setInApertura] = useState(null);
+
+  const scegli = async (file) => {
+    if (!file) return;
+    setInCaricamento(file.name);
+    await onCarica(commessa.id, file);
+    setInCaricamento(null);
+  };
+
+  const apri = async (a) => { setInApertura(a.id); await onApri(a); setInApertura(null); };
+
+  const usato = spazio?.usatoAzienda ?? 0;
+  const quota = spazio?.quotaAzienda ?? 0;
+  const quotaPiena = quota > 0 ? Math.min(1, usato / quota) : 0;
+
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-3 mb-1">
+        <h4 className="f-display text-base">Documenti · DDT</h4>
+        <p className="f-mono text-xs" style={{ color: "var(--muted)" }}>{allegati.length} {allegati.length === 1 ? "documento" : "documenti"}</p>
+      </div>
+      <p className="text-xs mb-4" style={{ color: "var(--muted)" }}>
+        Archivio dei documenti di trasporto della commessa: PDF o foto, fino a {spazio ? fmtDimensione(spazio.maxFile) : "5 MB"} l'uno. Le foto vengono rimpicciolite prima di essere caricate. Per ora i documenti si conservano soltanto: la lettura automatica arriverà più avanti.
+      </p>
+
+      <input ref={refFile} type="file" accept="application/pdf,image/jpeg,image/png" className="hidden"
+        onChange={(e) => { const f = e.target.files[0]; e.target.value = ""; scegli(f); }} />
+
+      {inCaricamento ? (
+        <div className="rounded-xl px-4 py-3.5" style={{ background: "var(--tela)", border: "1px solid var(--hairline)" }}>
+          <div className="flex items-center gap-2.5">
+            <Loader2 size={14} strokeWidth={1.75} className="animate-spin" style={{ color: "var(--accent)" }} />
+            <p className="text-sm truncate">Caricamento di {inCaricamento}…</p>
+          </div>
+          <div className="mt-3 h-1 rounded-full overflow-hidden" style={{ background: "var(--hairline)" }}>
+            <div className="h-full anim-scorre" style={{ background: "var(--accent)", width: "40%" }} />
+          </div>
+        </div>
+      ) : (
+        <Bottone variante="fantasma" onClick={() => refFile.current.click()}>
+          <Upload size={14} strokeWidth={1.75} /> Allega un documento
+        </Bottone>
+      )}
+
+      {allegati.length === 0 ? (
+        <p className="text-sm mt-4" style={{ color: "var(--muted)" }}>Nessun documento allegato a questa commessa.</p>
+      ) : (
+        <ul className="mt-4 space-y-2">
+          {allegati.map((a) => (
+            <li key={a.id} className="rounded-xl px-3.5 py-3 flex items-center justify-between gap-3" style={{ border: "1px solid var(--hairline)" }}>
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: "var(--velo-accento)" }}>
+                  {a.tipo === "application/pdf"
+                    ? <FileText size={16} strokeWidth={1.75} style={{ color: "var(--accent)" }} />
+                    : <FileImage size={16} strokeWidth={1.75} style={{ color: "var(--accent)" }} />}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{a.nomeFile}</p>
+                  <p className="f-mono text-xs mt-0.5" style={{ color: "var(--muted)" }}>
+                    {fmtData(a.caricatoIl.slice(0, 10))} · {fmtDimensione(a.dimensione)}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button onClick={() => apri(a)} disabled={inApertura === a.id}
+                  aria-label={"Apri documento " + a.nomeFile} className="p-1.5 rounded-lg btn" style={{ border: "1px solid var(--hairline)" }}>
+                  {inApertura === a.id
+                    ? <Loader2 size={12} strokeWidth={1.75} className="animate-spin" />
+                    : <Download size={12} strokeWidth={1.75} />}
+                </button>
+                <button onClick={() => onElimina(a)} aria-label={"Elimina documento " + a.nomeFile}
+                  className="p-1.5 rounded-lg btn" style={{ border: "1px solid rgba(166,58,50,.22)", color: "#A63A32" }}>
+                  <Trash2 size={12} strokeWidth={1.75} />
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {spazio && (
+        <div className="mt-4">
+          <div className="flex items-baseline justify-between gap-3">
+            <Micro>Spazio archivio</Micro>
+            <p className="f-mono text-xs" style={{ color: quotaPiena > 0.9 ? "#A63A32" : "var(--muted)" }}>
+              {fmtDimensione(usato)} di {fmtDimensione(quota)}
+            </p>
+          </div>
+          <div className="mt-2"><BarraQuota quota={quotaPiena} colore={quotaPiena > 0.9 ? "#A63A32" : "#454C57"} /></div>
+        </div>
       )}
     </div>
   );
@@ -3197,8 +3380,12 @@ function StileGlobale() {
       .anim-vista{ animation:vista .24s ease; }
       @keyframes cresci{ from{width:0;} }
       .anim-barra{ animation:cresci .6s cubic-bezier(.19,1,.22,1); transition:width .4s ease; }
+      /* Barra indeterminata: il caricamento di un file non espone una
+         percentuale affidabile, quindi si mostra un movimento continuo. */
+      @keyframes scorre{ from{transform:translateX(-100%);} to{transform:translateX(320%);} }
+      .anim-scorre{ animation:scorre 1.1s cubic-bezier(.4,0,.2,1) infinite; }
       @media (prefers-reduced-motion: reduce){
-        .anim-pop,.anim-slide,.anim-vista,.anim-velo,.anim-barra{ animation:none; transition:none; }
+        .anim-pop,.anim-slide,.anim-vista,.anim-velo,.anim-barra,.anim-scorre{ animation:none; transition:none; }
         *{ transition:none!important; }
       }
       .soloprint{ display:none; }

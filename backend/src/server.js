@@ -8,6 +8,10 @@ import { inviaEmailResetPassword } from "./email.js";
 import { stripe, PREZZO_MENSILE_CENTESIMI } from "./stripe.js";
 import { richiedeAbbonamentoAttivo, statoAbbonamentoDi } from "./abbonamento.js";
 import { adminRouter, richiedeAdmin } from "./admin.js";
+import {
+  salvaFile, leggiFile, eliminaFile, eliminaFileInBlocco,
+  archivioEsterno, descrizioneArchivio, QUOTA_AZIENDA_BYTE, TETTO_GLOBALE_BYTE,
+} from "./archivio.js";
 
 const app = express();
 app.use(cors());
@@ -277,7 +281,7 @@ app.use("/api/admin", richiedeAuth, richiedeAdmin, adminRouter);
 app.get("/api/stato", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) => {
   const aziendaId = req.aziendaId;
   try {
-    const [azRes, dipRes, comRes, regRes, matRes] = await Promise.all([
+    const [azRes, dipRes, comRes, regRes, matRes, allRes, spazio] = await Promise.all([
       pool.query("SELECT nome FROM aziende WHERE id = $1", [aziendaId]),
       pool.query(
         "SELECT id, nome, cognome, lordo_mensile FROM dipendenti WHERE azienda_id = $1 ORDER BY nome, cognome",
@@ -292,6 +296,10 @@ app.get("/api/stato", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) 
         [aziendaId]
       ),
       pool.query(`${SELECT_MATERIALI} WHERE azienda_id = $1 ORDER BY data DESC, descrizione`, [aziendaId]),
+      // Solo i metadati dei documenti: il contenuto dei file si scarica a
+      // parte, una richiesta per documento, quando serve davvero.
+      pool.query(`${SELECT_ALLEGATI} WHERE azienda_id = $1 ORDER BY caricato_il DESC`, [aziendaId]),
+      spazioAllegati(aziendaId),
     ]);
 
     res.json({
@@ -311,6 +319,8 @@ app.get("/api/stato", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) 
         ore: Number(r.ore),
       })),
       materiali: matRes.rows.map(mappaMateriale),
+      allegati: allRes.rows.map(mappaAllegato),
+      spazioAllegati: spazio,
     });
   } catch (e) {
     console.error(e);
@@ -350,9 +360,20 @@ app.put("/api/stato", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) 
     // cancellerebbe tutti i materiali dell'azienda. Si tolgono quindi solo le
     // commesse davvero sparite dall'elenco (e con esse, giustamente, i loro
     // materiali); le altre vengono aggiornate al passo successivo.
+    // I documenti delle commesse che stanno per sparire vanno tolti anche
+    // dall'archivio esterno: la cascata del database arriva alle righe, non ai
+    // file su R2. Si annotano qui, si cancellano dopo il COMMIT (se la
+    // transazione fallisse, i file devono restare al loro posto).
+    const idCommesse = commesse.map((c) => String(c.id));
+    const fileDaTogliere = (await client.query(
+      `SELECT posizione, chiave_esterna FROM allegati
+        WHERE azienda_id = $1 AND NOT (commessa_id = ANY($2::text[])) AND posizione <> 'database'`,
+      [aziendaId, idCommesse]
+    )).rows;
+
     await client.query(
       "DELETE FROM commesse WHERE azienda_id = $1 AND NOT (id = ANY($2::text[]))",
-      [aziendaId, commesse.map((c) => String(c.id))]
+      [aziendaId, idCommesse]
     );
     await client.query("DELETE FROM dipendenti WHERE azienda_id = $1", [aziendaId]);
 
@@ -401,6 +422,8 @@ app.put("/api/stato", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) 
     }
 
     await client.query("COMMIT");
+    // Solo ora che il database è a posto si tolgono i file rimasti orfani.
+    await eliminaFileInBlocco(fileDaTogliere);
     res.json({ ok: true });
   } catch (e) {
     await client.query("ROLLBACK");
@@ -584,5 +607,204 @@ app.delete("/api/materiali/:id", richiedeAuth, richiedeAbbonamentoAttivo, async 
   }
 });
 
+/* ---------------------------------------------------------------------------
+   ALLEGATI (DDT) — archivio dei documenti di una commessa.
+   Qui il documento viene solo conservato e collegato: nessuna lettura del
+   contenuto. Il file sta dentro Postgres perché il disco dei servizi Render
+   free è effimero (si perderebbe a ogni riavvio); per non riempire il piano
+   gratuito di Neon ci sono tre freni: dimensione del singolo file, quota per
+   azienda e tetto complessivo su tutte le aziende.
+--------------------------------------------------------------------------- */
+
+// Il singolo documento resta comunque limitato: un DDT è una pagina o due, e
+// un limite basso protegge memoria e tempi di caricamento. Quota per azienda e
+// tetto complessivo arrivano invece da archivio.js, perché dipendono da dove
+// finiscono i file (molto più larghi con l'archivio esterno).
+const MAX_FILE_BYTE = 5 * 1024 * 1024;
+const inMB = (b) => Math.round((b / (1024 * 1024)) * 10) / 10;
+
+// Colonne dei metadati: mai "contenuto", che pesa e serve solo allo scaricamento.
+const SELECT_ALLEGATI =
+  "SELECT id, commessa_id, nome_file, tipo, dimensione, posizione, to_char(caricato_il, 'YYYY-MM-DD\"T\"HH24:MI:SSOF') AS caricato_il FROM allegati";
+
+const mappaAllegato = (r) => ({
+  id: r.id,
+  commessaId: r.commessa_id,
+  nomeFile: r.nome_file,
+  tipo: r.tipo,
+  dimensione: Number(r.dimensione),
+  posizione: r.posizione,
+  caricatoIl: r.caricato_il,
+});
+
+/**
+ * Riconosce il tipo dai PRIMI BYTE del file, non dall'intestazione mandata dal
+ * client: un'estensione o un Content-Type si scrivono a piacere, la firma del
+ * formato no. Restituisce null se non è un tipo ammesso.
+ */
+function riconosciTipo(buf) {
+  if (!buf || buf.length < 8) return null;
+  if (buf[0] === 0x25 && buf[1] === 0x50 && buf[2] === 0x44 && buf[3] === 0x46) return "application/pdf"; // %PDF
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return "image/jpeg";
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47 &&
+      buf[4] === 0x0d && buf[5] === 0x0a && buf[6] === 0x1a && buf[7] === 0x0a) return "image/png";
+  return null;
+}
+
+/** Nome file ripulito: niente percorsi, niente caratteri di controllo, lunghezza limitata. */
+function nomeFilePulito(grezzo) {
+  let nome = "";
+  try { nome = decodeURIComponent(String(grezzo || "")); } catch { nome = String(grezzo || ""); }
+  // Via i separatori di percorso e i caratteri di controllo; il resto del
+  // nome (trattini, spazi, accenti) resta com'è.
+  nome = nome.replace(/[\\/\u0000-\u001F]/g, " ").replace(/\s+/g, " ").trim().slice(0, 200);
+  return nome || "documento";
+}
+
+/** Legge il corpo grezzo della richiesta, traducendo in JSON gli errori del parser. */
+const corpoGrezzo = express.raw({ type: () => true, limit: "6mb" });
+const leggiCorpoFile = (req, res, next) =>
+  corpoGrezzo(req, res, (err) => {
+    if (!err) return next();
+    if (err.type === "entity.too.large") {
+      return res.status(413).json({ errore: `Il file è troppo grande: il limite è ${inMB(MAX_FILE_BYTE)} MB.` });
+    }
+    console.error("Errore leggendo il file caricato:", err);
+    res.status(400).json({ errore: "Impossibile leggere il file caricato." });
+  });
+
+/** Spazio occupato dagli allegati: della singola azienda e di tutte insieme. */
+async function spazioAllegati(aziendaId) {
+  const ris = await pool.query(
+    `SELECT COALESCE(SUM(dimensione) FILTER (WHERE azienda_id = $1), 0)::bigint AS azienda,
+            COALESCE(SUM(dimensione), 0)::bigint AS globale
+       FROM allegati`,
+    [aziendaId]
+  );
+  return {
+    usatoAzienda: Number(ris.rows[0].azienda),
+    usatoGlobale: Number(ris.rows[0].globale),
+    quotaAzienda: QUOTA_AZIENDA_BYTE,
+    maxFile: MAX_FILE_BYTE,
+  };
+}
+
+/** Carica un documento e lo allega a una commessa dell'azienda del token. */
+app.post("/api/commesse/:id/allegati", richiedeAuth, richiedeAbbonamentoAttivo, leggiCorpoFile, async (req, res) => {
+  const commessaId = String(req.params.id);
+  const contenuto = Buffer.isBuffer(req.body) ? req.body : null;
+
+  if (!contenuto || contenuto.length === 0) return res.status(400).json({ errore: "Nessun file ricevuto." });
+  if (contenuto.length > MAX_FILE_BYTE) {
+    return res.status(413).json({ errore: `Il file è troppo grande: il limite è ${inMB(MAX_FILE_BYTE)} MB.` });
+  }
+  const tipo = riconosciTipo(contenuto);
+  if (!tipo) return res.status(415).json({ errore: "Tipo di file non ammesso: si possono allegare solo PDF, JPG e PNG." });
+
+  try {
+    const com = await pool.query("SELECT 1 FROM commesse WHERE id = $1 AND azienda_id = $2", [commessaId, req.aziendaId]);
+    if (com.rows.length === 0) return res.status(404).json({ errore: "Commessa non trovata." });
+
+    const spazio = await spazioAllegati(req.aziendaId);
+    if (spazio.usatoAzienda + contenuto.length > QUOTA_AZIENDA_BYTE) {
+      return res.status(507).json({
+        errore: `Spazio esaurito: i documenti occupano ${inMB(spazio.usatoAzienda)} MB dei ${inMB(QUOTA_AZIENDA_BYTE)} MB disponibili. Elimina qualche documento prima di caricarne altri.`,
+      });
+    }
+    if (spazio.usatoGlobale + contenuto.length > TETTO_GLOBALE_BYTE) {
+      return res.status(507).json({ errore: "Archivio documenti pieno: contatta l'assistenza." });
+    }
+
+    // Prima il file va nell'archivio (database o R2), poi si scrive la riga:
+    // se il caricamento fallisce non resta una riga che punta al nulla.
+    const id = randomUUID();
+    const salvato = await salvaFile({ aziendaId: req.aziendaId, id, contenuto, tipo });
+
+    try {
+      const ris = await pool.query(
+        `INSERT INTO allegati (id, azienda_id, commessa_id, nome_file, tipo, dimensione, posizione, contenuto, chiave_esterna)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         RETURNING id, commessa_id, nome_file, tipo, dimensione, posizione,
+                   to_char(caricato_il, 'YYYY-MM-DD"T"HH24:MI:SSOF') AS caricato_il`,
+        [id, req.aziendaId, commessaId, nomeFilePulito(req.headers["x-nome-file"]), tipo, contenuto.length,
+         salvato.posizione, salvato.contenuto, salvato.chiaveEsterna]
+      );
+      res.status(201).json({ allegato: mappaAllegato(ris.rows[0]), spazio: await spazioAllegati(req.aziendaId) });
+    } catch (e) {
+      // La riga non è stata scritta: si toglie anche il file, altrimenti
+      // resterebbe nell'archivio senza che nessuno sappia più che esiste.
+      await eliminaFileInBlocco([{ posizione: salvato.posizione, chiave_esterna: salvato.chiaveEsterna }]);
+      throw e;
+    }
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ errore: "Impossibile salvare il documento." });
+  }
+});
+
+/** Elenco dei documenti dell'azienda del token, eventualmente di una sola commessa. */
+app.get("/api/allegati", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) => {
+  const commessaId = req.query.commessaId ? String(req.query.commessaId) : null;
+  try {
+    const ris = commessaId
+      ? await pool.query(`${SELECT_ALLEGATI} WHERE azienda_id = $1 AND commessa_id = $2 ORDER BY caricato_il DESC`, [req.aziendaId, commessaId])
+      : await pool.query(`${SELECT_ALLEGATI} WHERE azienda_id = $1 ORDER BY caricato_il DESC`, [req.aziendaId]);
+    res.json({ allegati: ris.rows.map(mappaAllegato), spazio: await spazioAllegati(req.aziendaId) });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ errore: "Impossibile leggere i documenti." });
+  }
+});
+
+/**
+ * Scarica il file. Richiede il token come ogni altra rotta: il frontend lo
+ * legge con fetch e lo apre da una URL locale al browser, così il documento
+ * non è mai raggiungibile da un indirizzo pubblico.
+ */
+app.get("/api/allegati/:id", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) => {
+  try {
+    const ris = await pool.query(
+      "SELECT nome_file, tipo, dimensione, posizione, contenuto, chiave_esterna FROM allegati WHERE id = $1 AND azienda_id = $2",
+      [String(req.params.id), req.aziendaId]
+    );
+    const riga = ris.rows[0];
+    if (!riga) return res.status(404).json({ errore: "Documento non trovato." });
+
+    const contenuto = await leggiFile(riga);
+    res.setHeader("Content-Type", riga.tipo);
+    res.setHeader("Content-Length", contenuto.length);
+    res.setHeader("Content-Disposition", `inline; filename*=UTF-8''${encodeURIComponent(riga.nome_file)}`);
+    res.send(contenuto);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ errore: "Impossibile aprire il documento." });
+  }
+});
+
+/** Elimina un documento dell'azienda del token. */
+app.delete("/api/allegati/:id", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) => {
+  try {
+    const ris = await pool.query(
+      "SELECT id, posizione, chiave_esterna FROM allegati WHERE id = $1 AND azienda_id = $2",
+      [String(req.params.id), req.aziendaId]
+    );
+    const riga = ris.rows[0];
+    if (!riga) return res.status(404).json({ errore: "Documento non trovato." });
+
+    // Prima il file, poi la riga: se il file non si riesce a togliere, la riga
+    // resta e il documento è ancora scaricabile, invece di sparire dall'elenco
+    // lasciando un file abbandonato che occupa spazio per sempre.
+    await eliminaFile(riga);
+    await pool.query("DELETE FROM allegati WHERE id = $1 AND azienda_id = $2", [riga.id, req.aziendaId]);
+    res.json({ ok: true, id: riga.id, spazio: await spazioAllegati(req.aziendaId) });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ errore: "Impossibile eliminare il documento." });
+  }
+});
+
 const port = process.env.PORT || 3001;
-app.listen(port, () => console.log(`Backend in ascolto sulla porta ${port}`));
+app.listen(port, () => {
+  console.log(`Backend in ascolto sulla porta ${port}`);
+  console.log(`Documenti DDT: ${descrizioneArchivio} · quota per azienda ${inMB(QUOTA_AZIENDA_BYTE)} MB`);
+});

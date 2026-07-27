@@ -88,5 +88,35 @@ CREATE TABLE IF NOT EXISTS materiali (
 CREATE INDEX IF NOT EXISTS idx_materiali_azienda ON materiali(azienda_id);
 CREATE INDEX IF NOT EXISTS idx_materiali_commessa ON materiali(commessa_id);
 
+-- Tappa DDT (2a): archivio dei documenti allegati a una commessa (PDF o foto).
+-- In questo passo il documento viene solo conservato e collegato: nessuna
+-- lettura automatica del contenuto.
+--
+-- DOVE STANNO I FILE. Il contenuto è dentro Postgres (colonna "contenuto"),
+-- non su disco: il disco dei servizi Render free è effimero e i file
+-- sparirebbero a ogni riavvio. Per non riempire il piano gratuito di Neon
+-- (0,5 GB in tutto) le difese sono nel backend: immagini compresse dal
+-- browser prima dell'invio, limite per singolo file, quota per azienda e un
+-- freno complessivo su tutte le aziende.
+--
+-- "posizione" e "chiave_esterna" servono al futuro: se un domani i file
+-- dovranno stare su uno storage esterno, si potrà spostarli scrivendo
+-- posizione='r2' e la chiave del file, senza cambiare la struttura né il
+-- resto dell'applicazione.
+CREATE TABLE IF NOT EXISTS allegati (
+  id             TEXT PRIMARY KEY,
+  azienda_id     TEXT NOT NULL REFERENCES aziende(id),
+  commessa_id    TEXT NOT NULL REFERENCES commesse(id) ON DELETE CASCADE,
+  nome_file      TEXT NOT NULL,
+  tipo           TEXT NOT NULL,
+  dimensione     INTEGER NOT NULL,
+  posizione      TEXT NOT NULL DEFAULT 'database',
+  contenuto      BYTEA,
+  chiave_esterna TEXT,
+  caricato_il    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_allegati_azienda ON allegati(azienda_id);
+CREATE INDEX IF NOT EXISTS idx_allegati_commessa ON allegati(commessa_id);
+
 INSERT INTO aziende (id, nome) VALUES ('azienda-prova', 'Azienda di prova')
 ON CONFLICT (id) DO NOTHING;

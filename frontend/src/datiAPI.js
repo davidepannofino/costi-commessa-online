@@ -56,6 +56,45 @@ async function chiamaMateriali(metodo, percorso, corpo, messaggioDiRipiego, estr
   return estrai(await res.json());
 }
 
+/* --- compressione delle immagini prima del caricamento ----------------------
+   I DDT sono quasi sempre foto scattate col telefono: 3-5 MB l'una, una
+   risoluzione enorme rispetto a quello che serve per rileggerli. Ridurle qui,
+   nel browser, prima di mandarle, è ciò che tiene i documenti dentro il piano
+   gratuito: una foto da 4 MB scende tipicamente a qualche centinaio di kB
+   restando perfettamente leggibile. I PDF passano invece intatti.        */
+const LATO_MAX = 2000;      // px sul lato lungo
+const QUALITA_JPEG = 0.82;
+
+async function comprimiSeImmagine(file) {
+  const comprimibile = file.type === "image/jpeg" || file.type === "image/png";
+  if (!comprimibile || typeof createImageBitmap !== "function") return file;
+
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scala = Math.min(1, LATO_MAX / Math.max(bitmap.width, bitmap.height));
+    const largo = Math.round(bitmap.width * scala);
+    const alto = Math.round(bitmap.height * scala);
+
+    const tela = document.createElement("canvas");
+    tela.width = largo; tela.height = alto;
+    const ctx = tela.getContext("2d");
+    ctx.drawImage(bitmap, 0, 0, largo, alto);
+    bitmap.close?.();
+
+    const blob = await new Promise((r) => tela.toBlob(r, "image/jpeg", QUALITA_JPEG));
+    // Se la compressione non guadagna nulla (foto già piccola), si tiene
+    // l'originale: meglio non ricomprimere un'immagine per niente.
+    if (!blob || blob.size >= file.size) return file;
+
+    const nome = file.name.replace(/\.(png|jpe?g)$/i, "") + ".jpg";
+    return new File([blob], nome, { type: "image/jpeg" });
+  } catch (e) {
+    // Se qualcosa va storto si carica il file originale: meglio un file
+    // pesante che un caricamento fallito.
+    return file;
+  }
+}
+
 export const datiAPI = {
   async carica() {
     try {
@@ -145,6 +184,63 @@ export const datiAPI = {
   /** Elimina una voce di materiale. */
   async eliminaMateriale(id) {
     return chiamaMateriali("DELETE", `/api/materiali/${encodeURIComponent(id)}`, null, "Impossibile eliminare il materiale.", () => true);
+  },
+
+  /* --- ALLEGATI (DDT) -----------------------------------------------------
+     Documenti archiviati e collegati a una commessa. In questo passo non si
+     legge nulla dal contenuto: solo caricamento, elenco, apertura e
+     cancellazione. Ogni richiesta porta il token, quindi i documenti non sono
+     mai raggiungibili da un indirizzo pubblico. */
+
+  /** Carica un file (PDF/JPG/PNG) e lo allega a una commessa. Le immagini
+   *  vengono rimpicciolite prima dell'invio: vedi comprimiSeImmagine. */
+  async caricaAllegato(commessaId, file) {
+    const pronto = await comprimiSeImmagine(file);
+    let res;
+    try {
+      res = await fetch(`${API_BASE}/api/commesse/${encodeURIComponent(commessaId)}/allegati`, {
+        method: "POST",
+        headers: {
+          "Content-Type": pronto.type || "application/octet-stream",
+          "X-Nome-File": encodeURIComponent(pronto.name),
+          ...headerAuth(),
+        },
+        body: pronto,
+      });
+    } catch (e) {
+      throw new Error("Impossibile contattare il server: riprova.");
+    }
+    if (res.status === 401) { gestoreSessioneScaduta?.(); throw new Error("Sessione scaduta: accedi di nuovo."); }
+    if (res.status === 402) { gestoreAbbonamentoRichiesto?.(); throw new Error("Abbonamento richiesto."); }
+    if (!res.ok) {
+      const dati = await res.json().catch(() => null);
+      throw new Error(dati?.errore || "Impossibile caricare il documento.");
+    }
+    return await res.json(); // { allegato, spazio }
+  },
+
+  /** Scarica il contenuto di un allegato e ne restituisce una URL locale al
+   *  browser (blob:), da usare per aprirlo o salvarlo. Chi la usa deve poi
+   *  chiamare URL.revokeObjectURL per liberare la memoria. */
+  async apriAllegato(id) {
+    let res;
+    try {
+      res = await fetch(`${API_BASE}/api/allegati/${encodeURIComponent(id)}`, { headers: headerAuth() });
+    } catch (e) {
+      throw new Error("Impossibile contattare il server: riprova.");
+    }
+    if (res.status === 401) { gestoreSessioneScaduta?.(); throw new Error("Sessione scaduta: accedi di nuovo."); }
+    if (!res.ok) {
+      const dati = await res.json().catch(() => null);
+      throw new Error(dati?.errore || "Impossibile aprire il documento.");
+    }
+    const blob = await res.blob();
+    return { url: URL.createObjectURL(blob), blob };
+  },
+
+  /** Elimina un allegato. Ritorna lo spazio aggiornato. */
+  async eliminaAllegato(id) {
+    return chiamaMateriali("DELETE", `/api/allegati/${encodeURIComponent(id)}`, null, "Impossibile eliminare il documento.", (d) => d);
   },
 
   /** Stato dell'abbonamento dell'azienda loggata (giorni di prova, se attivo, ecc.). */
