@@ -73,6 +73,34 @@ export const datiAPI = {
     }
   },
 
+  /**
+   * Rinomina una commessa (codice e/o descrizione). Il server è l'autorità:
+   * verifica che la commessa sia dell'azienda del token e che il codice non
+   * sia già usato da un'altra commessa della stessa azienda.
+   * Ritorna la commessa aggiornata, oppure lancia un errore con il messaggio
+   * del server (da mostrare così com'è all'utente).
+   */
+  async rinominaCommessa(id, { codice, descrizione }) {
+    let res;
+    try {
+      res = await fetch(`${API_BASE}/api/commesse/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...headerAuth() },
+        body: JSON.stringify({ codice, descrizione }),
+      });
+    } catch (e) {
+      throw new Error("Impossibile contattare il server: riprova.");
+    }
+    if (res.status === 401) { gestoreSessioneScaduta?.(); throw new Error("Sessione scaduta: accedi di nuovo."); }
+    if (res.status === 402) { gestoreAbbonamentoRichiesto?.(); throw new Error("Abbonamento richiesto."); }
+    if (!res.ok) {
+      const dati = await res.json().catch(() => null);
+      throw new Error(dati?.errore || "Impossibile rinominare la commessa.");
+    }
+    const dati = await res.json();
+    return dati.commessa;
+  },
+
   /** Stato dell'abbonamento dell'azienda loggata (giorni di prova, se attivo, ecc.). */
   async statoAbbonamento() {
     try {

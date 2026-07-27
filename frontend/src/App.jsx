@@ -1450,6 +1450,28 @@ export default function App() {
     },
   });
 
+  /**
+   * Rinomina una commessa: cambia SOLO l'etichetta (codice/descrizione).
+   * Le ore sono legate alla commessa tramite commessaId, quindi registrazioni,
+   * costi, riepiloghi ed export restano identici: qui non si tocca nient'altro.
+   * Il controllo di proprietà e quello sui codici doppi sono del server; se
+   * rifiuta, lo stato locale non viene modificato.
+   */
+  const rinominaCommessa = async (id, { codice, descrizione }) => {
+    try {
+      const aggiornata = await datiAPI.rinominaCommessa(id, { codice, descrizione });
+      setCommesse((c) => c.map((x) => (x.id === aggiornata.id ? { ...x, codice: aggiornata.codice, descrizione: aggiornata.descrizione } : x)));
+      setDettaglio((d) => (d && d.commessa.id === aggiornata.id
+        ? { ...d, commessa: { ...d.commessa, codice: aggiornata.codice, descrizione: aggiornata.descrizione } }
+        : d));
+      notifica(`Commessa rinominata in ${aggiornata.codice}.`);
+      return { ok: true };
+    } catch (e) {
+      notifica(e.message, "errore");
+      return { ok: false, errore: e.message };
+    }
+  };
+
   const svuotaTutto = () => setConferma({
     titolo: "Svuotare tutti i dati?",
     testo: "Dipendenti, commesse e registrazioni verranno cancellati. Prima di procedere puoi scaricare un backup dalla sezione Dati.",
@@ -1706,7 +1728,7 @@ export default function App() {
               dipendenti={dipendenti} commesse={commesse} registrazioni={registrazioni}
               setDipendenti={setDipendenti} setCommesse={setCommesse}
               aggiungi={aggiungiRegistrazione} eliminaReg={eliminaRegistrazione} aggiornaReg={aggiornaRegistrazione}
-              eliminaCommessa={eliminaCommessa} caricaExcel={caricaExcel} backup={backupJSON} ripristina={ripristinaJSON}
+              eliminaCommessa={eliminaCommessa} rinominaCommessa={rinominaCommessa} caricaExcel={caricaExcel} backup={backupJSON} ripristina={ripristinaJSON}
               svuota={svuotaTutto} esempio={ricaricaEsempio} azienda={azienda} setAzienda={setAzienda} notifica={notifica}
               esportaTutto={() => esportaCompletoXLSX({ dipendenti, commesse, registrazioni }, dal, al)}
             />
@@ -2373,12 +2395,13 @@ function EditorDipendente({ iniziale, onSalva, onChiudi }) {
 /* ---------------------------------------------------------------------------
    DATI — inserimento, registrazioni, import/export, impostazioni
 --------------------------------------------------------------------------- */
-function VistaDati({ dipendenti, commesse, registrazioni, setCommesse, aggiungi, eliminaReg, aggiornaReg, eliminaCommessa, caricaExcel, backup, ripristina, svuota, esempio, azienda, setAzienda, notifica, esportaTutto }) {
+function VistaDati({ dipendenti, commesse, registrazioni, setCommesse, aggiungi, eliminaReg, aggiornaReg, eliminaCommessa, rinominaCommessa, caricaExcel, backup, ripristina, svuota, esempio, azienda, setAzienda, notifica, esportaTutto }) {
   const [form, setForm] = useState({ dipendenteId: "", commessaId: "", data: oggiISO(), ore: "" });
   const [erroriForm, setErroriForm] = useState({});
   const [nuovaCom, setNuovaCom] = useState({ codice: "", descrizione: "" });
   const [filtro, setFiltro] = useState("");
   const [modifica, setModifica] = useState(null);
+  const [rinomina, setRinomina] = useState(null); // commessa in corso di rinomina
   const refExcel = useRef(); const refOre = useRef();
 
   const dipById = useMemo(() => new Map(dipendenti.map((d) => [d.id, d])), [dipendenti]);
@@ -2470,6 +2493,7 @@ function VistaDati({ dipendenti, commesse, registrazioni, setCommesse, aggiungi,
             {commesse.map((c) => (
               <span key={c.id} className="inline-flex items-center gap-1.5 text-xs rounded-lg pl-2.5 pr-1 py-1" style={{ border: "1px solid var(--hairline)", background: "var(--tela)" }} title={c.descrizione}>
                 <span className="f-mono font-medium">{c.codice}</span>
+                <button onClick={() => setRinomina(c)} aria-label={"Rinomina commessa " + c.codice} title="Rinomina" className="p-0.5 rounded btn" style={{ color: "var(--muted)" }}><Pencil size={10} strokeWidth={1.75} /></button>
                 <button onClick={() => eliminaCommessa(c)} aria-label={"Elimina commessa " + c.codice} className="p-0.5 rounded btn" style={{ color: "var(--muted)" }}><X size={11} strokeWidth={1.75} /></button>
               </span>
             ))}
@@ -2546,6 +2570,18 @@ function VistaDati({ dipendenti, commesse, registrazioni, setCommesse, aggiungi,
             onAnnulla={() => setModifica(null)} />
         </Modale>
       )}
+
+      {rinomina && (
+        <Modale titolo="Rinomina commessa" onChiudi={() => setRinomina(null)}>
+          <EditorRinominaCommessa
+            commessa={rinomina}
+            commesse={commesse}
+            oreCollegate={registrazioni.filter((r) => r.commessaId === rinomina.id).length}
+            onSalva={(patch) => rinominaCommessa(rinomina.id, patch)}
+            onFatto={() => setRinomina(null)}
+            onAnnulla={() => setRinomina(null)} />
+        </Modale>
+      )}
     </div>
   );
 }
@@ -2581,6 +2617,60 @@ function EditorRegistrazione({ reg, dipendenti, commesse, onSalva, onAnnulla }) 
       <div className="flex justify-end gap-2 pt-3">
         <Bottone variante="fantasma" onClick={onAnnulla}>Annulla</Bottone>
         <Bottone onClick={invia}><Save size={14} strokeWidth={1.75} /> Salva</Bottone>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Rinomina codice e/o descrizione di una commessa esistente.
+ * Cambia solo l'etichetta: le ore restano collegate alla commessa tramite il
+ * suo id, quindi costi, riepiloghi ed export non si spostano di un centesimo.
+ * I controlli qui sono solo per dare una risposta immediata: la decisione
+ * definitiva (proprietà della commessa e codice doppio) è sempre del server.
+ */
+function EditorRinominaCommessa({ commessa, commesse, oreCollegate, onSalva, onFatto, onAnnulla }) {
+  const [f, setF] = useState({ codice: commessa.codice, descrizione: commessa.descrizione });
+  const [err, setErr] = useState(null);
+  const [inCorso, setInCorso] = useState(false);
+
+  const invia = async () => {
+    if (inCorso) return;
+    const codice = f.codice.trim();
+    const descrizione = f.descrizione.trim();
+    if (!codice) { setErr("Il codice della commessa è obbligatorio."); return; }
+    if (commesse.some((c) => c.id !== commessa.id && c.codice.toLowerCase() === codice.toLowerCase())) {
+      setErr(`Esiste già un'altra commessa con il codice ${codice}.`);
+      return;
+    }
+    if (codice === commessa.codice && descrizione === commessa.descrizione) { onFatto(); return; }
+    setErr(null);
+    setInCorso(true);
+    const ris = await onSalva({ codice, descrizione });
+    setInCorso(false);
+    if (ris?.ok) onFatto();
+    else setErr(ris?.errore || "Impossibile rinominare la commessa.");
+  };
+
+  return (
+    <div className="space-y-4" onKeyDown={(e) => e.key === "Enter" && invia()}>
+      <Campo etichetta="Codice" errore={err}>
+        <input autoFocus value={f.codice} onChange={(e) => { setF((x) => ({ ...x, codice: e.target.value })); setErr(null); }}
+          placeholder="es. P25 o VILLA-ROSSI" className={inputCls + " f-mono"} />
+      </Campo>
+      <Campo etichetta="Descrizione">
+        <input value={f.descrizione} onChange={(e) => setF((x) => ({ ...x, descrizione: e.target.value }))}
+          placeholder="es. Ristrutturazione Villa Rossi" className={inputCls} />
+      </Campo>
+      <p className="text-xs flex items-start gap-1.5 leading-relaxed" style={{ color: "var(--muted)" }}>
+        <Info size={12} strokeWidth={1.75} className="mt-0.5 shrink-0" />
+        {oreCollegate > 0
+          ? `Cambia solo il nome: le ${oreCollegate} registrazioni collegate, i costi e i report restano identici.`
+          : "Cambia solo il nome: nessun altro dato viene toccato."}
+      </p>
+      <div className="flex justify-end gap-2 pt-1">
+        <Bottone variante="fantasma" onClick={onAnnulla} disabled={inCorso}>Annulla</Bottone>
+        <Bottone onClick={invia} disabled={inCorso}><Save size={14} strokeWidth={1.75} /> {inCorso ? "Salvataggio…" : "Salva"}</Bottone>
       </div>
     </div>
   );

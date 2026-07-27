@@ -373,5 +373,60 @@ app.put("/api/stato", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) 
   }
 });
 
+/**
+ * Rinomina una commessa (codice e/o descrizione) senza toccare nient'altro.
+ * È un'operazione sicura per costruzione: le registrazioni sono legate alla
+ * commessa tramite registrazioni.commessa_id (chiave esterna su commesse.id),
+ * mai tramite il codice testuale. Cambiando solo l'etichetta, tutte le ore,
+ * i costi, i riepiloghi e gli export restano identici.
+ *
+ * L'azienda è sempre quella del token (richiedeAuth): la clausola
+ * "AND azienda_id = $4" fa sì che una commessa di un'altra azienda risulti
+ * semplicemente inesistente, senza rivelarne l'esistenza.
+ */
+app.patch("/api/commesse/:id", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) => {
+  const aziendaId = req.aziendaId;
+  const id = String(req.params.id);
+  const codice = String(req.body?.codice ?? "").trim();
+  const descrizione = String(req.body?.descrizione ?? "").trim();
+
+  if (!codice) return res.status(400).json({ errore: "Il codice della commessa è obbligatorio." });
+
+  try {
+    // Un solo UPDATE atomico: il NOT EXISTS impedisce che, fra un controllo
+    // separato e la scrittura, un'altra richiesta occupi lo stesso codice.
+    // Il confronto è senza distinzione fra maiuscole e minuscole, come il
+    // controllo che il frontend fa già alla creazione di una commessa.
+    const agg = await pool.query(
+      `UPDATE commesse SET codice = $2, descrizione = $3
+         WHERE id = $1 AND azienda_id = $4
+           AND NOT EXISTS (
+             SELECT 1 FROM commesse altra
+              WHERE altra.azienda_id = $4 AND altra.id <> $1
+                AND LOWER(altra.codice) = LOWER($2)
+           )
+       RETURNING id, codice, descrizione`,
+      [id, codice, descrizione, aziendaId]
+    );
+
+    if (agg.rows.length === 1) {
+      const c = agg.rows[0];
+      return res.json({ commessa: { id: c.id, codice: c.codice, descrizione: c.descrizione } });
+    }
+
+    // Nessuna riga aggiornata: o la commessa non è di questa azienda, o il
+    // codice è già occupato da un'altra commessa della stessa azienda.
+    const esiste = await pool.query(
+      "SELECT 1 FROM commesse WHERE id = $1 AND azienda_id = $2",
+      [id, aziendaId]
+    );
+    if (esiste.rows.length === 0) return res.status(404).json({ errore: "Commessa non trovata." });
+    res.status(409).json({ errore: `Esiste già un'altra commessa con il codice ${codice}.` });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ errore: "Impossibile rinominare la commessa." });
+  }
+});
+
 const port = process.env.PORT || 3001;
 app.listen(port, () => console.log(`Backend in ascolto sulla porta ${port}`));
