@@ -277,7 +277,7 @@ app.use("/api/admin", richiedeAuth, richiedeAdmin, adminRouter);
 app.get("/api/stato", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) => {
   const aziendaId = req.aziendaId;
   try {
-    const [azRes, dipRes, comRes, regRes] = await Promise.all([
+    const [azRes, dipRes, comRes, regRes, matRes] = await Promise.all([
       pool.query("SELECT nome FROM aziende WHERE id = $1", [aziendaId]),
       pool.query(
         "SELECT id, nome, cognome, lordo_mensile FROM dipendenti WHERE azienda_id = $1 ORDER BY nome, cognome",
@@ -291,6 +291,7 @@ app.get("/api/stato", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) 
         "SELECT id, dipendente_id, commessa_id, to_char(data, 'YYYY-MM-DD') AS data, ore FROM registrazioni WHERE azienda_id = $1",
         [aziendaId]
       ),
+      pool.query(`${SELECT_MATERIALI} WHERE azienda_id = $1 ORDER BY data DESC, descrizione`, [aziendaId]),
     ]);
 
     res.json({
@@ -309,6 +310,7 @@ app.get("/api/stato", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) 
         data: r.data,
         ore: Number(r.ore),
       })),
+      materiali: matRes.rows.map(mappaMateriale),
     });
   } catch (e) {
     console.error(e);
@@ -324,8 +326,11 @@ app.get("/api/stato", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) 
  */
 app.put("/api/stato", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) => {
   const aziendaId = req.aziendaId;
-  const { dipendenti = [], commesse = [], registrazioni = [], azienda = "" } = req.body || {};
+  const { dipendenti = [], commesse = [], registrazioni = [], materiali = null, azienda = "" } = req.body || {};
   if (!Array.isArray(dipendenti) || !Array.isArray(commesse) || !Array.isArray(registrazioni)) {
+    return res.status(400).json({ errore: "Struttura dati non valida." });
+  }
+  if (materiali !== null && !Array.isArray(materiali)) {
     return res.status(400).json({ errore: "Struttura dati non valida." });
   }
 
@@ -340,7 +345,15 @@ app.put("/api/stato", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) 
 
     // Ordine di cancellazione che rispetta i vincoli di chiave esterna.
     await client.query("DELETE FROM registrazioni WHERE azienda_id = $1", [aziendaId]);
-    await client.query("DELETE FROM commesse WHERE azienda_id = $1", [aziendaId]);
+    // Le commesse NON si cancellano tutte: i materiali sono loro figli in
+    // cascata, e un "cancella e ricrea" a ogni salvataggio automatico
+    // cancellerebbe tutti i materiali dell'azienda. Si tolgono quindi solo le
+    // commesse davvero sparite dall'elenco (e con esse, giustamente, i loro
+    // materiali); le altre vengono aggiornate al passo successivo.
+    await client.query(
+      "DELETE FROM commesse WHERE azienda_id = $1 AND NOT (id = ANY($2::text[]))",
+      [aziendaId, commesse.map((c) => String(c.id))]
+    );
     await client.query("DELETE FROM dipendenti WHERE azienda_id = $1", [aziendaId]);
 
     for (const d of dipendenti) {
@@ -350,16 +363,41 @@ app.put("/api/stato", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) 
       );
     }
     for (const c of commesse) {
-      await client.query(
-        "INSERT INTO commesse (id, azienda_id, codice, descrizione) VALUES ($1, $2, $3, $4)",
+      // "WHERE commesse.azienda_id = $2" impedisce che un id appartenente a
+      // un'altra azienda venga sovrascritto: in quel caso non si aggiorna
+      // nulla e la transazione viene annullata subito sotto.
+      const ris = await client.query(
+        `INSERT INTO commesse (id, azienda_id, codice, descrizione) VALUES ($1, $2, $3, $4)
+           ON CONFLICT (id) DO UPDATE SET codice = EXCLUDED.codice, descrizione = EXCLUDED.descrizione
+           WHERE commesse.azienda_id = $2
+         RETURNING id`,
         [c.id, aziendaId, c.codice, c.descrizione || ""]
       );
+      if (ris.rowCount === 0) throw new Error(`La commessa ${c.id} appartiene a un'altra azienda.`);
     }
     for (const r of registrazioni) {
       await client.query(
         "INSERT INTO registrazioni (id, azienda_id, dipendente_id, commessa_id, data, ore) VALUES ($1, $2, $3, $4, $5, $6)",
         [r.id, aziendaId, r.dipendenteId, r.commessaId, r.data, r.ore]
       );
+    }
+
+    // I materiali si toccano SOLO se il client li manda esplicitamente (è il
+    // caso del ripristino di un backup). Il salvataggio automatico non li
+    // include: li gestiscono le rotte /api/materiali, e ometterli qui
+    // significa "lasciali come stanno", non "cancellali".
+    if (materiali) {
+      await client.query("DELETE FROM materiali WHERE azienda_id = $1", [aziendaId]);
+      for (const m of materiali) {
+        const { voce, errore } = leggiVoceMateriale(m);
+        if (errore) throw new Error(`Materiale non valido (${m?.descrizione ?? "senza descrizione"}): ${errore}`);
+        await client.query(
+          `INSERT INTO materiali (id, azienda_id, commessa_id, data, fornitore, descrizione, quantita, prezzo_unitario)
+           SELECT $1, $2, $3, $4, $5, $6, $7, $8
+            WHERE EXISTS (SELECT 1 FROM commesse WHERE id = $3 AND azienda_id = $2)`,
+          [m.id || randomUUID(), aziendaId, m.commessaId, voce.data, voce.fornitore, voce.descrizione, voce.quantita, voce.prezzoUnitario]
+        );
+      }
     }
 
     await client.query("COMMIT");
@@ -425,6 +463,124 @@ app.patch("/api/commesse/:id", richiedeAuth, richiedeAbbonamentoAttivo, async (r
   } catch (e) {
     console.error(e);
     res.status(500).json({ errore: "Impossibile rinominare la commessa." });
+  }
+});
+
+/* ---------------------------------------------------------------------------
+   MATERIALI — costo dei materiali per commessa, inserito a mano.
+   Voce di costo AGGIUNTIVA e separata: non entra mai nel calcolo della tariffa
+   oraria né nell'invariante della manodopera, si somma solo alla fine.
+   Il collegamento alla commessa è per id, mai per codice testuale.
+--------------------------------------------------------------------------- */
+
+// "costo" è calcolato dal database (colonna generata): non viene mai accettato
+// dal client, così quantità × prezzo non può arrivare incoerente.
+const SELECT_MATERIALI =
+  "SELECT id, commessa_id, to_char(data, 'YYYY-MM-DD') AS data, fornitore, descrizione, quantita, prezzo_unitario, costo FROM materiali";
+
+const mappaMateriale = (r) => ({
+  id: r.id,
+  commessaId: r.commessa_id,
+  data: r.data,
+  fornitore: r.fornitore,
+  descrizione: r.descrizione,
+  quantita: Number(r.quantita),
+  prezzoUnitario: Number(r.prezzo_unitario),
+  costo: Number(r.costo),
+});
+
+/** Controlli comuni a creazione e modifica. Ritorna { voce } oppure { errore }. */
+function leggiVoceMateriale(body) {
+  const data = String(body?.data ?? "").trim();
+  const fornitore = String(body?.fornitore ?? "").trim();
+  const descrizione = String(body?.descrizione ?? "").trim();
+  const quantita = Number(body?.quantita);
+  const prezzoUnitario = Number(body?.prezzoUnitario);
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(data) || isNaN(new Date(data + "T00:00:00").getTime())) {
+    return { errore: "Data non valida." };
+  }
+  if (!descrizione) return { errore: "La descrizione del materiale è obbligatoria." };
+  if (!Number.isFinite(quantita) || quantita <= 0) return { errore: "La quantità deve essere maggiore di zero." };
+  if (!Number.isFinite(prezzoUnitario) || prezzoUnitario < 0) {
+    return { errore: "Il prezzo unitario non può essere negativo." };
+  }
+  return { voce: { data, fornitore, descrizione, quantita, prezzoUnitario } };
+}
+
+/** Elenco dei materiali dell'azienda del token, eventualmente di una sola commessa. */
+app.get("/api/materiali", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) => {
+  const commessaId = req.query.commessaId ? String(req.query.commessaId) : null;
+  try {
+    const ris = commessaId
+      ? await pool.query(
+          `${SELECT_MATERIALI} WHERE azienda_id = $1 AND commessa_id = $2 ORDER BY data DESC, descrizione`,
+          [req.aziendaId, commessaId]
+        )
+      : await pool.query(`${SELECT_MATERIALI} WHERE azienda_id = $1 ORDER BY data DESC, descrizione`, [req.aziendaId]);
+    res.json({ materiali: ris.rows.map(mappaMateriale) });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ errore: "Impossibile leggere i materiali." });
+  }
+});
+
+/** Aggiunge una voce di materiale a una commessa dell'azienda del token. */
+app.post("/api/materiali", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) => {
+  const commessaId = String(req.body?.commessaId ?? "");
+  const { voce, errore } = leggiVoceMateriale(req.body);
+  if (errore) return res.status(400).json({ errore });
+
+  try {
+    // L'INSERT ... SELECT scrive solo se la commessa è di questa azienda:
+    // il controllo di proprietà e la scrittura sono la stessa operazione.
+    const ris = await pool.query(
+      `INSERT INTO materiali (id, azienda_id, commessa_id, data, fornitore, descrizione, quantita, prezzo_unitario)
+       SELECT $1, $2, $3, $4, $5, $6, $7, $8
+        WHERE EXISTS (SELECT 1 FROM commesse WHERE id = $3 AND azienda_id = $2)
+       RETURNING id, commessa_id, to_char(data, 'YYYY-MM-DD') AS data, fornitore, descrizione, quantita, prezzo_unitario, costo`,
+      [randomUUID(), req.aziendaId, commessaId, voce.data, voce.fornitore, voce.descrizione, voce.quantita, voce.prezzoUnitario]
+    );
+    if (ris.rows.length === 0) return res.status(404).json({ errore: "Commessa non trovata." });
+    res.status(201).json({ materiale: mappaMateriale(ris.rows[0]) });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ errore: "Impossibile salvare il materiale." });
+  }
+});
+
+/** Modifica una voce di materiale dell'azienda del token. */
+app.patch("/api/materiali/:id", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) => {
+  const { voce, errore } = leggiVoceMateriale(req.body);
+  if (errore) return res.status(400).json({ errore });
+
+  try {
+    const ris = await pool.query(
+      `UPDATE materiali SET data = $3, fornitore = $4, descrizione = $5, quantita = $6, prezzo_unitario = $7
+         WHERE id = $1 AND azienda_id = $2
+       RETURNING id, commessa_id, to_char(data, 'YYYY-MM-DD') AS data, fornitore, descrizione, quantita, prezzo_unitario, costo`,
+      [String(req.params.id), req.aziendaId, voce.data, voce.fornitore, voce.descrizione, voce.quantita, voce.prezzoUnitario]
+    );
+    if (ris.rows.length === 0) return res.status(404).json({ errore: "Materiale non trovato." });
+    res.json({ materiale: mappaMateriale(ris.rows[0]) });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ errore: "Impossibile aggiornare il materiale." });
+  }
+});
+
+/** Elimina una voce di materiale dell'azienda del token. */
+app.delete("/api/materiali/:id", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) => {
+  try {
+    const ris = await pool.query(
+      "DELETE FROM materiali WHERE id = $1 AND azienda_id = $2 RETURNING id",
+      [String(req.params.id), req.aziendaId]
+    );
+    if (ris.rows.length === 0) return res.status(404).json({ errore: "Materiale non trovato." });
+    res.json({ ok: true, id: ris.rows[0].id });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ errore: "Impossibile eliminare il materiale." });
   }
 });
 

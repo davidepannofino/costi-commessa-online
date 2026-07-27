@@ -206,6 +206,77 @@ function calcolaSerieMensile({ registrazioni, dipendenti, commesse }) {
 }
 
 /* ---------------------------------------------------------------------------
+   MATERIALI — voce di costo AGGIUNTIVA, tenuta apposta fuori dal blocco CALC.
+   La manodopera si calcola come sempre (lordo mensile / ore del mese); i
+   materiali non entrano mai in quel calcolo né nell'invariante: si sommano
+   solo alla fine, per ottenere il costo totale della commessa.
+--------------------------------------------------------------------------- */
+
+/** Costo di una riga di materiale. Il server lo calcola già (colonna generata
+ *  del database): qui si ricalcola solo se manca, per non dipenderne. */
+const costoVoceMateriale = (m) => (Number.isFinite(m.costo) ? m.costo : (m.quantita || 0) * (m.prezzoUnitario || 0));
+
+/** Materiali dell'intervallo [dal, al], raggruppati per commessa (per ID). */
+function calcolaMateriali({ materiali, dal, al }) {
+  const perCommessa = new Map(); // commessaId -> { totale, voci: [] }
+  let totale = 0;
+  for (const m of materiali) {
+    if (!m.data || m.data < dal || m.data > al) continue;
+    const costo = costoVoceMateriale(m);
+    if (!perCommessa.has(m.commessaId)) perCommessa.set(m.commessaId, { totale: 0, voci: [] });
+    const c = perCommessa.get(m.commessaId);
+    c.totale += costo;
+    c.voci.push({ ...m, costo });
+    totale += costo;
+  }
+  for (const c of perCommessa.values()) c.voci.sort((a, b) => (a.data < b.data ? 1 : a.data > b.data ? -1 : 0));
+  return { perCommessa, totale };
+}
+
+/**
+ * Unisce manodopera e materiali in un'unica lista di righe per commessa.
+ * È un'UNIONE, non una somma riga per riga: una commessa può avere solo
+ * materiali e zero ore nell'intervallo, e deve comparire lo stesso.
+ * Ogni riga conserva `costo` con il significato di sempre (manodopera), così
+ * i grafici e i calcoli già esistenti continuano a leggere lo stesso numero.
+ */
+function unisciCosti({ riep, materiali, commesse, dal, al }) {
+  const mat = calcolaMateriali({ materiali, dal, al });
+  const comById = new Map(commesse.map((c) => [c.id, c]));
+  const perId = new Map();
+
+  if (riep) {
+    for (const r of riep.righe) {
+      perId.set(r.commessa.id, { ...r, costoManodopera: r.costo, costoMateriali: 0, voci: [] });
+    }
+  }
+  for (const [comId, v] of mat.perCommessa) {
+    if (!perId.has(comId)) {
+      perId.set(comId, {
+        commessa: comById.get(comId) || { id: comId, codice: "?", descrizione: "Commessa eliminata" },
+        ore: 0, costo: 0, dipendenti: [], costoManodopera: 0, costoMateriali: 0, voci: [],
+      });
+    }
+    const riga = perId.get(comId);
+    riga.costoMateriali = v.totale;
+    riga.voci = v.voci;
+  }
+
+  const righe = [...perId.values()]
+    .map((r) => ({ ...r, costoTotale: r.costoManodopera + r.costoMateriali }))
+    .sort((a, b) => b.costoTotale - a.costoTotale);
+
+  const totManodopera = riep ? riep.totCosto : 0;
+  return {
+    righe,
+    perCommessa: mat.perCommessa,
+    totManodopera,
+    totMateriali: mat.totale,
+    totTotale: totManodopera + mat.totale,
+  };
+}
+
+/* ---------------------------------------------------------------------------
    DATI D'ESEMPIO — luglio 2026, estratti dal file Excel reale.
    Sono SOLO dimostrativi: l'utente può cancellarli con "Svuota tutto".
 --------------------------------------------------------------------------- */
@@ -352,10 +423,18 @@ function scaricaBlob(contenuto, nomeFile, tipo) {
 }
 const numCsv = (v) => fmtNum.format(v).replace(/\./g, "");
 
-function esportaCSV(righe, totOre, totCosto, dal, al) {
-  const testa = "Codice;Descrizione;Ore;Costo (€)";
-  const corpo = righe.map((r) => [r.commessa.codice, r.commessa.descrizione.replace(/;/g, ","), fmtOre.format(r.ore).replace(/\./g, ""), numCsv(r.costo)].join(";"));
-  const totale = ["TOTALE", "", fmtOre.format(totOre).replace(/\./g, ""), numCsv(totCosto)].join(";");
+/** Riepilogo rapido in CSV. Le colonne rispecchiano la tabella a video:
+ *  manodopera e materiali restano separati, il totale è la loro somma. */
+function esportaCSV(righe, costi, dal, al) {
+  const testa = "Codice;Descrizione;Ore;Manodopera (€);Materiali (€);Totale (€)";
+  const corpo = righe.map((r) => [
+    r.commessa.codice, r.commessa.descrizione.replace(/;/g, ","),
+    fmtOre.format(r.ore).replace(/\./g, ""),
+    numCsv(r.costoManodopera), numCsv(r.costoMateriali), numCsv(r.costoTotale),
+  ].join(";"));
+  const totOre = righe.reduce((s, r) => s + r.ore, 0);
+  const totale = ["TOTALE", "", fmtOre.format(totOre).replace(/\./g, ""),
+    numCsv(costi.totManodopera), numCsv(costi.totMateriali), numCsv(costi.totTotale)].join(";");
   scaricaBlob("\uFEFF" + [testa, ...corpo, totale].join("\r\n"), `costi_${dal}_${al}.csv`, "text/csv;charset=utf-8");
 }
 
@@ -458,17 +537,62 @@ function costruisciWorkbookCompleto({ dipendenti, commesse, registrazioni, dal, 
   return wb;
 }
 
+/**
+ * Aggiunge i materiali all'export completo SENZA toccare come viene costruita
+ * la parte manodopera: costruisciWorkbookCompleto resta identica e viene solo
+ * chiamata: qui si aggiungono in coda due fogli, "MATERIALI" (una riga per
+ * voce) e "TOTALI COMMESSA" (manodopera, materiali e totale affiancati).
+ * Se non ci sono materiali il file risultante è identico a prima.
+ */
+function costruisciWorkbookConMateriali({ dipendenti, commesse, registrazioni, materiali, dal, al }) {
+  const wb = costruisciWorkbookCompleto({ dipendenti, commesse, registrazioni, dal, al });
+  const riep = calcolaRiepilogo({ registrazioni, dipendenti, commesse, dal, al });
+  const costi = unisciCosti({ riep, materiali, commesse, dal, al });
+  const arr2 = (v) => Math.round(v * 100) / 100;
+  const comById = new Map(commesse.map((c) => [c.id, c]));
+
+  const voci = materiali
+    .filter((m) => m.data >= dal && m.data <= al)
+    .sort((a, b) => (a.data < b.data ? -1 : a.data > b.data ? 1 : 0));
+
+  if (voci.length > 0) {
+    const aoaM = [["MATERIALI"], [`Periodo ${fmtData(dal)} — ${fmtData(al)}`],
+      ["DATA", "COMMESSA", "DESCRIZIONE COMMESSA", "FORNITORE", "DESCRIZIONE", "QUANTITÀ", "PREZZO UNITARIO (€)", "COSTO (€)"],
+      ...voci.map((m) => {
+        const c = comById.get(m.commessaId) || { codice: "?", descrizione: "Commessa eliminata" };
+        return [m.data, c.codice, c.descrizione, m.fornitore, m.descrizione, m.quantita, arr2(m.prezzoUnitario), arr2(costoVoceMateriale(m))];
+      }),
+      ["TOTALE", "", "", "", "", "", "", arr2(costi.totMateriali)]];
+    const wsM = XLSX.utils.aoa_to_sheet(aoaM);
+    wsM["!cols"] = [{ wch: 12 }, { wch: 12 }, { wch: 26 }, { wch: 20 }, { wch: 30 }, { wch: 10 }, { wch: 18 }, { wch: 12 }];
+    XLSX.utils.book_append_sheet(wb, wsM, "MATERIALI");
+  }
+
+  const aoaT = [["TOTALI PER COMMESSA — MANODOPERA E MATERIALI"], [`Periodo ${fmtData(dal)} — ${fmtData(al)}`],
+    ["CODICE", "DESCRIZIONE", "ORE", "MANODOPERA (€)", "MATERIALI (€)", "TOTALE (€)"],
+    ...costi.righe.map((r) => [r.commessa.codice, r.commessa.descrizione, r.ore, arr2(r.costoManodopera), arr2(r.costoMateriali), arr2(r.costoTotale)]),
+    ["TOTALE", "", riep.totOre, arr2(costi.totManodopera), arr2(costi.totMateriali), arr2(costi.totTotale)]];
+  const wsT = XLSX.utils.aoa_to_sheet(aoaT);
+  wsT["!cols"] = [{ wch: 12 }, { wch: 30 }, { wch: 8 }, { wch: 16 }, { wch: 14 }, { wch: 13 }];
+  XLSX.utils.book_append_sheet(wb, wsT, "TOTALI COMMESSA");
+
+  return wb;
+}
+
 function esportaCompletoXLSX(stato, dal, al) {
-  const wb = costruisciWorkbookCompleto({ ...stato, dal, al });
+  const wb = costruisciWorkbookConMateriali({ ...stato, materiali: stato.materiali || [], dal, al });
   XLSX.writeFile(wb, `costi_completo_${dal}_${al}.xlsx`, { cellDates: true });
 }
 
-function esportaXLSX(righe, totOre, totCosto, dal, al) {
-  const aoa = [["Codice", "Descrizione", "Ore", "Costo (€)"],
-    ...righe.map((r) => [r.commessa.codice, r.commessa.descrizione, r.ore, Math.round(r.costo * 100) / 100]),
-    ["TOTALE", "", totOre, Math.round(totCosto * 100) / 100]];
+/** Riepilogo rapido in Excel, con le stesse colonne della tabella a video. */
+function esportaXLSX(righe, costi, dal, al) {
+  const arr2 = (v) => Math.round(v * 100) / 100;
+  const totOre = righe.reduce((s, r) => s + r.ore, 0);
+  const aoa = [["Codice", "Descrizione", "Ore", "Manodopera (€)", "Materiali (€)", "Totale (€)"],
+    ...righe.map((r) => [r.commessa.codice, r.commessa.descrizione, r.ore, arr2(r.costoManodopera), arr2(r.costoMateriali), arr2(r.costoTotale)]),
+    ["TOTALE", "", totOre, arr2(costi.totManodopera), arr2(costi.totMateriali), arr2(costi.totTotale)]];
   const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws["!cols"] = [{ wch: 10 }, { wch: 34 }, { wch: 8 }, { wch: 14 }];
+  ws["!cols"] = [{ wch: 10 }, { wch: 34 }, { wch: 8 }, { wch: 16 }, { wch: 14 }, { wch: 13 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Riepilogo");
   XLSX.writeFile(wb, `costi_${dal}_${al}.xlsx`);
@@ -1244,6 +1368,7 @@ export default function App() {
   const [dipendenti, setDipendenti] = useState([]);
   const [commesse, setCommesse] = useState([]);
   const [registrazioni, setRegistrazioni] = useState([]);
+  const [materiali, setMateriali] = useState([]); // voci di costo materiale (rotte /api/materiali)
   const [vista, setVista] = useState("dashboard");
   const [dal, setDal] = useState("2026-07-01");
   const [al, setAl] = useState("2026-07-31");
@@ -1296,7 +1421,7 @@ export default function App() {
     cancellaToken();
     pronto.current = false;
     setCaricamento(true);
-    setDipendenti([]); setCommesse([]); setRegistrazioni([]); setAzienda("");
+    setDipendenti([]); setCommesse([]); setRegistrazioni([]); setMateriali([]); setAzienda("");
     setMessaggioAccesso(null);
     setBloccatoAbbonamento(false);
     setIsAdmin(false);
@@ -1372,6 +1497,7 @@ export default function App() {
         setDipendenti(Array.isArray(dati.dipendenti) ? dati.dipendenti : []);
         setCommesse(Array.isArray(dati.commesse) ? dati.commesse : []);
         setRegistrazioni(Array.isArray(dati.registrazioni) ? dati.registrazioni : []);
+        setMateriali(Array.isArray(dati.materiali) ? dati.materiali : []);
         if (typeof dati.azienda === "string") setAzienda(dati.azienda);
       }
       pronto.current = true;
@@ -1389,13 +1515,16 @@ export default function App() {
   }, [dipendenti, commesse, registrazioni, azienda]);
 
   /** Salvataggio immediato + snapshot di sicurezza forzato, per le operazioni
-   *  che cambiano molti dati in un colpo (import, svuota, ripristino). */
+   *  che cambiano molti dati in un colpo (import, svuota, ripristino).
+   *  I materiali si mandano SOLO se presenti nella patch: ometterli significa
+   *  "lasciali come stanno" (li gestiscono le rotte /api/materiali). */
   const salvaSubitoConBackup = useCallback((patch) => {
     datiAPI.salva(null, {
       dipendenti: patch.dipendenti ?? dipendenti,
       commesse: patch.commesse ?? commesse,
       registrazioni: patch.registrazioni ?? registrazioni,
       azienda: patch.azienda ?? azienda,
+      ...(Array.isArray(patch.materiali) ? { materiali: patch.materiali } : {}),
     }, { forzaBackup: true });
   }, [dipendenti, commesse, registrazioni, azienda]);
 
@@ -1404,6 +1533,19 @@ export default function App() {
     if (!dal || !al || erroreIntervallo) return null;
     return calcolaRiepilogo({ registrazioni, dipendenti, commesse, dal, al });
   }, [registrazioni, dipendenti, commesse, dal, al, erroreIntervallo]);
+
+  /**
+   * Manodopera e materiali uniti, commessa per commessa. `riep` resta quello
+   * di sempre (sola manodopera): qui si affianca il costo dei materiali senza
+   * mai mescolarlo, e si aggiungono le commesse che nell'intervallo hanno
+   * materiali ma nessuna ora.
+   */
+  const costi = useMemo(() => {
+    if (!dal || !al || erroreIntervallo) {
+      return { righe: [], perCommessa: new Map(), totManodopera: 0, totMateriali: 0, totTotale: 0 };
+    }
+    return unisciCosti({ riep, materiali, commesse, dal, al });
+  }, [riep, materiali, commesse, dal, al, erroreIntervallo]);
 
   /** Serie storiche per i grafici di andamento. Calcolata una sola volta e
    *  condivisa fra Dashboard e pannello di dettaglio: dipende solo dai dati,
@@ -1441,10 +1583,13 @@ export default function App() {
   });
   const eliminaCommessa = (com) => setConferma({
     titolo: "Eliminare la commessa?",
-    testo: `Verranno eliminate anche tutte le ore registrate sulla commessa ${com.codice}. L'operazione non si può annullare.`,
+    testo: `Verranno eliminate anche tutte le ore registrate e i materiali della commessa ${com.codice}. L'operazione non si può annullare.`,
     onOk: () => {
       setCommesse((c) => c.filter((x) => x.id !== com.id));
       setRegistrazioni((r) => r.filter((x) => x.commessaId !== com.id));
+      // I materiali della commessa spariscono anche sul server (cascata sulla
+      // chiave esterna): qui si allinea subito la copia locale.
+      setMateriali((m) => m.filter((x) => x.commessaId !== com.id));
       setDettaglio(null);
       notifica(`Commessa ${com.codice} eliminata.`);
     },
@@ -1472,12 +1617,55 @@ export default function App() {
     }
   };
 
+  /* --- materiali: passano dalle loro rotte, non dal salvataggio automatico ---
+     Il server è l'autorità: verifica che la commessa sia dell'azienda del
+     token e calcola lui il costo della riga (quantità × prezzo). Se rifiuta,
+     lo stato locale non viene toccato. */
+  const aggiungiMateriale = async (dati) => {
+    try {
+      const creato = await datiAPI.aggiungiMateriale(dati);
+      setMateriali((m) => [creato, ...m]);
+      notifica(`Materiale aggiunto: ${creato.descrizione} · ${euro(creato.costo)}.`);
+      // Una voce datata fuori dall'intervallo scelto sparirebbe dall'elenco
+      // senza spiegazione: meglio dirlo subito invece di farla sembrare persa.
+      if (creato.data < dal || creato.data > al) {
+        notifica(`La voce è datata ${fmtData(creato.data)}, fuori dall'intervallo mostrato: cambia le date per vederla.`, "avviso");
+      }
+      return { ok: true, materiale: creato };
+    } catch (e) {
+      notifica(e.message, "errore");
+      return { ok: false, errore: e.message };
+    }
+  };
+  const aggiornaMateriale = async (id, dati) => {
+    try {
+      const agg = await datiAPI.aggiornaMateriale(id, dati);
+      setMateriali((m) => m.map((x) => (x.id === agg.id ? agg : x)));
+      notifica("Materiale aggiornato.");
+      return { ok: true, materiale: agg };
+    } catch (e) {
+      notifica(e.message, "errore");
+      return { ok: false, errore: e.message };
+    }
+  };
+  const eliminaMateriale = async (voce) => {
+    try {
+      await datiAPI.eliminaMateriale(voce.id);
+      setMateriali((m) => m.filter((x) => x.id !== voce.id));
+      notifica("Voce di materiale eliminata.");
+      return { ok: true };
+    } catch (e) {
+      notifica(e.message, "errore");
+      return { ok: false, errore: e.message };
+    }
+  };
+
   const svuotaTutto = () => setConferma({
     titolo: "Svuotare tutti i dati?",
-    testo: "Dipendenti, commesse e registrazioni verranno cancellati. Prima di procedere puoi scaricare un backup dalla sezione Dati.",
+    testo: "Dipendenti, commesse, registrazioni e materiali verranno cancellati. Prima di procedere puoi scaricare un backup dalla sezione Dati.",
     onOk: () => {
-      setDipendenti([]); setCommesse([]); setRegistrazioni([]); setDettaglio(null);
-      salvaSubitoConBackup({ dipendenti: [], commesse: [], registrazioni: [] });
+      setDipendenti([]); setCommesse([]); setRegistrazioni([]); setMateriali([]); setDettaglio(null);
+      salvaSubitoConBackup({ dipendenti: [], commesse: [], registrazioni: [], materiali: [] });
       notifica("Tutti i dati sono stati cancellati.");
     },
   });
@@ -1489,9 +1677,10 @@ export default function App() {
     notifica("Dati d'esempio (luglio 2026) ricaricati.");
   };
 
-  /** "Backup (JSON)": salva su un file scelto dall'utente sul PC (non più un download del browser). */
+  /** "Backup (JSON)": salva su un file scelto dall'utente sul PC (non più un download del browser).
+   *  Include anche i materiali, altrimenti un backup/ripristino li perderebbe. */
   const backupJSON = async () => {
-    const ris = await datiAPI.backupEsporta(null, { azienda, dipendenti, commesse, registrazioni });
+    const ris = await datiAPI.backupEsporta(null, { azienda, dipendenti, commesse, registrazioni, materiali });
     if (ris.ok) notifica("Backup salvato: " + ris.percorso);
     else if (!ris.annullato) notifica("Non è stato possibile salvare il backup.", "errore");
   };
@@ -1504,9 +1693,16 @@ export default function App() {
       notifica("File di backup non valido: struttura non valida.", "errore");
       return;
     }
+    // I backup fatti prima dei materiali non hanno la chiave "materiali":
+    // in quel caso si lasciano quelli già presenti, senza cancellare nulla.
+    const materialiBackup = Array.isArray(d.materiali) ? d.materiali : null;
     setDipendenti(d.dipendenti); setCommesse(d.commesse); setRegistrazioni(d.registrazioni);
+    if (materialiBackup) setMateriali(materialiBackup);
     if (typeof d.azienda === "string") setAzienda(d.azienda);
-    salvaSubitoConBackup({ dipendenti: d.dipendenti, commesse: d.commesse, registrazioni: d.registrazioni, azienda: d.azienda });
+    salvaSubitoConBackup({
+      dipendenti: d.dipendenti, commesse: d.commesse, registrazioni: d.registrazioni,
+      azienda: d.azienda, ...(materialiBackup ? { materiali: materialiBackup } : {}),
+    });
     notifica("Backup ripristinato: i dati sono tornati com'erano.");
   };
 
@@ -1720,8 +1916,8 @@ export default function App() {
             </div>
           )}
 
-          {vista === "dashboard" && <Dashboard riep={riep} dal={dal} al={al} dipendenti={dipendenti} serieMensile={serieMensile} vaiCommesse={() => setVista("commesse")} vaiDati={() => setVista("dati")} haDati={registrazioni.length > 0} apri={setDettaglio} />}
-          {vista === "commesse" && <VistaCommesse riep={riep} dal={dal} al={al} apri={setDettaglio} esportaCsv={() => riep && esportaCSV(riep.righe, riep.totOre, riep.totCosto, dal, al)} esportaXlsx={() => riep && esportaXLSX(riep.righe, riep.totOre, riep.totCosto, dal, al)} esportaTutto={() => esportaCompletoXLSX({ dipendenti, commesse, registrazioni }, dal, al)} stampa={stampaPDF} vaiDati={() => setVista("dati")} />}
+          {vista === "dashboard" && <Dashboard riep={riep} costi={costi} dal={dal} al={al} dipendenti={dipendenti} serieMensile={serieMensile} vaiCommesse={() => setVista("commesse")} vaiDati={() => setVista("dati")} haDati={registrazioni.length > 0} apri={setDettaglio} />}
+          {vista === "commesse" && <VistaCommesse riep={riep} costi={costi} dal={dal} al={al} apri={setDettaglio} esportaCsv={() => riep && esportaCSV(costi.righe, costi, dal, al)} esportaXlsx={() => riep && esportaXLSX(costi.righe, costi, dal, al)} esportaTutto={() => esportaCompletoXLSX({ dipendenti, commesse, registrazioni, materiali }, dal, al)} stampa={stampaPDF} vaiDati={() => setVista("dati")} />}
           {vista === "dipendenti" && <VistaDipendenti dipendenti={dipendenti} setDipendenti={setDipendenti} riep={riep} elimina={eliminaDipendente} notifica={notifica} />}
           {vista === "dati" && (
             <VistaDati
@@ -1749,7 +1945,16 @@ export default function App() {
         ))}
       </nav>
 
-      {dettaglio && <PannelloDettaglio riga={dettaglio} riep={riep} dal={dal} al={al} serieMensile={serieMensile} onChiudi={() => setDettaglio(null)} />}
+      {/* La riga mostrata si rilegge sempre da `costi`, non dalla copia salvata
+          all'apertura: così aggiungendo o togliendo un materiale i numeri del
+          pannello si aggiornano subito. */}
+      {dettaglio && (
+        <PannelloDettaglio
+          riga={costi.righe.find((r) => r.commessa.id === dettaglio.commessa.id) || { ...dettaglio, costoManodopera: dettaglio.costo ?? 0, costoMateriali: 0, costoTotale: dettaglio.costo ?? 0, voci: [] }}
+          riep={riep} costi={costi} dal={dal} al={al} serieMensile={serieMensile}
+          onAggiungiMateriale={aggiungiMateriale} onAggiornaMateriale={aggiornaMateriale} onEliminaMateriale={eliminaMateriale}
+          onChiudi={() => setDettaglio(null)} />
+      )}
 
       {/* conflitto d'import: sostituisci / salta / annulla tutto */}
       {pianoConflitto && (
@@ -1811,7 +2016,7 @@ export default function App() {
         ))}
       </div>
 
-      <ReportStampa riep={riep} dal={dal} al={al} azienda={azienda} />
+      <ReportStampa riep={riep} costi={costi} dal={dal} al={al} azienda={azienda} />
     </div>
   );
 }
@@ -1918,7 +2123,38 @@ function AndamentoMensile({ serieMensile }) {
   );
 }
 
-function Dashboard({ riep, dal, al, dipendenti, serieMensile, vaiCommesse, vaiDati, haDati, apri }) {
+/**
+ * I tre numeri del costo, sempre affiancati e sempre distinti: manodopera,
+ * materiali, totale. Non vanno mai mescolati fra loro perché rispondono a
+ * domande diverse ("quanto mi è costato il lavoro" / "quanto ho speso in
+ * materiale"); il totale è solo la loro somma.
+ */
+function FasciaCosti({ costi, titolo = "Costo del periodo" }) {
+  const voci = [
+    { e: "Manodopera", v: euro(costi.totManodopera), c: "var(--euro)" },
+    { e: "Materiali", v: euro(costi.totMateriali), c: "var(--euro)" },
+    { e: "Costo totale", v: euro(costi.totTotale), c: "var(--accent)", forte: true },
+  ];
+  return (
+    <section className="rounded-2xl overflow-hidden" style={{ background: "var(--card)", boxShadow: "var(--ombra-sm)" }}>
+      <div className="px-6 pt-5">
+        <Micro>{titolo}</Micro>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 mt-1">
+        {voci.map((k, i) => (
+          <div key={k.e} className="px-6 py-4"
+            style={{ borderLeft: i > 0 ? "1px solid var(--hairline)" : "none", background: k.forte ? "var(--tela)" : "transparent" }}>
+            <Micro>{k.e}</Micro>
+            <p className={"f-mono mt-2 leading-none " + (k.forte ? "text-[24px]" : "text-[20px]")} style={{ color: k.c }}>{k.v}</p>
+            {k.forte && <p className="text-[11px] mt-2" style={{ color: "var(--muted)" }}>manodopera + materiali</p>}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function Dashboard({ riep, costi, dal, al, dipendenti, serieMensile, vaiCommesse, vaiDati, haDati, apri }) {
   if (!riep) return null;
   const { righe, totCosto, totOre } = riep;
   const top = righe[0];
@@ -1938,23 +2174,41 @@ function Dashboard({ riep, dal, al, dipendenti, serieMensile, vaiCommesse, vaiDa
     // sono davvero i suoi dati, invece di lasciare la Dashboard tutta vuota.
     return (
       <div className="space-y-10">
+        {/* Zero ore non vuol dire zero costi: se ci sono materiali nel periodo,
+            i tre numeri restano visibili invece di sparire con le ore. */}
+        {costi.totMateriali > 0 && <FasciaCosti costi={costi} />}
         <StatoVuoto icona={LayoutDashboard} titolo="Nessuna ora nell'intervallo"
-          testo={haDati ? "Cambia l'intervallo di date con le frecce in alto oppure registra nuove ore." : "Non ci sono ancora dati. Registra le prime ore, importa il file Excel o ricarica i dati d'esempio dalla sezione Dati."}
-          azione={<Bottone onClick={vaiDati}><Plus size={14} strokeWidth={1.75} /> Vai a Dati</Bottone>} />
+          testo={costi.totMateriali > 0
+            ? "In queste date ci sono materiali ma nessuna ora registrata: il riepilogo Commesse mostra le commesse interessate."
+            : haDati ? "Cambia l'intervallo di date con le frecce in alto oppure registra nuove ore." : "Non ci sono ancora dati. Registra le prime ore, importa il file Excel o ricarica i dati d'esempio dalla sezione Dati."}
+          azione={costi.totMateriali > 0
+            ? <Bottone onClick={vaiCommesse}><ChevronRight size={14} strokeWidth={1.75} /> Vai al riepilogo</Bottone>
+            : <Bottone onClick={vaiDati}><Plus size={14} strokeWidth={1.75} /> Vai a Dati</Bottone>} />
         {haDati && <AndamentoMensile serieMensile={serieMensile} />}
       </div>
     );
   }
 
-  const datiBarre = righe.map((r) => ({ nome: r.commessa.codice, costo: Math.round(r.costo * 100) / 100, riga: r }));
+  // Le barre mostrano il costo TOTALE della commessa (manodopera + materiali):
+  // è il numero che risponde a "quanto mi è costata davvero". La ripartizione
+  // fra le due voci si legge nel riepilogo e nel dettaglio.
+  const datiBarre = costi.righe.map((r) => ({
+    nome: r.commessa.codice,
+    costo: Math.round(r.costoTotale * 100) / 100,
+    riga: r,
+  }));
   const datiGiorni = [...riep.perGiorno.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1))
     .map(([d, c]) => ({ giorno: d.slice(8) + "/" + d.slice(5, 7), costo: Math.round(c * 100) / 100 }));
   const costoMedioOra = totOre > 0 ? totCosto / totOre : 0;
 
+  // "Più costosa" e "attive" guardano il costo TOTALE (manodopera + materiali):
+  // una commessa può essere in testa per la spesa di materiale. Il costo medio
+  // orario invece resta di sola manodopera, perché è una tariffa del lavoro.
+  const piuCostosa = costi.righe[0] || top;
   const kpi = [
-    { e: "Commesse attive", v: String(righe.length) },
-    { e: "Costo medio orario", v: fmtNum.format(costoMedioOra), u: "€/h" },
-    { e: "Commessa più costosa", v: top.commessa.codice, sub: euro(top.costo) },
+    { e: "Commesse attive", v: String(Math.max(righe.length, costi.righe.length)) },
+    { e: "Costo medio orario", v: fmtNum.format(costoMedioOra), u: "€/h", sub: "solo manodopera", subMuto: true },
+    { e: "Commessa più costosa", v: piuCostosa.commessa.codice, sub: euro(piuCostosa.costoTotale ?? piuCostosa.costo) },
     { e: "Dipendenti attivi", v: String(perDip.length), sub: `su ${dipendenti.length} totali`, muto: true },
   ];
 
@@ -1965,6 +2219,8 @@ function Dashboard({ riep, dal, al, dipendenti, serieMensile, vaiCommesse, vaiDa
         <h1 className="f-display text-[26px] mt-1" style={{ letterSpacing: "-0.01em" }}>{fmtData(dal)} – {fmtData(al)}</h1>
       </div>
 
+      <FasciaCosti costi={costi} />
+
       {/* KPI: una fascia unica, separatori a filo */}
       <div className="rounded-2xl grid grid-cols-2 xl:grid-cols-4 overflow-hidden" style={{ background: "var(--card)", boxShadow: "var(--ombra-sm)" }}>
         {kpi.map((k, i) => (
@@ -1973,7 +2229,7 @@ function Dashboard({ riep, dal, al, dipendenti, serieMensile, vaiCommesse, vaiDa
             <p className="f-mono text-[22px] mt-2 leading-none" style={{ color: k.muto ? "var(--muted)" : "var(--txt)" }}>
               {k.v}{k.u && <span className="text-sm ml-1" style={{ color: "var(--muted)" }}>{k.u}</span>}
             </p>
-            {k.sub && <p className="f-mono text-xs mt-1.5" style={{ color: k.muto ? "var(--muted)" : "var(--euro)" }}>{k.sub}</p>}
+            {k.sub && <p className="f-mono text-xs mt-1.5" style={{ color: k.muto || k.subMuto ? "var(--muted)" : "var(--euro)" }}>{k.sub}</p>}
           </div>
         ))}
       </div>
@@ -1991,7 +2247,7 @@ function Dashboard({ riep, dal, al, dipendenti, serieMensile, vaiCommesse, vaiDa
                 <CartesianGrid stroke="var(--hairline)" horizontal={false} />
                 <XAxis type="number" tick={{ fontSize: 11, fontFamily: "'IBM Plex Mono', monospace", fill: "#9AA0A8" }} tickFormatter={(v) => fmtOre.format(v)} axisLine={false} tickLine={false} />
                 <YAxis type="category" dataKey="nome" width={46} tick={{ fontSize: 11.5, fontFamily: "'IBM Plex Mono', monospace", fill: "var(--txt)" }} interval={0} axisLine={false} tickLine={false} />
-                <Tooltip formatter={(v) => [euro(v), "Costo"]} labelFormatter={(l) => "Commessa " + l}
+                <Tooltip formatter={(v) => [euro(v), "Costo totale"]} labelFormatter={(l) => "Commessa " + l}
                   contentStyle={{ borderRadius: 10, border: "1px solid var(--hairline)", boxShadow: "var(--ombra-md)", fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, padding: "8px 12px" }}
                   cursor={{ fill: "rgba(23,27,34,.04)" }} />
                 <Bar dataKey="costo" radius={[0, 2, 2, 0]} maxBarSize={9} className="cursor-pointer">
@@ -2055,23 +2311,29 @@ function Dashboard({ riep, dal, al, dipendenti, serieMensile, vaiCommesse, vaiDa
 /* ---------------------------------------------------------------------------
    RIEPILOGO COMMESSE
 --------------------------------------------------------------------------- */
-function VistaCommesse({ riep, dal, al, apri, esportaCsv, esportaXlsx, esportaTutto, stampa, vaiDati }) {
-  const [ordina, setOrdina] = useState({ campo: "costo", disc: true });
+function VistaCommesse({ riep, costi, dal, al, apri, esportaCsv, esportaXlsx, esportaTutto, stampa, vaiDati }) {
+  const [ordina, setOrdina] = useState({ campo: "totale", disc: true });
   const [cerca, setCerca] = useState("");
   if (!riep) return null;
 
+  const valore = (r, campo) => (
+    campo === "ore" ? r.ore
+      : campo === "codice" ? r.commessa.codice
+      : campo === "manodopera" ? r.costoManodopera
+      : campo === "materiali" ? r.costoMateriali
+      : r.costoTotale
+  );
   const filtro = cerca.trim().toLowerCase();
-  const righe = riep.righe
+  const righe = costi.righe
     .filter((r) => !filtro || (r.commessa.codice + " " + r.commessa.descrizione).toLowerCase().includes(filtro))
     .sort((a, b) => {
-      const va = ordina.campo === "ore" ? a.ore : ordina.campo === "codice" ? a.commessa.codice : a.costo;
-      const vb = ordina.campo === "ore" ? b.ore : ordina.campo === "codice" ? b.commessa.codice : b.costo;
+      const va = valore(a, ordina.campo), vb = valore(b, ordina.campo);
       const c = va < vb ? -1 : va > vb ? 1 : 0;
       return ordina.disc ? -c : c;
     });
   const clic = (campo) => setOrdina((o) => ({ campo, disc: o.campo === campo ? !o.disc : true }));
   const freccia = (campo) => (ordina.campo === campo ? (ordina.disc ? " ↓" : " ↑") : "");
-  const maxCosto = riep.righe.length ? Math.max(...riep.righe.map((r) => r.costo)) : 0;
+  const maxCosto = costi.righe.length ? Math.max(...costi.righe.map((r) => r.costoTotale)) : 0;
 
   return (
     <div className="space-y-8">
@@ -2088,9 +2350,9 @@ function VistaCommesse({ riep, dal, al, apri, esportaCsv, esportaXlsx, esportaTu
         </div>
       </div>
 
-      {riep.righe.length === 0 ? (
+      {costi.righe.length === 0 ? (
         <StatoVuoto icona={FolderKanban} titolo="Nessuna commessa nell'intervallo"
-          testo="Nessuna ora registrata in queste date. Allarga l'intervallo o registra nuove ore."
+          testo="Nessuna ora né materiale registrati in queste date. Allarga l'intervallo o registra nuove ore."
           azione={<Bottone onClick={vaiDati}><Plus size={14} strokeWidth={1.75} /> Registra ore</Bottone>} />
       ) : (
         <div className="rounded-2xl overflow-hidden" style={{ background: "var(--card)", boxShadow: "var(--ombra-sm)" }}>
@@ -2106,7 +2368,9 @@ function VistaCommesse({ riep, dal, al, apri, esportaCsv, esportaXlsx, esportaTu
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left">
-                  {[["codice", "Codice", ""], [null, "Descrizione", "hidden sm:table-cell"], ["ore", "Ore", "text-right"], [null, "Quota", "w-40 hidden md:table-cell"], ["costo", "Costo", "text-right"]].map(([campo, nome, cls]) => (
+                  {[["codice", "Codice", ""], [null, "Descrizione", "hidden lg:table-cell"], ["ore", "Ore", "text-right"],
+                    [null, "Quota", "w-32 hidden xl:table-cell"],
+                    ["manodopera", "Manodopera", "text-right"], ["materiali", "Materiali", "text-right"], ["totale", "Totale", "text-right"]].map(([campo, nome, cls]) => (
                     <th key={nome} className={`px-6 py-3.5 text-[11px] font-semibold uppercase ${cls} ${campo ? "cursor-pointer select-none" : ""}`}
                       style={{ letterSpacing: ".1em", color: "var(--muted)" }} onClick={campo ? () => clic(campo) : undefined}>
                       {nome}{campo ? freccia(campo) : ""}
@@ -2120,25 +2384,30 @@ function VistaCommesse({ riep, dal, al, apri, esportaCsv, esportaXlsx, esportaTu
                   <tr key={r.commessa.id} onClick={() => apri(r)} tabIndex={0} onKeyDown={(e) => e.key === "Enter" && apri(r)}
                     className="cursor-pointer transition-colors riga" style={{ borderTop: "1px solid var(--hairline)" }}>
                     <td className="px-6 py-4 f-mono font-medium">{r.commessa.codice}</td>
-                    <td className="px-6 py-4 hidden sm:table-cell" style={{ color: "var(--muted)" }}>{r.commessa.descrizione}</td>
+                    <td className="px-6 py-4 hidden lg:table-cell" style={{ color: "var(--muted)" }}>{r.commessa.descrizione}</td>
                     <td className="px-6 py-4 f-mono text-right">{fmtOre.format(r.ore)}</td>
-                    <td className="px-6 py-4 hidden md:table-cell">
+                    <td className="px-6 py-4 hidden xl:table-cell">
                       <div className="flex items-center gap-2.5">
-                        <div className="flex-1"><BarraQuota quota={maxCosto > 0 ? r.costo / maxCosto : 0} colore="#454C57" /></div>
-                        <span className="f-mono text-xs w-11 text-right" style={{ color: "var(--muted)" }}>{fmtPerc.format(riep.totCosto > 0 ? (r.costo / riep.totCosto) * 100 : 0)}%</span>
+                        <div className="flex-1"><BarraQuota quota={maxCosto > 0 ? r.costoTotale / maxCosto : 0} colore="#454C57" /></div>
+                        <span className="f-mono text-xs w-11 text-right" style={{ color: "var(--muted)" }}>{fmtPerc.format(costi.totTotale > 0 ? (r.costoTotale / costi.totTotale) * 100 : 0)}%</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 f-mono text-right" style={{ color: "var(--euro)" }}>{euro(r.costo)}</td>
+                    <td className="px-6 py-4 f-mono text-right" style={{ color: "var(--euro)" }}>{euro(r.costoManodopera)}</td>
+                    <td className="px-6 py-4 f-mono text-right" style={{ color: r.costoMateriali > 0 ? "var(--euro)" : "var(--muted)" }}>{euro(r.costoMateriali)}</td>
+                    <td className="px-6 py-4 f-mono text-right font-medium" style={{ color: "var(--accent)" }}>{euro(r.costoTotale)}</td>
                     <td className="pr-4 text-right"><ChevronRight size={14} strokeWidth={1.75} style={{ color: "var(--muted)" }} /></td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
                 <tr style={{ borderTop: "1px solid var(--txt)", background: "var(--tela)" }}>
-                  <td className="px-6 py-4 f-display" colSpan={2}>Totale</td>
+                  <td className="px-6 py-4 f-display">Totale</td>
+                  <td className="hidden lg:table-cell" />
                   <td className="px-6 py-4 f-mono text-right font-medium">{fmtOre.format(riep.totOre)}</td>
-                  <td className="hidden md:table-cell" />
-                  <td className="px-6 py-4 f-mono text-right font-medium" style={{ color: "var(--euro)" }}>{euro(riep.totCosto)}</td>
+                  <td className="hidden xl:table-cell" />
+                  <td className="px-6 py-4 f-mono text-right font-medium" style={{ color: "var(--euro)" }}>{euro(costi.totManodopera)}</td>
+                  <td className="px-6 py-4 f-mono text-right font-medium" style={{ color: "var(--euro)" }}>{euro(costi.totMateriali)}</td>
+                  <td className="px-6 py-4 f-mono text-right font-medium" style={{ color: "var(--accent)" }}>{euro(costi.totTotale)}</td>
                   <td />
                 </tr>
               </tfoot>
@@ -2150,12 +2419,12 @@ function VistaCommesse({ riep, dal, al, apri, esportaCsv, esportaXlsx, esportaTu
   );
 }
 
-function PannelloDettaglio({ riga, riep, dal, al, serieMensile, onChiudi }) {
+function PannelloDettaglio({ riga, riep, costi, dal, al, serieMensile, onAggiungiMateriale, onAggiornaMateriale, onEliminaMateriale, onChiudi }) {
   useEffect(() => {
     const h = (e) => e.key === "Escape" && onChiudi();
     window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h);
   }, [onChiudi]);
-  const quota = riep && riep.totCosto > 0 ? riga.costo / riep.totCosto : 0;
+  const quota = costi && costi.totTotale > 0 ? riga.costoTotale / costi.totTotale : 0;
   const maxDip = riga.dipendenti.length ? Math.max(...riga.dipendenti.map((d) => d.costo)) : 0;
 
   // Storico di QUESTA commessa, estratto dalla serie già calcolata in App:
@@ -2179,13 +2448,24 @@ function PannelloDettaglio({ riga, riep, dal, al, serieMensile, onChiudi }) {
           <button onClick={onChiudi} aria-label="Chiudi dettaglio" className="p-1.5 rounded-lg btn" style={{ color: "#8B929C" }}><X size={17} strokeWidth={1.75} /></button>
         </div>
         <div className="p-7 space-y-7 overflow-y-auto">
-          <div className="rounded-xl grid grid-cols-3 overflow-hidden" style={{ border: "1px solid var(--hairline)" }}>
-            {[["Ore", fmtOre.format(riga.ore), null], ["Costo", euro(riga.costo), "var(--euro)"], ["Quota", fmtPerc.format(quota * 100) + "%", null]].map(([e, v, col], i) => (
-              <div key={e} className="px-4 py-3.5" style={{ borderLeft: i > 0 ? "1px solid var(--hairline)" : "none" }}>
-                <Micro>{e}</Micro>
-                <p className="f-mono text-[15px] mt-1.5" style={{ color: col || "var(--txt)" }}>{v}</p>
+          {/* I tre numeri, sempre distinti: ore e manodopera, materiali, e la
+              loro somma. Non si mescolano mai in un unico "costo". */}
+          <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--hairline)" }}>
+            <div className="grid grid-cols-3">
+              {[["Ore", fmtOre.format(riga.ore), null], ["Manodopera", euro(riga.costoManodopera), "var(--euro)"], ["Materiali", euro(riga.costoMateriali), riga.costoMateriali > 0 ? "var(--euro)" : "var(--muted)"]].map(([e, v, col], i) => (
+                <div key={e} className="px-4 py-3.5" style={{ borderLeft: i > 0 ? "1px solid var(--hairline)" : "none" }}>
+                  <Micro>{e}</Micro>
+                  <p className="f-mono text-[15px] mt-1.5" style={{ color: col || "var(--txt)" }}>{v}</p>
+                </div>
+              ))}
+            </div>
+            <div className="px-4 py-3.5 flex items-end justify-between gap-3" style={{ borderTop: "1px solid var(--hairline)", background: "var(--tela)" }}>
+              <div>
+                <Micro>Costo totale</Micro>
+                <p className="text-[11px] mt-1" style={{ color: "var(--muted)" }}>manodopera + materiali · {fmtPerc.format(quota * 100)}% del periodo</p>
               </div>
-            ))}
+              <p className="f-mono text-[20px] leading-none" style={{ color: "var(--accent)" }}>{euro(riga.costoTotale)}</p>
+            </div>
           </div>
           <p className="text-xs f-mono" style={{ color: "var(--muted)" }}>Intervallo {fmtData(dal)} – {fmtData(al)}</p>
           <div>
@@ -2203,6 +2483,10 @@ function PannelloDettaglio({ riga, riep, dal, al, serieMensile, onChiudi }) {
               ))}
             </div>
           </div>
+
+          <SezioneMateriali
+            commessa={riga.commessa} voci={riga.voci} totale={riga.costoMateriali} dal={dal} al={al}
+            onAggiungi={onAggiungiMateriale} onAggiorna={onAggiornaMateriale} onElimina={onEliminaMateriale} />
 
           {/* storico della commessa: tutti i mesi in cui ha avuto ore, non solo l'intervallo */}
           <div>
@@ -2239,6 +2523,136 @@ function PannelloDettaglio({ riga, riep, dal, al, serieMensile, onChiudi }) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Materiali di una commessa: inserimento, elenco e totale.
+ * Vive dentro il pannello di dettaglio, così la voce si inserisce dov'è già
+ * chiaro di quale commessa si sta parlando. Il collegamento è per id, quindi
+ * rinominare la commessa non tocca nulla di qui.
+ * L'elenco mostra le voci dell'intervallo scelto, come tutti gli altri numeri
+ * del pannello.
+ */
+function SezioneMateriali({ commessa, voci, totale, dal, al, onAggiungi, onAggiorna, onElimina }) {
+  // La data proposta cade sempre dentro l'intervallo mostrato: così la voce
+  // appena inserita è visibile subito invece di finire fuori dalla vista.
+  const dataIniziale = () => { const o = oggiISO(); return o >= dal && o <= al ? o : dal; };
+  const vuoto = { data: dataIniziale(), fornitore: "", descrizione: "", quantita: "", prezzoUnitario: "" };
+  const [f, setF] = useState(vuoto);
+  const [inModifica, setInModifica] = useState(null); // id della voce in modifica
+  const [err, setErr] = useState({});
+  const [inCorso, setInCorso] = useState(false);
+
+  const q = parseNumIt(f.quantita), p = parseNumIt(f.prezzoUnitario);
+  const costoRiga = !isNaN(q) && !isNaN(p) ? q * p : null;
+
+  const annulla = () => { setInModifica(null); setF(vuoto); setErr({}); };
+
+  const invia = async () => {
+    if (inCorso) return;
+    const e = {};
+    if (!dataValida(f.data)) e.data = "Data non valida.";
+    if (!f.descrizione.trim()) e.descrizione = "Scrivi che materiale è.";
+    if (isNaN(q) || q <= 0) e.quantita = "Maggiore di zero.";
+    if (isNaN(p) || p < 0) e.prezzoUnitario = "Non può essere negativo.";
+    setErr(e);
+    if (Object.keys(e).length) return;
+
+    const dati = {
+      commessaId: commessa.id, data: f.data, fornitore: f.fornitore.trim(),
+      descrizione: f.descrizione.trim(), quantita: q, prezzoUnitario: p,
+    };
+    setInCorso(true);
+    const ris = inModifica ? await onAggiorna(inModifica, dati) : await onAggiungi(dati);
+    setInCorso(false);
+    if (!ris?.ok) return;
+    // Dopo un inserimento si tengono data e fornitore: di solito si caricano
+    // più voci dello stesso documento una dopo l'altra.
+    setInModifica(null);
+    setF((x) => ({ ...vuoto, data: x.data, fornitore: inModifica ? "" : x.fornitore }));
+  };
+
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-3 mb-1">
+        <h4 className="f-display text-base">Materiali</h4>
+        <p className="f-mono text-sm" style={{ color: totale > 0 ? "var(--euro)" : "var(--muted)" }}>{euro(totale)}</p>
+      </div>
+      <p className="text-xs mb-4" style={{ color: "var(--muted)" }}>
+        Voci di spesa inserite a mano, nell'intervallo scelto. Il costo della riga è quantità × prezzo unitario e si somma alla manodopera solo nel costo totale.
+      </p>
+
+      <div className="rounded-xl p-4 space-y-3" style={{ background: "var(--tela)", border: "1px solid var(--hairline)" }}
+        onKeyDown={(e) => e.key === "Enter" && invia()}>
+        <div className="grid grid-cols-2 gap-3">
+          <Campo etichetta="Data" errore={err.data}>
+            <input type="date" value={f.data} onChange={(e) => setF((x) => ({ ...x, data: e.target.value }))} className={inputCls + " f-mono"} style={{ background: "var(--card)" }} />
+          </Campo>
+          <Campo etichetta="Fornitore">
+            <input value={f.fornitore} onChange={(e) => setF((x) => ({ ...x, fornitore: e.target.value }))} placeholder="es. Ferramenta Bianchi" className={inputCls} style={{ background: "var(--card)" }} />
+          </Campo>
+        </div>
+        <Campo etichetta="Descrizione" errore={err.descrizione}>
+          <input value={f.descrizione} onChange={(e) => setF((x) => ({ ...x, descrizione: e.target.value }))} placeholder="es. Cemento 32,5 R — sacchi 25 kg" className={inputCls} style={{ background: "var(--card)" }} />
+        </Campo>
+        <div className="grid grid-cols-2 gap-3">
+          <Campo etichetta="Quantità" errore={err.quantita}>
+            <input value={f.quantita} onChange={(e) => setF((x) => ({ ...x, quantita: e.target.value }))} placeholder="es. 10" className={inputCls + " f-mono text-right"} style={{ background: "var(--card)" }} />
+          </Campo>
+          <Campo etichetta="Prezzo unitario (€)" errore={err.prezzoUnitario}>
+            <input value={f.prezzoUnitario} onChange={(e) => setF((x) => ({ ...x, prezzoUnitario: e.target.value }))} placeholder="es. 5,00" className={inputCls + " f-mono text-right"} style={{ background: "var(--card)" }} />
+          </Campo>
+        </div>
+        <div className="flex items-center justify-between gap-3 pt-1">
+          <div>
+            <Micro>Costo riga</Micro>
+            <p className="f-mono text-[15px] mt-1" style={{ color: costoRiga ? "var(--euro)" : "var(--muted)" }}>
+              {costoRiga != null ? euro(costoRiga) : "—"}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            {inModifica && <Bottone variante="fantasma" onClick={annulla} disabled={inCorso}>Annulla</Bottone>}
+            <Bottone onClick={invia} disabled={inCorso}>
+              {inModifica ? <Save size={14} strokeWidth={1.75} /> : <Plus size={14} strokeWidth={1.75} />}
+              {inCorso ? "Salvataggio…" : inModifica ? "Salva" : "Aggiungi"}
+            </Bottone>
+          </div>
+        </div>
+      </div>
+
+      {voci.length === 0 ? (
+        <p className="text-sm mt-4" style={{ color: "var(--muted)" }}>Nessun materiale registrato su questa commessa nell'intervallo scelto.</p>
+      ) : (
+        <ul className="mt-4 space-y-2">
+          {voci.map((m) => (
+            <li key={m.id} className="rounded-xl px-3.5 py-3 flex items-start justify-between gap-3"
+              style={{ border: "1px solid var(--hairline)", background: inModifica === m.id ? "var(--velo-accento)" : "transparent" }}>
+              <div className="min-w-0">
+                <p className="text-sm font-medium truncate">{m.descrizione}</p>
+                <p className="f-mono text-xs mt-1" style={{ color: "var(--muted)" }}>
+                  {fmtData(m.data)}{m.fornitore ? " · " + m.fornitore : ""}
+                </p>
+                <p className="f-mono text-xs mt-0.5" style={{ color: "var(--muted)" }}>
+                  {fmtOre.format(m.quantita)} × {fmtNum.format(m.prezzoUnitario)} €
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <p className="f-mono text-sm" style={{ color: "var(--euro)" }}>{euro(m.costo)}</p>
+                <button onClick={() => { setInModifica(m.id); setErr({}); setF({ data: m.data, fornitore: m.fornitore, descrizione: m.descrizione, quantita: String(m.quantita).replace(".", ","), prezzoUnitario: String(m.prezzoUnitario).replace(".", ",") }); }}
+                  aria-label={"Modifica materiale " + m.descrizione} className="p-1.5 rounded-lg btn" style={{ border: "1px solid var(--hairline)" }}>
+                  <Pencil size={12} strokeWidth={1.75} />
+                </button>
+                <button onClick={async () => { if (inModifica === m.id) annulla(); await onElimina(m); }}
+                  aria-label={"Elimina materiale " + m.descrizione} className="p-1.5 rounded-lg btn" style={{ border: "1px solid rgba(166,58,50,.22)", color: "#A63A32" }}>
+                  <Trash2 size={12} strokeWidth={1.75} />
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -2679,8 +3093,11 @@ function EditorRinominaCommessa({ commessa, commesse, oreCollegate, onSalva, onF
 /* ---------------------------------------------------------------------------
    REPORT DI STAMPA (PDF via stampa del browser, stile dedicato)
 --------------------------------------------------------------------------- */
-function ReportStampa({ riep, dal, al, azienda }) {
+function ReportStampa({ riep, costi, dal, al, azienda }) {
   if (!riep) return null;
+  // Stesse colonne della tabella a video: manodopera e materiali restano
+  // distinti anche sulla carta, il totale è la loro somma.
+  const righeStampa = costi?.righe ?? [];
   return (
     <div className="soloprint" aria-hidden="true">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", borderBottom: "2px solid #171B22", paddingBottom: 10, marginBottom: 16 }}>
@@ -2689,7 +3106,7 @@ function ReportStampa({ riep, dal, al, azienda }) {
           <p style={{ fontWeight: 700, fontSize: 16, margin: 0 }}>{azienda || "________________________"}</p>
         </div>
         <div style={{ textAlign: "right", fontSize: 11 }}>
-          <p style={{ margin: 0, fontWeight: 700 }}>Costi del lavoro per commessa</p>
+          <p style={{ margin: 0, fontWeight: 700 }}>Costi per commessa</p>
           <p style={{ margin: 0 }}>Periodo: {fmtData(dal)} — {fmtData(al)}</p>
           <p style={{ margin: 0 }}>Stampato il {fmtData(oggiISO())}</p>
         </div>
@@ -2700,16 +3117,20 @@ function ReportStampa({ riep, dal, al, azienda }) {
             <th style={{ padding: "6px 8px" }}>Codice</th>
             <th style={{ padding: "6px 8px" }}>Descrizione</th>
             <th style={{ padding: "6px 8px", textAlign: "right" }}>Ore</th>
-            <th style={{ padding: "6px 8px", textAlign: "right" }}>Costo (€)</th>
+            <th style={{ padding: "6px 8px", textAlign: "right" }}>Manodopera (€)</th>
+            <th style={{ padding: "6px 8px", textAlign: "right" }}>Materiali (€)</th>
+            <th style={{ padding: "6px 8px", textAlign: "right" }}>Totale (€)</th>
           </tr>
         </thead>
         <tbody>
-          {riep.righe.map((r) => (
+          {righeStampa.map((r) => (
             <tr key={r.commessa.id} style={{ borderBottom: "1px solid #DDD" }}>
               <td style={{ padding: "5px 8px", fontFamily: "'IBM Plex Mono', monospace" }}>{r.commessa.codice}</td>
               <td style={{ padding: "5px 8px" }}>{r.commessa.descrizione}</td>
               <td style={{ padding: "5px 8px", textAlign: "right", fontFamily: "'IBM Plex Mono', monospace" }}>{fmtOre.format(r.ore)}</td>
-              <td style={{ padding: "5px 8px", textAlign: "right", fontFamily: "'IBM Plex Mono', monospace" }}>{fmtNum.format(r.costo)}</td>
+              <td style={{ padding: "5px 8px", textAlign: "right", fontFamily: "'IBM Plex Mono', monospace" }}>{fmtNum.format(r.costoManodopera)}</td>
+              <td style={{ padding: "5px 8px", textAlign: "right", fontFamily: "'IBM Plex Mono', monospace" }}>{fmtNum.format(r.costoMateriali)}</td>
+              <td style={{ padding: "5px 8px", textAlign: "right", fontFamily: "'IBM Plex Mono', monospace" }}>{fmtNum.format(r.costoTotale)}</td>
             </tr>
           ))}
         </tbody>
@@ -2717,7 +3138,9 @@ function ReportStampa({ riep, dal, al, azienda }) {
           <tr style={{ borderTop: "1.5px solid #171B22", fontWeight: 700 }}>
             <td style={{ padding: "7px 8px" }} colSpan={2}>TOTALE</td>
             <td style={{ padding: "7px 8px", textAlign: "right", fontFamily: "'IBM Plex Mono', monospace" }}>{fmtOre.format(riep.totOre)}</td>
-            <td style={{ padding: "7px 8px", textAlign: "right", fontFamily: "'IBM Plex Mono', monospace" }}>{fmtNum.format(riep.totCosto)}</td>
+            <td style={{ padding: "7px 8px", textAlign: "right", fontFamily: "'IBM Plex Mono', monospace" }}>{fmtNum.format(costi?.totManodopera ?? riep.totCosto)}</td>
+            <td style={{ padding: "7px 8px", textAlign: "right", fontFamily: "'IBM Plex Mono', monospace" }}>{fmtNum.format(costi?.totMateriali ?? 0)}</td>
+            <td style={{ padding: "7px 8px", textAlign: "right", fontFamily: "'IBM Plex Mono', monospace" }}>{fmtNum.format(costi?.totTotale ?? riep.totCosto)}</td>
           </tr>
         </tfoot>
       </table>

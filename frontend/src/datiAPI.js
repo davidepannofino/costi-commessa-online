@@ -30,6 +30,32 @@ export function suAbbonamentoRichiesto(fn) {
 
 const headerAuth = () => ({ Authorization: `Bearer ${leggiToken() || ""}` });
 
+/**
+ * Chiamata alle rotte dei materiali. Gestisce allo stesso modo di tutto il
+ * resto la sessione scaduta (401) e l'abbonamento richiesto (402), e propaga
+ * il messaggio d'errore del server così com'è, perché è già scritto per essere
+ * mostrato all'utente.
+ */
+async function chiamaMateriali(metodo, percorso, corpo, messaggioDiRipiego, estrai) {
+  let res;
+  try {
+    res = await fetch(`${API_BASE}${percorso}`, {
+      method: metodo,
+      headers: { "Content-Type": "application/json", ...headerAuth() },
+      body: corpo ? JSON.stringify(corpo) : undefined,
+    });
+  } catch (e) {
+    throw new Error("Impossibile contattare il server: riprova.");
+  }
+  if (res.status === 401) { gestoreSessioneScaduta?.(); throw new Error("Sessione scaduta: accedi di nuovo."); }
+  if (res.status === 402) { gestoreAbbonamentoRichiesto?.(); throw new Error("Abbonamento richiesto."); }
+  if (!res.ok) {
+    const dati = await res.json().catch(() => null);
+    throw new Error(dati?.errore || messaggioDiRipiego);
+  }
+  return estrai(await res.json());
+}
+
 export const datiAPI = {
   async carica() {
     try {
@@ -99,6 +125,26 @@ export const datiAPI = {
     }
     const dati = await res.json();
     return dati.commessa;
+  },
+
+  /* --- MATERIALI ---------------------------------------------------------
+     Voci di costo materiale di una commessa. Hanno rotte proprie (non passano
+     dal salvataggio automatico di /api/stato): ogni operazione è immediata e
+     viene sempre verificata dal server contro l'azienda del token. */
+
+  /** Aggiunge una voce di materiale. Ritorna la voce creata (con il costo calcolato dal database). */
+  async aggiungiMateriale(dati) {
+    return chiamaMateriali("POST", "/api/materiali", dati, "Impossibile salvare il materiale.", (d) => d.materiale);
+  },
+
+  /** Modifica una voce di materiale esistente. */
+  async aggiornaMateriale(id, dati) {
+    return chiamaMateriali("PATCH", `/api/materiali/${encodeURIComponent(id)}`, dati, "Impossibile aggiornare il materiale.", (d) => d.materiale);
+  },
+
+  /** Elimina una voce di materiale. */
+  async eliminaMateriale(id) {
+    return chiamaMateriali("DELETE", `/api/materiali/${encodeURIComponent(id)}`, null, "Impossibile eliminare il materiale.", () => true);
   },
 
   /** Stato dell'abbonamento dell'azienda loggata (giorni di prova, se attivo, ecc.). */

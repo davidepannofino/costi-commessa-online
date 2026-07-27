@@ -64,5 +64,29 @@ CREATE INDEX IF NOT EXISTS idx_registrazioni_azienda ON registrazioni(azienda_id
 CREATE INDEX IF NOT EXISTS idx_registrazioni_dipendente ON registrazioni(dipendente_id);
 CREATE INDEX IF NOT EXISTS idx_registrazioni_commessa ON registrazioni(commessa_id);
 
+-- Tappa materiali: costo dei materiali per commessa, inseriti a mano.
+-- È una voce di costo AGGIUNTIVA e separata dalla manodopera: non entra mai nel
+-- calcolo della tariffa oraria dei dipendenti (che resta lordo mensile / ore del
+-- mese) e non altera l'invariante della manodopera. Si somma solo alla fine,
+-- per ottenere il costo totale della commessa.
+--
+-- Il collegamento alla commessa è per ID (come le registrazioni), mai per
+-- codice testuale: rinominare una commessa non tocca i suoi materiali.
+-- "costo" è una colonna generata dal database: quantità × prezzo non può
+-- andare fuori sincrono nemmeno scrivendo sulla tabella da fuori dell'app.
+CREATE TABLE IF NOT EXISTS materiali (
+  id              TEXT PRIMARY KEY,
+  azienda_id      TEXT NOT NULL REFERENCES aziende(id),
+  commessa_id     TEXT NOT NULL REFERENCES commesse(id) ON DELETE CASCADE,
+  data            DATE NOT NULL,
+  fornitore       TEXT NOT NULL DEFAULT '',
+  descrizione     TEXT NOT NULL DEFAULT '',
+  quantita        NUMERIC NOT NULL,
+  prezzo_unitario NUMERIC NOT NULL,
+  costo           NUMERIC GENERATED ALWAYS AS (quantita * prezzo_unitario) STORED
+);
+CREATE INDEX IF NOT EXISTS idx_materiali_azienda ON materiali(azienda_id);
+CREATE INDEX IF NOT EXISTS idx_materiali_commessa ON materiali(commessa_id);
+
 INSERT INTO aziende (id, nome) VALUES ('azienda-prova', 'Azienda di prova')
 ON CONFLICT (id) DO NOTHING;
