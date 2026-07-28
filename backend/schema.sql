@@ -118,5 +118,35 @@ CREATE TABLE IF NOT EXISTS allegati (
 CREATE INDEX IF NOT EXISTS idx_allegati_azienda ON allegati(azienda_id);
 CREATE INDEX IF NOT EXISTS idx_allegati_commessa ON allegati(commessa_id);
 
+-- Tappa DDT (2b): fatture elettroniche XML (FatturaPA) da cui leggere le righe
+-- dei materiali. La fattura NON appartiene a una commessa (può riguardarne
+-- diverse), quindi ha una tabella sua e non sta fra gli allegati.
+-- Il file XML originale si conserva come i DDT: su R2 se configurato, con la
+-- stessa colonna "posizione" a dire dove sta.
+-- "importata_il" serve a non importare due volte gli stessi costi per errore.
+CREATE TABLE IF NOT EXISTS fatture (
+  id              TEXT PRIMARY KEY,
+  azienda_id      TEXT NOT NULL REFERENCES aziende(id),
+  nome_file       TEXT NOT NULL,
+  tipo            TEXT NOT NULL,
+  dimensione      INTEGER NOT NULL,
+  posizione       TEXT NOT NULL DEFAULT 'database',
+  contenuto       BYTEA,
+  chiave_esterna  TEXT,
+  fornitore       TEXT NOT NULL DEFAULT '',
+  partita_iva     TEXT NOT NULL DEFAULT '',
+  numero          TEXT NOT NULL DEFAULT '',
+  data            DATE,
+  caricata_il     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  importata_il    TIMESTAMPTZ,
+  righe_importate INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_fatture_azienda ON fatture(azienda_id);
+
+-- Da quale fattura arriva una voce di materiale (vuoto se inserita a mano).
+-- ON DELETE SET NULL: cancellando la fattura il costo resta, perde solo il
+-- riferimento al documento di provenienza.
+ALTER TABLE materiali ADD COLUMN IF NOT EXISTS fattura_id TEXT REFERENCES fatture(id) ON DELETE SET NULL;
+
 INSERT INTO aziende (id, nome) VALUES ('azienda-prova', 'Azienda di prova')
 ON CONFLICT (id) DO NOTHING;

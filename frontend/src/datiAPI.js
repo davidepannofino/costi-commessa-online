@@ -243,6 +243,47 @@ export const datiAPI = {
     return chiamaMateriali("DELETE", `/api/allegati/${encodeURIComponent(id)}`, null, "Impossibile eliminare il documento.", (d) => d);
   },
 
+  /* --- FATTURE ELETTRONICHE (FatturaPA) ------------------------------------
+     Il caricamento LEGGE soltanto: restituisce le righe trovate senza toccare
+     i costi. I materiali entrano nei conti solo con importaFattura, dopo che
+     l'utente ha assegnato le commesse e confermato. */
+
+  /** Carica il file XML (o .p7m) e restituisce { fattura, lettura, suggerimenti }. */
+  async caricaFattura(file) {
+    let res;
+    try {
+      res = await fetch(`${API_BASE}/api/fatture`, {
+        method: "POST",
+        headers: {
+          "Content-Type": file.type || "application/xml",
+          "X-Nome-File": encodeURIComponent(file.name),
+          ...headerAuth(),
+        },
+        body: file,
+      });
+    } catch (e) {
+      throw new Error("Impossibile contattare il server: riprova.");
+    }
+    if (res.status === 401) { gestoreSessioneScaduta?.(); throw new Error("Sessione scaduta: accedi di nuovo."); }
+    if (res.status === 402) { gestoreAbbonamentoRichiesto?.(); throw new Error("Abbonamento richiesto."); }
+    if (!res.ok) {
+      const dati = await res.json().catch(() => null);
+      throw new Error(dati?.errore || "Impossibile leggere la fattura.");
+    }
+    return await res.json();
+  },
+
+  /** Conferma l'importazione: le righe assegnate diventano voci di materiale. */
+  async importaFattura(fatturaId, righe) {
+    return chiamaMateriali("POST", `/api/fatture/${encodeURIComponent(fatturaId)}/importa`, { righe },
+      "Impossibile importare le righe della fattura.", (d) => d);
+  },
+
+  /** Elenco delle fatture già caricate. */
+  async elencoFatture() {
+    return chiamaMateriali("GET", "/api/fatture", null, "Impossibile leggere le fatture.", (d) => d.fatture);
+  },
+
   /** Stato dell'abbonamento dell'azienda loggata (giorni di prova, se attivo, ecc.). */
   async statoAbbonamento() {
     try {

@@ -8,6 +8,7 @@ import {
   FileSpreadsheet, FileText, AlertTriangle, CheckCircle2, X, ChevronRight, ChevronLeft,
   Search, RotateCcw, Save, Eraser, Info, FileDown, LogOut, Mail, Lock, Building2, ArrowRight, Loader2,
   Clock, Sparkles, Eye, EyeOff, CreditCard, Gift, PartyPopper, ShieldCheck, FileImage,
+  ReceiptText, Link2, CheckCircle,
 } from "lucide-react";
 import { datiAPI, suSessioneScaduta, suAbbonamentoRichiesto, API_BASE } from "./datiAPI.js";
 import { leggiToken, salvaToken, cancellaToken } from "./auth.js";
@@ -1721,6 +1722,34 @@ export default function App() {
     },
   });
 
+  /* --- fatture elettroniche ---
+     Il caricamento legge soltanto: nessun numero entra nei conti. È
+     l'importazione, dopo la conferma dell'utente, a creare le voci di
+     materiale — che da lì in poi sono materiali come tutti gli altri. */
+  const caricaFattura = async (file) => {
+    try {
+      const dati = await datiAPI.caricaFattura(file);
+      const n = dati.lettura.righe.length;
+      notifica(`Fattura letta: ${n} ${n === 1 ? "riga trovata" : "righe trovate"}. Assegna le commesse e conferma.`);
+      return { ok: true, dati };
+    } catch (e) {
+      notifica(e.message, "errore");
+      return { ok: false, errore: e.message };
+    }
+  };
+  const importaFattura = async (fatturaId, righe) => {
+    try {
+      const ris = await datiAPI.importaFattura(fatturaId, righe);
+      setMateriali((m) => [...ris.materiali, ...m]);
+      const totale = ris.materiali.reduce((s, x) => s + x.costo, 0);
+      notifica(`Importate ${ris.importate} righe dalla fattura, per ${euro(totale)} di materiali.`);
+      return { ok: true, materiali: ris.materiali };
+    } catch (e) {
+      notifica(e.message, "errore");
+      return { ok: false, errore: e.message };
+    }
+  };
+
   const svuotaTutto = () => setConferma({
     titolo: "Svuotare tutti i dati?",
     testo: "Dipendenti, commesse, registrazioni, materiali e documenti allegati verranno cancellati. Prima di procedere puoi scaricare un backup dalla sezione Dati.",
@@ -1822,6 +1851,7 @@ export default function App() {
     { id: "dashboard", nome: "Dashboard", icona: LayoutDashboard },
     { id: "commesse", nome: "Commesse", icona: FolderKanban },
     { id: "dipendenti", nome: "Dipendenti", icona: Users },
+    { id: "fatture", nome: "Fatture", icona: ReceiptText },
     { id: "dati", nome: "Dati", icona: Database },
     { id: "abbonamento", nome: "Abbonamento", icona: CreditCard },
     ...(isAdmin ? [{ id: "admin", nome: "Amministrazione", icona: ShieldCheck }] : []),
@@ -1995,6 +2025,10 @@ export default function App() {
               svuota={svuotaTutto} esempio={ricaricaEsempio} azienda={azienda} setAzienda={setAzienda} notifica={notifica}
               esportaTutto={() => esportaCompletoXLSX({ dipendenti, commesse, registrazioni }, dal, al)}
             />
+          )}
+          {vista === "fatture" && (
+            <VistaFatture commesse={commesse} onCarica={caricaFattura} onImporta={importaFattura}
+              notifica={notifica} vaiCommesse={() => setVista("commesse")} />
           )}
           {vista === "abbonamento" && <VistaAbbonamento info={abbonamentoInfo} />}
           {vista === "admin" && isAdmin && <VistaAdmin />}
@@ -2836,6 +2870,299 @@ function SezioneDocumenti({ commessa, allegati, spazio, onCarica, onApri, onElim
           <div className="mt-2"><BarraQuota quota={quotaPiena} colore={quotaPiena > 0.9 ? "#A63A32" : "#454C57"} /></div>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------------
+   IMPORTAZIONE DELLE FATTURE ELETTRONICHE (FatturaPA)
+
+   Il percorso è in tre momenti, e nessun numero entra nei conti prima
+   dell'ultimo:
+     1. si carica l'XML e il software legge le righe;
+     2. si assegnano le commesse (a gruppi di DDT o riga per riga) e si
+        correggono i valori che servono;
+     3. si conferma, e solo allora le righe diventano costi materiale.
+--------------------------------------------------------------------------- */
+
+/** Voce del menù commessa quando si decide di NON importare una riga. */
+const NON_IMPORTARE = "";
+
+function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) {
+  const refFile = useRef();
+  const [inLettura, setInLettura] = useState(false);
+  const [inImportazione, setInImportazione] = useState(false);
+  const [lettura, setLettura] = useState(null);  // { fattura, gruppi, avvisi, suggerimenti }
+  const [righe, setRighe] = useState([]);        // righe modificabili, con la commessa assegnata
+
+  const comById = useMemo(() => new Map(commesse.map((c) => [c.id, c])), [commesse]);
+
+  const scegliFile = async (file) => {
+    if (!file) return;
+    setInLettura(true);
+    const ris = await onCarica(file);
+    setInLettura(false);
+    if (!ris.ok) return;
+
+    const { fattura, lettura: dati, suggerimenti } = ris.dati;
+    // Ogni riga diventa modificabile e parte senza commessa: l'assegnazione è
+    // una scelta dell'utente, mai un'ipotesi del software.
+    const perDDT = new Map(suggerimenti.map((s) => [s.ddtNumero, s]));
+    setRighe(dati.righe.map((r) => ({
+      ...r,
+      quantita: r.quantita ?? "",
+      prezzoUnitario: r.prezzoUnitario ?? "",
+      commessaId: NON_IMPORTARE,
+      suggerimento: perDDT.get(r.ddtNumero) || null,
+    })));
+    setLettura({ fattura, gruppi: dati.gruppi, avvisi: dati.avvisi, documenti: dati.documenti, fornitore: dati.fornitore, suggerimenti });
+  };
+
+  const modificaRiga = (id, patch) => setRighe((rr) => rr.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  const assegnaGruppo = (chiaveGruppo, commessaId) =>
+    setRighe((rr) => rr.map((r) => (chiaveGruppo === (r.ddtNumero ? `ddt:${r.ddtNumero}` : "senza-ddt") ? { ...r, commessaId } : r)));
+  const cambiaDataGruppo = (chiaveGruppo, data) =>
+    setRighe((rr) => rr.map((r) => (chiaveGruppo === (r.ddtNumero ? `ddt:${r.ddtNumero}` : "senza-ddt") ? { ...r, data } : r)));
+
+  const numero = (v) => (typeof v === "number" ? v : parseNumIt(String(v ?? "")));
+  const totaleRiga = (r) => {
+    const q = numero(r.quantita), p = numero(r.prezzoUnitario);
+    return isNaN(q) || isNaN(p) ? null : q * p;
+  };
+
+  const daImportare = righe.filter((r) => r.commessaId !== NON_IMPORTARE);
+  const totaleDaImportare = daImportare.reduce((s, r) => s + (totaleRiga(r) ?? 0), 0);
+  const perCommessa = useMemo(() => {
+    const m = new Map();
+    for (const r of daImportare) {
+      if (!m.has(r.commessaId)) m.set(r.commessaId, { righe: 0, totale: 0 });
+      const v = m.get(r.commessaId);
+      v.righe += 1; v.totale += totaleRiga(r) ?? 0;
+    }
+    return [...m.entries()].map(([id, v]) => ({ commessa: comById.get(id), ...v })).sort((a, b) => b.totale - a.totale);
+  }, [daImportare, comById]);
+
+  const confermaImporta = async () => {
+    if (inImportazione) return;
+    if (daImportare.length === 0) { notifica("Nessuna riga assegnata a una commessa: non c'è niente da importare.", "avviso"); return; }
+
+    const problemi = daImportare.filter((r) => {
+      const q = numero(r.quantita), p = numero(r.prezzoUnitario);
+      return !String(r.descrizione).trim() || isNaN(q) || q <= 0 || isNaN(p) || p < 0 || !dataValida(r.data);
+    });
+    if (problemi.length > 0) {
+      notifica(`${problemi.length} righe da importare hanno valori non validi: controlla quantità, prezzo, descrizione e data.`, "errore");
+      return;
+    }
+
+    setInImportazione(true);
+    const ris = await onImporta(lettura.fattura.id, daImportare.map((r) => ({
+      commessaId: r.commessaId,
+      data: r.data,
+      fornitore: lettura.fornitore.denominazione,
+      descrizione: String(r.descrizione).trim(),
+      quantita: numero(r.quantita),
+      prezzoUnitario: numero(r.prezzoUnitario),
+    })));
+    setInImportazione(false);
+    if (ris.ok) { setLettura(null); setRighe([]); }
+  };
+
+  /* --- schermata iniziale: nessuna fattura caricata --- */
+  if (!lettura) {
+    return (
+      <div className="space-y-8">
+        <div>
+          <Micro>Documenti</Micro>
+          <h1 className="f-display text-[26px] mt-1" style={{ letterSpacing: "-0.01em" }}>Fatture</h1>
+        </div>
+        <input ref={refFile} type="file" accept=".xml,.p7m,application/xml,text/xml" className="hidden"
+          onChange={(e) => { const f = e.target.files[0]; e.target.value = ""; scegliFile(f); }} />
+        <StatoVuoto icona={ReceiptText} titolo={inLettura ? "Lettura della fattura in corso…" : "Importa una fattura elettronica"}
+          testo="Carica il file XML della fattura (anche firmato .p7m): il software ne legge le righe con i prezzi esatti e te le mostra raggruppate per DDT. Niente entra nei costi finché non confermi tu, riga per riga."
+          azione={inLettura
+            ? <Bottone disabled><Loader2 size={14} strokeWidth={1.75} className="animate-spin" /> Lettura…</Bottone>
+            : <Bottone onClick={() => refFile.current.click()}><Upload size={14} strokeWidth={1.75} /> Carica fattura XML</Bottone>} />
+      </div>
+    );
+  }
+
+  /* --- fattura letta: assegnazione e conferma --- */
+  const doc = lettura.documenti[0] || {};
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <Micro>Importazione fattura</Micro>
+          <h1 className="f-display text-[26px] mt-1" style={{ letterSpacing: "-0.01em" }}>{lettura.fornitore.denominazione || "Fornitore non letto"}</h1>
+          <p className="f-mono text-[13px] mt-1.5" style={{ color: "var(--muted)" }}>
+            {lettura.fornitore.partitaIVA && `P.IVA ${lettura.fornitore.partitaIVA} · `}
+            Fattura {doc.numero || "—"} del {doc.data ? fmtData(doc.data) : "—"}
+            {doc.totale != null && ` · totale documento ${euro(doc.totale)}`}
+          </p>
+        </div>
+        <Bottone variante="fantasma" onClick={() => { setLettura(null); setRighe([]); }}>
+          <X size={14} strokeWidth={1.75} /> Annulla
+        </Bottone>
+      </div>
+
+      {lettura.avvisi.length > 0 && (
+        <div className="rounded-xl px-4 py-3 space-y-1" style={{ background: "var(--velo-accento)", border: "1px solid rgba(154,120,58,.18)" }} role="alert">
+          {lettura.avvisi.map((a, i) => (
+            <p key={i} className="text-sm flex items-start gap-2" style={{ color: "#7C6027" }}>
+              <AlertTriangle size={14} strokeWidth={1.75} className="mt-0.5 shrink-0" /> {a}
+            </p>
+          ))}
+        </div>
+      )}
+
+      {commesse.length === 0 && (
+        <div className="rounded-xl px-4 py-3 text-sm flex items-start gap-2" style={{ background: "rgba(166,58,50,.07)", border: "1px solid rgba(166,58,50,.2)", color: "#A63A32" }}>
+          <Info size={14} strokeWidth={1.75} className="mt-0.5 shrink-0" />
+          Non ci sono commesse a cui assegnare le righe: creane una nella sezione Dati, poi torna qui.
+        </div>
+      )}
+
+      {lettura.gruppi.map((g) => {
+        const righeGruppo = righe.filter((r) => (r.ddtNumero ? `ddt:${r.ddtNumero}` : "senza-ddt") === g.chiave);
+        if (righeGruppo.length === 0) return null;
+        const totaleGruppo = righeGruppo.reduce((s, r) => s + (totaleRiga(r) ?? 0), 0);
+        const comuni = new Set(righeGruppo.map((r) => r.commessaId));
+        const commessaGruppo = comuni.size === 1 ? [...comuni][0] : "";
+        const suggerimento = righeGruppo[0]?.suggerimento;
+
+        return (
+          <section key={g.chiave} className="rounded-2xl overflow-hidden" style={{ background: "var(--card)", boxShadow: "var(--ombra-sm)" }}>
+            <div className="px-6 py-4 flex flex-wrap items-end justify-between gap-4" style={{ borderBottom: "1px solid var(--hairline)", background: "var(--tela)" }}>
+              <div>
+                <Micro>{g.ddtNumero ? "Documento di trasporto" : "Righe senza DDT"}</Micro>
+                <p className="f-display text-lg mt-1">
+                  {g.ddtNumero ? `DDT ${g.ddtNumero}` : "Nessun riferimento a un DDT"}
+                  {g.ddtData && <span className="text-sm font-normal" style={{ color: "var(--muted)" }}> del {fmtData(g.ddtData)}</span>}
+                </p>
+                <p className="f-mono text-xs mt-1" style={{ color: "var(--muted)" }}>
+                  {righeGruppo.length} {righeGruppo.length === 1 ? "riga" : "righe"} · {euro(totaleGruppo)}
+                </p>
+                {suggerimento && (
+                  <p className="text-xs mt-2 flex items-center gap-1.5" style={{ color: "var(--accent)" }}>
+                    <Link2 size={12} strokeWidth={1.75} />
+                    DDT {suggerimento.ddtNumero} già archiviato sulla commessa {suggerimento.commessaCodice} ({suggerimento.nomeFile})
+                  </p>
+                )}
+              </div>
+              <div className="flex flex-wrap items-end gap-3">
+                <Campo etichetta="Data dei materiali">
+                  <input type="date" value={righeGruppo[0]?.data || ""} onChange={(e) => cambiaDataGruppo(g.chiave, e.target.value)}
+                    className={inputCls + " f-mono"} style={{ width: 150, background: "var(--card)" }} />
+                </Campo>
+                <Campo etichetta="Assegna tutto il gruppo a">
+                  <select value={commessaGruppo} onChange={(e) => assegnaGruppo(g.chiave, e.target.value)}
+                    className={inputCls} style={{ width: 230, background: "var(--card)" }}>
+                    <option value={NON_IMPORTARE}>— non importare —</option>
+                    {commesse.map((c) => <option key={c.id} value={c.id}>{c.codice} — {c.descrizione}</option>)}
+                  </select>
+                </Campo>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left">
+                    {["Descrizione", "Quantità", "Prezzo unitario", "Totale", "Commessa"].map((h) => (
+                      <th key={h} className={`px-4 py-2.5 text-[11px] font-semibold uppercase ${h === "Descrizione" || h === "Commessa" ? "" : "text-right"}`}
+                        style={{ letterSpacing: ".1em", color: "var(--muted)" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {righeGruppo.map((r) => {
+                    const tot = totaleRiga(r);
+                    const daControllare = r.daControllare.length > 0;
+                    return (
+                      <tr key={r.id} style={{ borderTop: "1px solid var(--hairline)", background: daControllare ? "var(--velo-accento)" : "transparent" }}>
+                        <td className="px-4 py-2.5" style={{ minWidth: 280 }}>
+                          <input value={r.descrizione} onChange={(e) => modificaRiga(r.id, { descrizione: e.target.value })}
+                            className={inputCls + " py-1.5"} style={{ background: "var(--tela)" }} aria-label="Descrizione della riga" />
+                          {daControllare && (
+                            <p className="text-[11px] mt-1 flex items-center gap-1" style={{ color: "#7C6027" }}>
+                              <AlertTriangle size={11} strokeWidth={1.75} /> da controllare: {r.daControllare.join(", ")}
+                            </p>
+                          )}
+                          {r.unitaMisura && <span className="text-[11px] f-mono" style={{ color: "var(--muted)" }}>unità: {r.unitaMisura}</span>}
+                        </td>
+                        <td className="px-4 py-2.5 text-right">
+                          <input value={r.quantita} onChange={(e) => modificaRiga(r.id, { quantita: e.target.value })}
+                            className={inputCls + " f-mono text-right py-1.5"} style={{ width: 90, background: "var(--tela)" }} aria-label="Quantità" />
+                        </td>
+                        <td className="px-4 py-2.5 text-right">
+                          <input value={r.prezzoUnitario} onChange={(e) => modificaRiga(r.id, { prezzoUnitario: e.target.value })}
+                            className={inputCls + " f-mono text-right py-1.5"} style={{ width: 110, background: "var(--tela)" }} aria-label="Prezzo unitario" />
+                        </td>
+                        <td className="px-4 py-2.5 f-mono text-right whitespace-nowrap" style={{ color: tot == null ? "#A63A32" : "var(--euro)" }}>
+                          {tot == null ? "da controllare" : euro(tot)}
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <select value={r.commessaId} onChange={(e) => modificaRiga(r.id, { commessaId: e.target.value })}
+                            className={inputCls + " py-1.5"} style={{ width: 200, background: "var(--tela)" }} aria-label={"Commessa per " + r.descrizione}>
+                            <option value={NON_IMPORTARE}>— non importare —</option>
+                            {commesse.map((c) => <option key={c.id} value={c.id}>{c.codice}</option>)}
+                          </select>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        );
+      })}
+
+      {/* riepilogo e conferma */}
+      <section className="rounded-2xl p-6" style={{ background: "var(--card)", boxShadow: "var(--ombra-sm)" }}>
+        <h2 className="f-display text-lg mb-4">Riepilogo prima di importare</h2>
+        <div className="grid sm:grid-cols-3 gap-4 mb-5">
+          {[
+            { e: "Righe da importare", v: `${daImportare.length} di ${righe.length}` },
+            { e: "Totale materiali", v: euro(totaleDaImportare), c: "var(--euro)" },
+            { e: "Righe escluse", v: String(righe.length - daImportare.length), c: righe.length - daImportare.length > 0 ? "#7C6027" : "var(--muted)" },
+          ].map((k) => (
+            <div key={k.e} className="rounded-xl px-4 py-3" style={{ border: "1px solid var(--hairline)" }}>
+              <Micro>{k.e}</Micro>
+              <p className="f-mono text-[17px] mt-1.5" style={{ color: k.c || "var(--txt)" }}>{k.v}</p>
+            </div>
+          ))}
+        </div>
+
+        {perCommessa.length > 0 ? (
+          <div className="space-y-2 mb-5">
+            {perCommessa.map((p) => (
+              <div key={p.commessa?.id} className="flex items-baseline justify-between gap-3 text-sm">
+                <p><span className="f-mono font-medium">{p.commessa?.codice ?? "?"}</span> <span style={{ color: "var(--muted)" }}>{p.commessa?.descrizione}</span></p>
+                <p className="f-mono shrink-0" style={{ color: "var(--euro)" }}>{p.righe} {p.righe === 1 ? "riga" : "righe"} · {euro(p.totale)}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm mb-5" style={{ color: "var(--muted)" }}>Nessuna riga assegnata: usa i menù "Assegna tutto il gruppo a" oppure quelli sulle singole righe.</p>
+        )}
+
+        {righe.length - daImportare.length > 0 && (
+          <p className="text-xs mb-5 flex items-start gap-1.5" style={{ color: "var(--muted)" }}>
+            <Info size={12} strokeWidth={1.75} className="mt-0.5 shrink-0" />
+            Le righe lasciate su "non importare" restano fuori dai costi. Il file della fattura resta comunque archiviato e puoi importarle più avanti.
+          </p>
+        )}
+
+        <div className="flex justify-end gap-2">
+          <Bottone variante="fantasma" onClick={vaiCommesse}>Vai alle commesse</Bottone>
+          <Bottone variante="accento" onClick={confermaImporta} disabled={inImportazione || daImportare.length === 0}>
+            {inImportazione ? <Loader2 size={14} strokeWidth={1.75} className="animate-spin" /> : <CheckCircle size={14} strokeWidth={1.75} />}
+            {inImportazione ? "Importazione…" : `Conferma e importa ${daImportare.length ? `(${daImportare.length})` : ""}`}
+          </Bottone>
+        </div>
+      </section>
     </div>
   );
 }

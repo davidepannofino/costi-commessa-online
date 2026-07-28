@@ -12,6 +12,7 @@ import {
   salvaFile, leggiFile, eliminaFile, eliminaFileInBlocco,
   archivioEsterno, descrizioneArchivio, QUOTA_AZIENDA_BYTE, TETTO_GLOBALE_BYTE,
 } from "./archivio.js";
+import { leggiFatturaXML, raggruppaPerDDT, riconosciFormatoFattura, estraiXMLdaP7M } from "./fatturaPA.js";
 
 const app = express();
 app.use(cors());
@@ -800,6 +801,254 @@ app.delete("/api/allegati/:id", richiedeAuth, richiedeAbbonamentoAttivo, async (
   } catch (e) {
     console.error(e);
     res.status(500).json({ errore: "Impossibile eliminare il documento." });
+  }
+});
+
+/* ---------------------------------------------------------------------------
+   FATTURE ELETTRONICHE (FatturaPA) — lettura delle righe e importazione.
+   Il caricamento NON scrive nulla nei costi: legge, conserva il file e
+   restituisce le righe. I materiali entrano nei conti solo dopo che l'utente
+   ha assegnato le commesse e confermato (rotta /importa).
+--------------------------------------------------------------------------- */
+
+const MAX_FATTURA_BYTE = 10 * 1024 * 1024; // gli XML sono piccoli: 10 MB è già larghissimo
+
+const corpoFattura = express.raw({ type: () => true, limit: "11mb" });
+const leggiCorpoFattura = (req, res, next) =>
+  corpoFattura(req, res, (err) => {
+    if (!err) return next();
+    if (err.type === "entity.too.large") {
+      return res.status(413).json({ errore: `Il file è troppo grande: il limite è ${inMB(MAX_FATTURA_BYTE)} MB.` });
+    }
+    console.error("Errore leggendo la fattura caricata:", err);
+    res.status(400).json({ errore: "Impossibile leggere il file caricato." });
+  });
+
+const mappaFattura = (r) => ({
+  id: r.id,
+  nomeFile: r.nome_file,
+  fornitore: r.fornitore,
+  partitaIVA: r.partita_iva,
+  numero: r.numero,
+  data: r.data,
+  dimensione: Number(r.dimensione),
+  caricataIl: r.caricata_il,
+  importataIl: r.importata_il,
+  righeImportate: Number(r.righe_importate),
+});
+
+/**
+ * Cerca, fra i documenti già archiviati sulle commesse, quelli il cui nome
+ * contiene il numero di un DDT citato dalla fattura. È solo un SUGGERIMENTO
+ * per aiutare l'assegnazione: non assegna niente da solo, perché un numero
+ * che compare in un nome file non è una prova.
+ */
+async function suggerimentiDaDDT(aziendaId, numeriDDT) {
+  const numeri = [...new Set(numeriDDT.filter(Boolean))];
+  if (numeri.length === 0) return [];
+  const ris = await pool.query(
+    `SELECT a.nome_file, a.commessa_id, c.codice
+       FROM allegati a JOIN commesse c ON c.id = a.commessa_id
+      WHERE a.azienda_id = $1`,
+    [aziendaId]
+  );
+  const suggerimenti = [];
+  for (const numero of numeri) {
+    // Il numero deve comparire come parola a sé: "4711" non deve agganciare "147110".
+    const espressione = new RegExp(`(^|[^0-9])${numero.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^0-9]|$)`);
+    const trovato = ris.rows.find((r) => espressione.test(r.nome_file));
+    if (trovato) {
+      suggerimenti.push({
+        ddtNumero: numero,
+        commessaId: trovato.commessa_id,
+        commessaCodice: trovato.codice,
+        nomeFile: trovato.nome_file,
+      });
+    }
+  }
+  return suggerimenti;
+}
+
+/** Carica una fattura XML/P7M, la conserva e restituisce le righe lette. */
+app.post("/api/fatture", richiedeAuth, richiedeAbbonamentoAttivo, leggiCorpoFattura, async (req, res) => {
+  const contenuto = Buffer.isBuffer(req.body) ? req.body : null;
+  if (!contenuto || contenuto.length === 0) return res.status(400).json({ errore: "Nessun file ricevuto." });
+  if (contenuto.length > MAX_FATTURA_BYTE) {
+    return res.status(413).json({ errore: `Il file è troppo grande: il limite è ${inMB(MAX_FATTURA_BYTE)} MB.` });
+  }
+
+  const formato = riconosciFormatoFattura(contenuto);
+  if (!formato) {
+    return res.status(415).json({
+      errore: "Questo file non è una fattura elettronica: servono un XML FatturaPA (.xml) o la sua versione firmata (.xml.p7m).",
+    });
+  }
+
+  let xml = contenuto;
+  if (formato === "p7m") {
+    xml = estraiXMLdaP7M(contenuto);
+    if (!xml) {
+      return res.status(415).json({ errore: "Il file è firmato (.p7m) ma non contiene una fattura XML leggibile." });
+    }
+  }
+
+  let lettura;
+  try {
+    try {
+      lettura = leggiFatturaXML(xml);
+    } catch (primoTentativo) {
+      // Il file sembrava un XML ma non si legge: può essere un involucro con
+      // l'XML dentro (capita con certe firme). Si prova a estrarlo prima di
+      // arrendersi; se non si trova nulla, vale l'errore originale.
+      const dentro = formato === "xml" ? estraiXMLdaP7M(contenuto) : null;
+      if (!dentro) throw primoTentativo;
+      xml = dentro;
+      lettura = leggiFatturaXML(xml);
+    }
+    lettura.gruppi = raggruppaPerDDT(lettura.righe);
+  } catch (e) {
+    // Errore di lettura: si risponde con il motivo, senza conservare nulla.
+    return res.status(422).json({ errore: e.message });
+  }
+
+  const id = randomUUID();
+  const documento = lettura.documenti[0] || {};
+  try {
+    const salvato = await salvaFile({ aziendaId: req.aziendaId, id, contenuto, tipo: "application/xml" });
+    const ris = await pool.query(
+      `INSERT INTO fatture (id, azienda_id, nome_file, tipo, dimensione, posizione, contenuto, chiave_esterna,
+                            fornitore, partita_iva, numero, data)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NULLIF($12, '')::date)
+       RETURNING id, nome_file, fornitore, partita_iva, numero, to_char(data, 'YYYY-MM-DD') AS data,
+                 dimensione, caricata_il, importata_il, righe_importate`,
+      [id, req.aziendaId, nomeFilePulito(req.headers["x-nome-file"]), formato === "p7m" ? "application/pkcs7-mime" : "application/xml",
+       contenuto.length, salvato.posizione, salvato.contenuto, salvato.chiaveEsterna,
+       lettura.fornitore.denominazione, lettura.fornitore.partitaIVA, documento.numero || "", documento.data || ""]
+    );
+
+    // Una fattura con lo stesso fornitore e numero è già stata importata?
+    // Non si blocca: si avvisa, perché può capitare di doverla rifare.
+    const gemella = await pool.query(
+      `SELECT to_char(importata_il, 'DD/MM/YYYY') AS quando, righe_importate FROM fatture
+        WHERE azienda_id = $1 AND id <> $2 AND numero = $3 AND partita_iva = $4 AND importata_il IS NOT NULL
+        ORDER BY importata_il DESC LIMIT 1`,
+      [req.aziendaId, id, documento.numero || "", lettura.fornitore.partitaIVA]
+    );
+    const avvisi = [...lettura.avvisi];
+    if (gemella.rows[0]) {
+      avvisi.unshift(`Attenzione: la fattura ${documento.numero} di questo fornitore risulta già importata il ${gemella.rows[0].quando} (${gemella.rows[0].righe_importate} righe). Importandola di nuovo i costi verrebbero contati due volte.`);
+    }
+
+    res.status(201).json({
+      fattura: mappaFattura(ris.rows[0]),
+      lettura: { ...lettura, avvisi },
+      suggerimenti: await suggerimentiDaDDT(req.aziendaId, lettura.righe.map((r) => r.ddtNumero)),
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ errore: "Impossibile conservare la fattura." });
+  }
+});
+
+/**
+ * Conferma: le righe assegnate a una commessa diventano voci di materiale.
+ * È il primo momento in cui i numeri entrano nei conti. Tutto in una
+ * transazione: o entrano tutte le righe, o nessuna.
+ */
+app.post("/api/fatture/:id/importa", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) => {
+  const fatturaId = String(req.params.id);
+  const righe = req.body?.righe;
+  if (!Array.isArray(righe) || righe.length === 0) {
+    return res.status(400).json({ errore: "Nessuna riga da importare." });
+  }
+
+  const client = await pool.connect();
+  try {
+    const fat = await client.query("SELECT id, fornitore FROM fatture WHERE id = $1 AND azienda_id = $2", [fatturaId, req.aziendaId]);
+    if (fat.rows.length === 0) return res.status(404).json({ errore: "Fattura non trovata." });
+    const fornitore = fat.rows[0].fornitore;
+
+    await client.query("BEGIN");
+    const creati = [];
+    for (const riga of righe) {
+      const commessaId = String(riga?.commessaId ?? "");
+      if (!commessaId) {
+        throw Object.assign(new Error("Ogni riga da importare deve avere una commessa."), { codice: 400 });
+      }
+      const { voce, errore } = leggiVoceMateriale({
+        data: riga?.data,
+        fornitore: riga?.fornitore ?? fornitore,
+        descrizione: riga?.descrizione,
+        quantita: riga?.quantita,
+        prezzoUnitario: riga?.prezzoUnitario,
+      });
+      if (errore) {
+        throw Object.assign(new Error(`Riga "${String(riga?.descrizione ?? "").slice(0, 40)}": ${errore}`), { codice: 400 });
+      }
+
+      const ins = await client.query(
+        `INSERT INTO materiali (id, azienda_id, commessa_id, data, fornitore, descrizione, quantita, prezzo_unitario, fattura_id)
+         SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9
+          WHERE EXISTS (SELECT 1 FROM commesse WHERE id = $3 AND azienda_id = $2)
+         RETURNING id, commessa_id, to_char(data, 'YYYY-MM-DD') AS data, fornitore, descrizione, quantita, prezzo_unitario, costo`,
+        [randomUUID(), req.aziendaId, commessaId, voce.data, voce.fornitore, voce.descrizione, voce.quantita, voce.prezzoUnitario, fatturaId]
+      );
+      if (ins.rows.length === 0) {
+        throw Object.assign(new Error("Una delle commesse indicate non esiste o non è di questa azienda."), { codice: 404 });
+      }
+      creati.push(mappaMateriale(ins.rows[0]));
+    }
+
+    await client.query(
+      "UPDATE fatture SET importata_il = now(), righe_importate = righe_importate + $2 WHERE id = $1",
+      [fatturaId, creati.length]
+    );
+    await client.query("COMMIT");
+    res.status(201).json({ materiali: creati, importate: creati.length });
+  } catch (e) {
+    await client.query("ROLLBACK");
+    if (e.codice) return res.status(e.codice).json({ errore: e.message });
+    console.error(e);
+    res.status(500).json({ errore: "Impossibile importare le righe della fattura." });
+  } finally {
+    client.release();
+  }
+});
+
+/** Elenco delle fatture caricate dall'azienda del token. */
+app.get("/api/fatture", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) => {
+  try {
+    const ris = await pool.query(
+      `SELECT id, nome_file, fornitore, partita_iva, numero, to_char(data, 'YYYY-MM-DD') AS data,
+              dimensione, caricata_il, importata_il, righe_importate
+         FROM fatture WHERE azienda_id = $1 ORDER BY caricata_il DESC`,
+      [req.aziendaId]
+    );
+    res.json({ fatture: ris.rows.map(mappaFattura) });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ errore: "Impossibile leggere le fatture." });
+  }
+});
+
+/** Riscarica il file XML originale di una fattura. */
+app.get("/api/fatture/:id/file", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) => {
+  try {
+    const ris = await pool.query(
+      "SELECT nome_file, tipo, posizione, contenuto, chiave_esterna FROM fatture WHERE id = $1 AND azienda_id = $2",
+      [String(req.params.id), req.aziendaId]
+    );
+    const riga = ris.rows[0];
+    if (!riga) return res.status(404).json({ errore: "Fattura non trovata." });
+
+    const contenuto = await leggiFile(riga);
+    res.setHeader("Content-Type", riga.tipo);
+    res.setHeader("Content-Length", contenuto.length);
+    res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(riga.nome_file)}`);
+    res.send(contenuto);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ errore: "Impossibile scaricare la fattura." });
   }
 });
 
