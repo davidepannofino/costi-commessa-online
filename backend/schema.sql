@@ -118,6 +118,29 @@ CREATE TABLE IF NOT EXISTS allegati (
 CREATE INDEX IF NOT EXISTS idx_allegati_azienda ON allegati(azienda_id);
 CREATE INDEX IF NOT EXISTS idx_allegati_commessa ON allegati(commessa_id);
 
+-- Tappa DDT (2c): i dati del documento, per poterlo riconoscere da solo quando
+-- arriva la fattura che lo cita. Sono TUTTI E TRE FACOLTATIVI: un DDT si
+-- archivia come prima anche lasciandoli vuoti, e i documenti già in archivio
+-- restano validi con i campi a vuoto (nessuna migrazione, nessuna riga
+-- riscritta: il DEFAULT vale per chi non li compila).
+--
+-- Il numero vuoto ('') vuol dire "non lo so", e un DDT senza numero non
+-- partecipa mai all'abbinamento automatico: meglio nessuna proposta che una
+-- proposta costruita sul nulla.
+--
+-- Perché il fornitore anche qui, se la commessa c'è già: i numeri di DDT NON
+-- sono unici fra fornitori diversi. Senza il fornitore, "DDT 4711" da solo non
+-- distingue il ferramenta dal cementificio, e abbinare sul solo numero
+-- metterebbe i costi sulla commessa sbagliata in silenzio.
+ALTER TABLE allegati ADD COLUMN IF NOT EXISTS ddt_numero TEXT NOT NULL DEFAULT '';
+ALTER TABLE allegati ADD COLUMN IF NOT EXISTS ddt_data   DATE;
+ALTER TABLE allegati ADD COLUMN IF NOT EXISTS fornitore  TEXT NOT NULL DEFAULT '';
+
+-- L'abbinamento parte sempre dal numero, dentro una sola azienda. I DDT senza
+-- numero non servono a quella ricerca e stanno fuori dall'indice.
+CREATE INDEX IF NOT EXISTS idx_allegati_ddt ON allegati(azienda_id, ddt_numero)
+  WHERE ddt_numero <> '';
+
 -- Tappa DDT (2b): fatture elettroniche XML (FatturaPA) da cui leggere le righe
 -- dei materiali. La fattura NON appartiene a una commessa (può riguardarne
 -- diverse), quindi ha una tabella sua e non sta fra gli allegati.

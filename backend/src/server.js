@@ -13,6 +13,7 @@ import {
   archivioEsterno, descrizioneArchivio, QUOTA_AZIENDA_BYTE, TETTO_GLOBALE_BYTE,
 } from "./archivio.js";
 import { leggiFatturaXML, raggruppaPerDDT, riconosciFormatoFattura, estraiXMLdaP7M } from "./fatturaPA.js";
+import { abbinaDDT, normalizzaNumero } from "./abbinamentoDDT.js";
 import { leggiFatturaPDF, eUnPDF, estraiRighePDF } from "./fatturaPDF.js";
 import {
   leggiFatturaConDocumentAI, documentAIConfigurato, descrizioneDocumentAI, consumiDelMese,
@@ -629,8 +630,11 @@ const MAX_FILE_BYTE = 5 * 1024 * 1024;
 const inMB = (b) => Math.round((b / (1024 * 1024)) * 10) / 10;
 
 // Colonne dei metadati: mai "contenuto", che pesa e serve solo allo scaricamento.
-const SELECT_ALLEGATI =
-  "SELECT id, commessa_id, nome_file, tipo, dimensione, posizione, to_char(caricato_il, 'YYYY-MM-DD\"T\"HH24:MI:SSOF') AS caricato_il FROM allegati";
+const COLONNE_ALLEGATO =
+  `id, commessa_id, nome_file, tipo, dimensione, posizione, ddt_numero,
+   to_char(ddt_data, 'YYYY-MM-DD') AS ddt_data, fornitore,
+   to_char(caricato_il, 'YYYY-MM-DD"T"HH24:MI:SSOF') AS caricato_il`;
+const SELECT_ALLEGATI = `SELECT ${COLONNE_ALLEGATO} FROM allegati`;
 
 const mappaAllegato = (r) => ({
   id: r.id,
@@ -639,8 +643,34 @@ const mappaAllegato = (r) => ({
   tipo: r.tipo,
   dimensione: Number(r.dimensione),
   posizione: r.posizione,
+  // I tre dati del DDT sono FACOLTATIVI: vuoti per i documenti archiviati prima
+  // che esistessero, e vuoti per chi non ha voglia di compilarli. Il frontend
+  // li mostra solo se ci sono.
+  ddtNumero: r.ddt_numero || "",
+  ddtData: r.ddt_data || "",
+  fornitore: r.fornitore || "",
   caricatoIl: r.caricato_il,
 });
+
+/**
+ * Legge i tre dati facoltativi del DDT (numero, data, fornitore) da dove
+ * arrivano — la query string al caricamento, il corpo JSON alla modifica.
+ *
+ * FACOLTATIVI vuol dire facoltativi: se non ci sono, si restituiscono vuoti e
+ * il documento si archivia come si è sempre fatto. L'unica cosa che viene
+ * rifiutata è una data scritta male, perché una data sbagliata in silenzio
+ * farebbe poi sballare l'abbinamento senza che nessuno capisca perché.
+ */
+function leggiDatiDDT(fonte) {
+  const pulisci = (v, max) => String(v ?? "").replace(new RegExp("[\\u0000-\\u001F]", "g"), " ").replace(/\s+/g, " ").trim().slice(0, max);
+  const ddtNumero = pulisci(fonte?.ddtNumero, 60);
+  const fornitore = pulisci(fonte?.fornitore, 200);
+  const ddtData = pulisci(fonte?.ddtData, 10);
+  if (ddtData && !/^\d{4}-\d{2}-\d{2}$/.test(ddtData)) {
+    return { errore: "La data del DDT non è una data valida (serve nella forma AAAA-MM-GG), oppure lasciala vuota." };
+  }
+  return { dati: { ddtNumero, ddtData, fornitore } };
+}
 
 /**
  * Riconosce il tipo dai PRIMI BYTE del file, non dall'intestazione mandata dal
@@ -694,10 +724,20 @@ async function spazioAllegati(aziendaId) {
   };
 }
 
-/** Carica un documento e lo allega a una commessa dell'azienda del token. */
+/**
+ * Carica un documento e lo allega a una commessa dell'azienda del token.
+ *
+ * Numero, data e fornitore del DDT arrivano dalla query string (il corpo della
+ * richiesta è il file, byte per byte) e sono TUTTI FACOLTATIVI: senza di loro
+ * il documento si archivia esattamente come prima, si perde solo la possibilità
+ * di riconoscerlo da solo quando arriverà la fattura.
+ */
 app.post("/api/commesse/:id/allegati", richiedeAuth, richiedeAbbonamentoAttivo, leggiCorpoFile, async (req, res) => {
   const commessaId = String(req.params.id);
   const contenuto = Buffer.isBuffer(req.body) ? req.body : null;
+
+  const { dati: ddt, errore: erroreDDT } = leggiDatiDDT(req.query);
+  if (erroreDDT) return res.status(400).json({ errore: erroreDDT });
 
   if (!contenuto || contenuto.length === 0) return res.status(400).json({ errore: "Nessun file ricevuto." });
   if (contenuto.length > MAX_FILE_BYTE) {
@@ -727,12 +767,13 @@ app.post("/api/commesse/:id/allegati", richiedeAuth, richiedeAbbonamentoAttivo, 
 
     try {
       const ris = await pool.query(
-        `INSERT INTO allegati (id, azienda_id, commessa_id, nome_file, tipo, dimensione, posizione, contenuto, chiave_esterna)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-         RETURNING id, commessa_id, nome_file, tipo, dimensione, posizione,
-                   to_char(caricato_il, 'YYYY-MM-DD"T"HH24:MI:SSOF') AS caricato_il`,
+        `INSERT INTO allegati (id, azienda_id, commessa_id, nome_file, tipo, dimensione, posizione, contenuto, chiave_esterna,
+                               ddt_numero, ddt_data, fornitore)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NULLIF($11, '')::date, $12)
+         RETURNING ${COLONNE_ALLEGATO}`,
         [id, req.aziendaId, commessaId, nomeFilePulito(req.headers["x-nome-file"]), tipo, contenuto.length,
-         salvato.posizione, salvato.contenuto, salvato.chiaveEsterna]
+         salvato.posizione, salvato.contenuto, salvato.chiaveEsterna,
+         ddt.ddtNumero, ddt.ddtData, ddt.fornitore]
       );
       res.status(201).json({ allegato: mappaAllegato(ris.rows[0]), spazio: await spazioAllegati(req.aziendaId) });
     } catch (e) {
@@ -758,6 +799,62 @@ app.get("/api/allegati", richiedeAuth, richiedeAbbonamentoAttivo, async (req, re
   } catch (e) {
     console.error(e);
     res.status(500).json({ errore: "Impossibile leggere i documenti." });
+  }
+});
+
+/**
+ * Aggiorna SOLO i tre dati del DDT (numero, data, fornitore) di un documento
+ * già archiviato. Il file non si tocca: resta dov'è, con la stessa chiave.
+ *
+ * Perché serve. I documenti archiviati prima di questa funzione hanno i tre
+ * campi vuoti, e senza numero non partecipano all'abbinamento automatico.
+ * Poterli completare dopo, senza ricaricare il file, è ciò che rende utile
+ * l'archivio che c'è già invece di chiedere di ricominciare da capo.
+ */
+app.patch("/api/allegati/:id", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) => {
+  const { dati: ddt, errore } = leggiDatiDDT(req.body || {});
+  if (errore) return res.status(400).json({ errore });
+
+  try {
+    const ris = await pool.query(
+      `UPDATE allegati SET ddt_numero = $3, ddt_data = NULLIF($4, '')::date, fornitore = $5
+        WHERE id = $1 AND azienda_id = $2
+        RETURNING ${COLONNE_ALLEGATO}`,
+      [String(req.params.id), req.aziendaId, ddt.ddtNumero, ddt.ddtData, ddt.fornitore]
+    );
+    if (ris.rows.length === 0) return res.status(404).json({ errore: "Documento non trovato." });
+    res.json({ allegato: mappaAllegato(ris.rows[0]) });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ errore: "Impossibile aggiornare i dati del documento." });
+  }
+});
+
+/**
+ * I fornitori già visti da questa azienda: nelle fatture importate, nei
+ * materiali inseriti e nei DDT archiviati.
+ *
+ * Serve solo a riempire la tendina del campo "Fornitore" quando si archivia un
+ * DDT: scegliere da un elenco è più veloce che riscrivere "EPIÙ MATERIALI
+ * EDILI S.R.L." ogni volta, e soprattutto lo scrive sempre allo stesso modo,
+ * che è quello che poi fa combaciare l'abbinamento. Il campo resta comunque
+ * libero: la tendina suggerisce, non obbliga.
+ */
+app.get("/api/fornitori", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) => {
+  try {
+    const ris = await pool.query(
+      `SELECT nome FROM (
+                SELECT DISTINCT fornitore AS nome FROM fatture   WHERE azienda_id = $1 AND fornitore <> ''
+         UNION  SELECT DISTINCT fornitore AS nome FROM allegati  WHERE azienda_id = $1 AND fornitore <> ''
+         UNION  SELECT DISTINCT fornitore AS nome FROM materiali WHERE azienda_id = $1 AND fornitore <> ''
+       ) AS tutti ORDER BY nome LIMIT 300`,
+      [req.aziendaId]
+    );
+    res.json({ fornitori: ris.rows.map((r) => r.nome) });
+  } catch (e) {
+    console.error(e);
+    // Una tendina vuota non è un errore da mostrare: il campo si scrive a mano.
+    res.json({ fornitori: [] });
   }
 });
 
@@ -844,35 +941,74 @@ const mappaFattura = (r) => ({
 });
 
 /**
- * Cerca, fra i documenti già archiviati sulle commesse, quelli il cui nome
- * contiene il numero di un DDT citato dalla fattura. È solo un SUGGERIMENTO
- * per aiutare l'assegnazione: non assegna niente da solo, perché un numero
- * che compare in un nome file non è una prova.
+ * ABBINAMENTO DEI GRUPPI-DDT DELLA FATTURA AI DDT ARCHIVIATI.
+ *
+ * Qui si legge solo: la funzione non scrive niente e non importa niente.
+ * Restituisce delle PROPOSTE, e l'unica strada per cui un costo entra nei conti
+ * resta la conferma dell'utente su /api/fatture/:id/importa.
+ *
+ * ISOLAMENTO PER AZIENDA. Il filtro "a.azienda_id = $1" nella query è l'unico
+ * punto in cui si scelgono i documenti da confrontare: alla logica di
+ * abbinamento arrivano soltanto i DDT di questa azienda, e non ha modo di
+ * vederne altri nemmeno volendo.
+ *
+ * Due strade, in ordine di forza:
+ *   1. i dati del DDT scritti in archivio (numero, data, fornitore) — è la
+ *      strada buona, l'unica che può arrivare a un abbinamento "forte";
+ *   2. il numero che compare nel NOME DEL FILE — la vecchia strada, tenuta per
+ *      i documenti archiviati prima che i tre campi esistessero. Vale sempre e
+ *      solo come indizio "debole": un numero dentro un nome file non è una prova.
  */
-async function suggerimentiDaDDT(aziendaId, numeriDDT) {
-  const numeri = [...new Set(numeriDDT.filter(Boolean))];
-  if (numeri.length === 0) return [];
+async function abbinamentiDaDDT(aziendaId, { riferimenti, fornitore }) {
+  const daCercare = (riferimenti || []).filter((r) => r?.ddtNumero);
+  if (daCercare.length === 0) return [];
+
   const ris = await pool.query(
-    `SELECT a.nome_file, a.commessa_id, c.codice
+    `SELECT a.id, a.nome_file, a.commessa_id, a.ddt_numero,
+            to_char(a.ddt_data, 'YYYY-MM-DD') AS ddt_data, a.fornitore,
+            c.codice, c.descrizione
        FROM allegati a JOIN commesse c ON c.id = a.commessa_id
       WHERE a.azienda_id = $1`,
     [aziendaId]
   );
-  const suggerimenti = [];
-  for (const numero of numeri) {
+
+  const archiviati = ris.rows.map((r) => ({
+    id: r.id,
+    commessaId: r.commessa_id,
+    commessaCodice: r.codice,
+    commessaDescrizione: r.descrizione,
+    nomeFile: r.nome_file,
+    ddtNumero: r.ddt_numero || "",
+    ddtData: r.ddt_data || "",
+    fornitore: r.fornitore || "",
+  }));
+
+  const esiti = abbinaDDT({ riferimenti: daCercare, fornitore, archiviati });
+
+  // Ripiego per i numeri rimasti senza niente: il vecchio confronto sul nome
+  // del file. Serve ai DDT archiviati prima, che hanno i campi vuoti.
+  const trovati = new Set(esiti.map((e) => normalizzaNumero(e.ddtNumero)));
+  for (const rif of daCercare) {
+    const numero = String(rif.ddtNumero);
+    if (trovati.has(normalizzaNumero(numero))) continue;
+    trovati.add(normalizzaNumero(numero));
+
     // Il numero deve comparire come parola a sé: "4711" non deve agganciare "147110".
     const espressione = new RegExp(`(^|[^0-9])${numero.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^0-9]|$)`);
-    const trovato = ris.rows.find((r) => espressione.test(r.nome_file));
+    const trovato = archiviati.find((a) => espressione.test(a.nomeFile));
     if (trovato) {
-      suggerimenti.push({
+      esiti.push({
         ddtNumero: numero,
-        commessaId: trovato.commessa_id,
-        commessaCodice: trovato.codice,
-        nomeFile: trovato.nome_file,
+        forza: "debole",
+        commessaId: trovato.commessaId,
+        commessaCodice: trovato.commessaCodice,
+        commessaDescrizione: trovato.commessaDescrizione,
+        motivo: `il numero compare nel nome del file "${trovato.nomeFile}", ma quel documento non ha i dati del DDT compilati`,
+        allegato: { id: trovato.id, nomeFile: trovato.nomeFile, ddtNumero: trovato.ddtNumero, ddtData: trovato.ddtData, fornitore: trovato.fornitore },
       });
     }
   }
-  return suggerimenti;
+  return esiti;
 }
 
 /**
@@ -1025,10 +1161,24 @@ app.post("/api/fatture", richiedeAuth, richiedeAbbonamentoAttivo, leggiCorpoFatt
       avvisi.unshift(`Attenzione: la fattura ${documento.numero} di questo fornitore risulta già importata il ${gemella.rows[0].quando} (${gemella.rows[0].righe_importate} righe). Importandola di nuovo i costi verrebbero contati due volte.`);
     }
 
+    // Gli abbinamenti si cercano sui GRUPPI (un DDT = un gruppo di righe), col
+    // fornitore della fattura: è lo stesso per tutte le sue righe.
+    const abbinamenti = await abbinamentiDaDDT(req.aziendaId, {
+      riferimenti: lettura.gruppi.map((g) => ({ ddtNumero: g.ddtNumero, ddtData: g.ddtData })),
+      fornitore: lettura.fornitore.denominazione,
+    });
+
     res.status(201).json({
       fattura: mappaFattura(ris.rows[0]),
       lettura: { ...lettura, avvisi },
-      suggerimenti: await suggerimentiDaDDT(req.aziendaId, lettura.righe.map((r) => r.ddtNumero)),
+      abbinamenti,
+      // Vecchio nome, vecchia forma: serve solo perché una versione del
+      // frontend già pubblicata continui a funzionare mentre il nuovo va in
+      // linea. Si può togliere quando il frontend nuovo è dappertutto.
+      suggerimenti: abbinamenti.map((a) => ({
+        ddtNumero: a.ddtNumero, commessaId: a.commessaId,
+        commessaCodice: a.commessaCodice, nomeFile: a.allegato?.nomeFile || "",
+      })),
     });
   } catch (e) {
     console.error(e);

@@ -40,6 +40,30 @@ viene comunque archiviato.
 I costi importati sono **al netto dell'IVA**: è l'imponibile che serve per il
 costo di commessa.
 
+## Provare l'abbinamento automatico
+
+Il fornitore della fattura di esempio è **EPIÙ MATERIALI EDILI S.R.L.** e i tre
+DDT hanno queste date: **4711** del 06/07/2026, **4738** del 14/07/2026, **4802**
+del 23/07/2026. Per vedere l'abbinamento all'opera basta archiviare un documento
+su una commessa compilando numero, data e fornitore, e poi caricare la fattura:
+
+| Cosa archivi | Cosa deve succedere |
+|---|---|
+| DDT `4711`, 06/07/2026, `EPIÙ MATERIALI EDILI S.R.L.` | **abbinato in automatico** (verde): la commessa arriva già selezionata |
+| DDT `4711`, 06/07/2026, **un altro fornitore** | **da confermare** (giallo), con scritto che il fornitore non combacia — i numeri di DDT non sono unici fra fornitori diversi |
+| DDT `4711` con data 30/07/2026 (oltre 5 giorni) | **da confermare** (giallo): le date sono troppo distanti |
+| DDT `4711` senza data o senza fornitore | **da confermare** (giallo): manca di che verificare |
+| niente | **da assegnare** a mano, come prima |
+
+Il fornitore si può scrivere anche in forma breve (`Epiu Materiali Edili`):
+accenti e forma societaria non contano nel confronto. Il numero si può scrivere
+`n. 4711` o `DDT 4711`, è lo stesso.
+
+Le prove automatiche di questa logica stanno in
+`backend/src/abbinamentoDDT.test.js` (`npm run prova` nel backend) e
+`frontend/src/statoGruppoDDT.test.js` (`npm run prova` nel frontend): non
+servono né database né rete.
+
 ## Quando arriverà una fattura vera
 
 La lettura dei campi sta tutta in `backend/src/fatturaPA.js`, nella mappa

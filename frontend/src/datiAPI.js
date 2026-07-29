@@ -212,13 +212,26 @@ export const datiAPI = {
      cancellazione. Ogni richiesta porta il token, quindi i documenti non sono
      mai raggiungibili da un indirizzo pubblico. */
 
-  /** Carica un file (PDF/JPG/PNG) e lo allega a una commessa. Le immagini
-   *  vengono rimpicciolite prima dell'invio: vedi comprimiSeImmagine. */
-  async caricaAllegato(commessaId, file) {
+  /**
+   * Carica un file (PDF/JPG/PNG) e lo allega a una commessa. Le immagini
+   * vengono rimpicciolite prima dell'invio: vedi comprimiSeImmagine.
+   *
+   * "ddt" porta i tre dati FACOLTATIVI del documento (numero, data,
+   * fornitore). Vanno nella query string perché il corpo della richiesta è il
+   * file. Se non ci sono, non si manda niente e il documento si archivia come
+   * si è sempre fatto.
+   */
+  async caricaAllegato(commessaId, file, ddt = {}) {
     const pronto = await comprimiSeImmagine(file);
+    const q = new URLSearchParams();
+    for (const chiave of ["ddtNumero", "ddtData", "fornitore"]) {
+      const valore = String(ddt?.[chiave] ?? "").trim();
+      if (valore) q.set(chiave, valore);
+    }
+    const coda = q.toString() ? `?${q}` : "";
     let res;
     try {
-      res = await fetch(`${API_BASE}/api/commesse/${encodeURIComponent(commessaId)}/allegati`, {
+      res = await fetch(`${API_BASE}/api/commesse/${encodeURIComponent(commessaId)}/allegati${coda}`, {
         method: "POST",
         headers: {
           "Content-Type": pronto.type || "application/octet-stream",
@@ -263,12 +276,35 @@ export const datiAPI = {
     return chiamaMateriali("DELETE", `/api/allegati/${encodeURIComponent(id)}`, null, "Impossibile eliminare il documento.", (d) => d);
   },
 
+  /** Aggiorna i tre dati facoltativi del DDT su un documento già archiviato
+   *  (il file non si tocca). Serve a completare i documenti vecchi. */
+  async aggiornaDatiAllegato(id, ddt) {
+    return chiamaMateriali("PATCH", `/api/allegati/${encodeURIComponent(id)}`, ddt,
+      "Impossibile aggiornare i dati del documento.", (d) => d.allegato);
+  },
+
+  /** I fornitori già visti da questa azienda, per la tendina del campo
+   *  "Fornitore". Se la chiamata non riesce si torna un elenco vuoto: la
+   *  tendina è una comodità, non una condizione per lavorare. */
+  async elencoFornitori() {
+    try {
+      const res = await fetch(`${API_BASE}/api/fornitori`, { headers: headerAuth() });
+      if (!res.ok) return [];
+      const dati = await res.json();
+      return Array.isArray(dati.fornitori) ? dati.fornitori : [];
+    } catch (e) {
+      return [];
+    }
+  },
+
   /* --- FATTURE ELETTRONICHE (FatturaPA) ------------------------------------
      Il caricamento LEGGE soltanto: restituisce le righe trovate senza toccare
      i costi. I materiali entrano nei conti solo con importaFattura, dopo che
      l'utente ha assegnato le commesse e confermato. */
 
-  /** Carica il file XML (o .p7m) e restituisce { fattura, lettura, suggerimenti }. */
+  /** Carica il file XML (o .p7m) e restituisce { fattura, lettura, abbinamenti }.
+   *  "abbinamenti" sono le PROPOSTE di commessa ricavate dai DDT archiviati:
+   *  non assegnano niente da sole, decide la schermata di importazione. */
   async caricaFattura(file) {
     let res;
     try {

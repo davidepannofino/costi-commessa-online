@@ -6,7 +6,8 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "migrate": "node src/migrate.js"
+    "migrate": "node src/migrate.js",
+    "prova": "node src/abbinamentoDDT.test.js"
   },
   "dependencies": {
     "@google-cloud/documentai": "^9.6.2",

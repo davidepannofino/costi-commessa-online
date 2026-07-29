@@ -8,9 +8,10 @@ import {
   FileSpreadsheet, FileText, AlertTriangle, CheckCircle2, X, ChevronRight, ChevronLeft,
   Search, RotateCcw, Save, Eraser, Info, FileDown, LogOut, Mail, Lock, Building2, ArrowRight, Loader2,
   Clock, Sparkles, Eye, EyeOff, CreditCard, Gift, PartyPopper, ShieldCheck, FileImage,
-  ReceiptText, Link2, CheckCircle,
+  ReceiptText, Link2, CheckCircle, Check, HelpCircle, CircleDot,
 } from "lucide-react";
 import { datiAPI, suSessioneScaduta, suAbbonamentoRichiesto, API_BASE } from "./datiAPI.js";
+import { statoGruppo, assegnazioneIniziale, NON_IMPORTARE } from "./statoGruppoDDT.js";
 import { leggiToken, salvaToken, cancellaToken } from "./auth.js";
 
 /* ============================================================================
@@ -1389,6 +1390,7 @@ export default function App() {
   const [materiali, setMateriali] = useState([]); // voci di costo materiale (rotte /api/materiali)
   const [allegati, setAllegati] = useState([]); // documenti DDT: solo metadati, i file si scaricano a richiesta
   const [spazioAllegati, setSpazioAllegati] = useState(null); // { usatoAzienda, quotaAzienda, maxFile }
+  const [fornitoriNoti, setFornitoriNoti] = useState([]); // per la tendina del campo Fornitore, non è un vincolo
   const [vista, setVista] = useState("dashboard");
   const [dal, setDal] = useState("2026-07-01");
   const [al, setAl] = useState("2026-07-31");
@@ -1442,6 +1444,7 @@ export default function App() {
     pronto.current = false;
     setCaricamento(true);
     setDipendenti([]); setCommesse([]); setRegistrazioni([]); setMateriali([]); setAllegati([]); setAzienda("");
+    setFornitoriNoti([]);
     setMessaggioAccesso(null);
     setBloccatoAbbonamento(false);
     setIsAdmin(false);
@@ -1524,6 +1527,9 @@ export default function App() {
       }
       pronto.current = true;
       setCaricamento(false);
+      // I fornitori già visti servono solo a riempire una tendina: si chiedono
+      // dopo, e se non arrivano non cambia niente di quello che si può fare.
+      datiAPI.elencoFornitori().then((f) => { if (!annullato) setFornitoriNoti(f); });
     })();
     return () => { annullato = true; };
   }, [token, notifica, verificandoPagamento, versioneAccesso]);
@@ -1718,18 +1724,46 @@ export default function App() {
      Come i materiali, passano dalle loro rotte e non dal salvataggio
      automatico. Il file viaggia una volta sola: qui si tengono solo i
      metadati, il contenuto si riscarica quando si apre il documento. */
-  const caricaAllegato = async (commessaId, file) => {
+  /* I tre dati del DDT (numero, data, fornitore) sono FACOLTATIVI: se "ddt"
+     arriva vuoto il documento si archivia come si è sempre fatto. Quando ci
+     sono, servono a far riconoscere il documento da solo quando arriverà la
+     fattura che lo cita. */
+  const caricaAllegato = async (commessaId, file, ddt = {}) => {
     try {
-      const { allegato, spazio } = await datiAPI.caricaAllegato(commessaId, file);
+      const { allegato, spazio } = await datiAPI.caricaAllegato(commessaId, file, ddt);
       setAllegati((a) => [allegato, ...a]);
       if (spazio) setSpazioAllegati(spazio);
-      notifica(`Documento allegato: ${allegato.nomeFile} (${fmtDimensione(allegato.dimensione)}).`);
+      if (allegato.fornitore) ricordaFornitore(allegato.fornitore);
+      notifica(allegato.ddtNumero
+        ? `Documento allegato: DDT ${allegato.ddtNumero} (${fmtDimensione(allegato.dimensione)}).`
+        : `Documento allegato: ${allegato.nomeFile} (${fmtDimensione(allegato.dimensione)}).`);
       return { ok: true, allegato };
     } catch (e) {
       notifica(e.message, "errore");
       return { ok: false, errore: e.message };
     }
   };
+
+  /** Completa o corregge i dati del DDT su un documento già archiviato. Il
+   *  file non si tocca: serve soprattutto ai documenti caricati prima che
+   *  questi campi esistessero, che partono vuoti. */
+  const aggiornaDatiAllegato = async (id, ddt) => {
+    try {
+      const allegato = await datiAPI.aggiornaDatiAllegato(id, ddt);
+      setAllegati((a) => a.map((x) => (x.id === allegato.id ? allegato : x)));
+      if (allegato.fornitore) ricordaFornitore(allegato.fornitore);
+      notifica("Dati del documento aggiornati.");
+      return { ok: true, allegato };
+    } catch (e) {
+      notifica(e.message, "errore");
+      return { ok: false, errore: e.message };
+    }
+  };
+
+  /** Un fornitore appena scritto a mano entra subito nella tendina, senza
+   *  aspettare di ricaricare la pagina. */
+  const ricordaFornitore = (nome) =>
+    setFornitoriNoti((f) => (f.includes(nome) ? f : [...f, nome].sort((a, b) => a.localeCompare(b, "it"))));
   const apriAllegato = async (allegato) => {
     try {
       const { url } = await datiAPI.apriAllegato(allegato.id);
@@ -2114,9 +2148,10 @@ export default function App() {
         <PannelloDettaglio
           riga={costi.righe.find((r) => r.commessa.id === dettaglio.commessa.id) || { ...dettaglio, costoManodopera: dettaglio.costo ?? 0, costoMateriali: 0, costoTotale: dettaglio.costo ?? 0, voci: [] }}
           riep={riep} costi={costi} dal={dal} al={al} serieMensile={serieMensile}
-          allegati={allegati} spazioAllegati={spazioAllegati}
+          allegati={allegati} spazioAllegati={spazioAllegati} fornitoriNoti={fornitoriNoti}
           onAggiungiMateriale={aggiungiMateriale} onAggiornaMateriale={aggiornaMateriale} onEliminaMateriale={eliminaMateriale}
           onCaricaAllegato={caricaAllegato} onApriAllegato={apriAllegato} onEliminaAllegato={eliminaAllegato}
+          onAggiornaDatiAllegato={aggiornaDatiAllegato}
           onChiudi={() => setDettaglio(null)} />
       )}
 
@@ -2583,9 +2618,9 @@ function VistaCommesse({ riep, costi, dal, al, apri, esportaCsv, esportaXlsx, es
   );
 }
 
-function PannelloDettaglio({ riga, riep, costi, dal, al, serieMensile, allegati, spazioAllegati,
+function PannelloDettaglio({ riga, riep, costi, dal, al, serieMensile, allegati, spazioAllegati, fornitoriNoti,
   onAggiungiMateriale, onAggiornaMateriale, onEliminaMateriale,
-  onCaricaAllegato, onApriAllegato, onEliminaAllegato, onChiudi }) {
+  onCaricaAllegato, onApriAllegato, onEliminaAllegato, onAggiornaDatiAllegato, onChiudi }) {
   useEffect(() => {
     const h = (e) => e.key === "Escape" && onChiudi();
     window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h);
@@ -2657,8 +2692,9 @@ function PannelloDettaglio({ riga, riep, costi, dal, al, serieMensile, allegati,
           <SezioneDocumenti
             commessa={riga.commessa}
             allegati={allegati.filter((a) => a.commessaId === riga.commessa.id)}
-            spazio={spazioAllegati}
-            onCarica={onCaricaAllegato} onApri={onApriAllegato} onElimina={onEliminaAllegato} />
+            spazio={spazioAllegati} fornitoriNoti={fornitoriNoti}
+            onCarica={onCaricaAllegato} onApri={onApriAllegato} onElimina={onEliminaAllegato}
+            onAggiornaDati={onAggiornaDatiAllegato} />
 
           {/* storico della commessa: tutti i mesi in cui ha avuto ore, non solo l'intervallo */}
           <div>
@@ -2830,26 +2866,87 @@ function SezioneMateriali({ commessa, voci, totale, dal, al, onAggiungi, onAggio
 }
 
 /**
+ * I tre dati del DDT, in una riga di campi. Sono FACOLTATIVI: la stessa forma
+ * serve sia quando si archivia un documento nuovo sia quando si completano i
+ * dati di uno vecchio, e in entrambi i casi si può lasciare tutto vuoto.
+ *
+ * Il fornitore è un campo di testo con una tendina attaccata (datalist): si
+ * sceglie fra quelli già visti — che è più veloce e li scrive sempre allo
+ * stesso modo, cosa che poi fa combaciare l'abbinamento — oppure si scrive a
+ * mano quello che si vuole. La tendina suggerisce, non obbliga.
+ */
+function CampiDDT({ valori, onCambia, fornitoriNoti, idElenco }) {
+  return (
+    <div className="grid sm:grid-cols-3 gap-3">
+      <Campo etichetta="Numero DDT (facoltativo)">
+        <input value={valori.ddtNumero} onChange={(e) => onCambia({ ddtNumero: e.target.value })}
+          placeholder="es. 4711" className={inputCls + " f-mono"} style={{ background: "var(--card)" }} />
+      </Campo>
+      <Campo etichetta="Data DDT (facoltativo)">
+        <input type="date" value={valori.ddtData} onChange={(e) => onCambia({ ddtData: e.target.value })}
+          className={inputCls + " f-mono"} style={{ background: "var(--card)" }} />
+      </Campo>
+      <Campo etichetta="Fornitore (facoltativo)">
+        <input value={valori.fornitore} onChange={(e) => onCambia({ fornitore: e.target.value })}
+          list={idElenco} placeholder="scegli o scrivi" className={inputCls} style={{ background: "var(--card)" }} />
+        <datalist id={idElenco}>
+          {fornitoriNoti.map((f) => <option key={f} value={f} />)}
+        </datalist>
+      </Campo>
+    </div>
+  );
+}
+
+const DDT_VUOTO = { ddtNumero: "", ddtData: "", fornitore: "" };
+
+/**
  * Documenti (DDT) di una commessa: caricamento, elenco, apertura, eliminazione.
- * In questo passo il documento viene solo archiviato e collegato: nessuna
- * lettura del contenuto. Il collegamento è per id della commessa, quindi
- * rinominarla non stacca nulla.
+ * Il documento viene archiviato e collegato: del contenuto non si legge nulla.
+ * Il collegamento è per id della commessa, quindi rinominarla non stacca nulla.
  * A differenza dei materiali l'elenco NON è filtrato per intervallo di date:
  * un archivio di documenti serve tutto, sempre.
+ *
+ * Da questo passo si possono scrivere anche numero, data e fornitore del DDT.
+ * Sono tre campi FACOLTATIVI: chi li lascia vuoti archivia esattamente come
+ * prima e non perde niente di quello che aveva. Chi li compila ottiene una
+ * cosa in cambio: quando arriverà la fattura che cita quel numero, la commessa
+ * verrà proposta da sola.
  */
-function SezioneDocumenti({ commessa, allegati, spazio, onCarica, onApri, onElimina }) {
+function SezioneDocumenti({ commessa, allegati, spazio, fornitoriNoti = [], onCarica, onApri, onElimina, onAggiornaDati }) {
   const refFile = useRef();
   const [inCaricamento, setInCaricamento] = useState(null); // nome del file in corso
   const [inApertura, setInApertura] = useState(null);
+  const [form, setForm] = useState(null);      // null = chiuso; altrimenti i tre campi del nuovo documento
+  const [inModifica, setInModifica] = useState(null); // { id, ddtNumero, ddtData, fornitore } di un documento esistente
+  const [salvandoModifica, setSalvandoModifica] = useState(false);
 
   const scegli = async (file) => {
     if (!file) return;
     setInCaricamento(file.name);
-    await onCarica(commessa.id, file);
+    const ris = await onCarica(commessa.id, file, form || DDT_VUOTO);
     setInCaricamento(null);
+    // Il form si chiude solo se il caricamento è andato: altrimenti l'utente
+    // riavrebbe i campi vuoti e dovrebbe riscrivere tutto.
+    if (ris?.ok) setForm(null);
+  };
+
+  const salvaModifica = async () => {
+    if (salvandoModifica) return;
+    setSalvandoModifica(true);
+    const { id, ...ddt } = inModifica;
+    const ris = await onAggiornaDati(id, ddt);
+    setSalvandoModifica(false);
+    if (ris?.ok) setInModifica(null);
   };
 
   const apri = async (a) => { setInApertura(a.id); await onApri(a); setInApertura(null); };
+
+  /** La riga di dati sotto al nome del file: c'è solo se c'è qualcosa da dire. */
+  const rigaDDT = (a) => [
+    a.ddtNumero && `DDT ${a.ddtNumero}`,
+    a.ddtData && fmtData(a.ddtData),
+    a.fornitore,
+  ].filter(Boolean).join(" · ");
 
   const usato = spazio?.usatoAzienda ?? 0;
   const quota = spazio?.quotaAzienda ?? 0;
@@ -2862,7 +2959,7 @@ function SezioneDocumenti({ commessa, allegati, spazio, onCarica, onApri, onElim
         <p className="f-mono text-xs" style={{ color: "var(--muted)" }}>{allegati.length} {allegati.length === 1 ? "documento" : "documenti"}</p>
       </div>
       <p className="text-xs mb-4" style={{ color: "var(--muted)" }}>
-        Archivio dei documenti di trasporto della commessa: PDF o foto, fino a {spazio ? fmtDimensione(spazio.maxFile) : "5 MB"} l'uno. Le foto vengono rimpicciolite prima di essere caricate. Per ora i documenti si conservano soltanto: la lettura automatica arriverà più avanti.
+        Archivio dei documenti di trasporto della commessa: PDF o foto, fino a {spazio ? fmtDimensione(spazio.maxFile) : "5 MB"} l'uno. Le foto vengono rimpicciolite prima di essere caricate. Del contenuto non si legge nulla: il documento si conserva e resta collegato a questa commessa.
       </p>
 
       <input ref={refFile} type="file" accept="application/pdf,image/jpeg,image/png" className="hidden"
@@ -2878,8 +2975,27 @@ function SezioneDocumenti({ commessa, allegati, spazio, onCarica, onApri, onElim
             <div className="h-full anim-scorre" style={{ background: "var(--accent)", width: "40%" }} />
           </div>
         </div>
+      ) : form ? (
+        /* I tre campi del DDT, prima di scegliere il file. Si può premere
+           "Scegli il file" con tutti i campi vuoti: sono facoltativi davvero. */
+        <div className="rounded-xl px-4 py-4" style={{ background: "var(--tela)", border: "1px solid var(--hairline)" }}>
+          <p className="text-xs mb-3" style={{ color: "var(--muted)" }}>
+            Se scrivi <strong style={{ color: "var(--txt)" }}>numero, data e fornitore</strong> del DDT, quando arriverà la fattura che lo cita
+            questa commessa verrà proposta da sola. Non è obbligatorio: puoi lasciarli vuoti e archiviare il documento come sempre.
+          </p>
+          <CampiDDT valori={form} onCambia={(patch) => setForm((f) => ({ ...f, ...patch }))}
+            fornitoriNoti={fornitoriNoti} idElenco={`fornitori-nuovo-${commessa.id}`} />
+          <div className="flex flex-wrap gap-2 mt-4">
+            <Bottone onClick={() => refFile.current.click()}>
+              <Upload size={14} strokeWidth={1.75} /> Scegli il file e archivia
+            </Bottone>
+            <Bottone variante="fantasma" onClick={() => setForm(null)}>
+              <X size={14} strokeWidth={1.75} /> Annulla
+            </Bottone>
+          </div>
+        </div>
       ) : (
-        <Bottone variante="fantasma" onClick={() => refFile.current.click()}>
+        <Bottone variante="fantasma" onClick={() => setForm({ ...DDT_VUOTO })}>
           <Upload size={14} strokeWidth={1.75} /> Allega un documento
         </Bottone>
       )}
@@ -2889,32 +3005,62 @@ function SezioneDocumenti({ commessa, allegati, spazio, onCarica, onApri, onElim
       ) : (
         <ul className="mt-4 space-y-2">
           {allegati.map((a) => (
-            <li key={a.id} className="rounded-xl px-3.5 py-3 flex items-center justify-between gap-3" style={{ border: "1px solid var(--hairline)" }}>
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: "var(--velo-accento)" }}>
-                  {a.tipo === "application/pdf"
-                    ? <FileText size={16} strokeWidth={1.75} style={{ color: "var(--accent)" }} />
-                    : <FileImage size={16} strokeWidth={1.75} style={{ color: "var(--accent)" }} />}
+            <li key={a.id} className="rounded-xl px-3.5 py-3" style={{ border: "1px solid var(--hairline)" }}>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: "var(--velo-accento)" }}>
+                    {a.tipo === "application/pdf"
+                      ? <FileText size={16} strokeWidth={1.75} style={{ color: "var(--accent)" }} />
+                      : <FileImage size={16} strokeWidth={1.75} style={{ color: "var(--accent)" }} />}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{a.nomeFile}</p>
+                    {/* I dati del DDT compaiono solo se ci sono: un documento
+                        archiviato senza compilarli si legge come prima. */}
+                    {rigaDDT(a) && (
+                      <p className="f-mono text-xs mt-0.5 truncate" style={{ color: "var(--accent)" }}>{rigaDDT(a)}</p>
+                    )}
+                    <p className="f-mono text-xs mt-0.5" style={{ color: "var(--muted)" }}>
+                      {fmtData(a.caricatoIl.slice(0, 10))} · {fmtDimensione(a.dimensione)}
+                    </p>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium truncate">{a.nomeFile}</p>
-                  <p className="f-mono text-xs mt-0.5" style={{ color: "var(--muted)" }}>
-                    {fmtData(a.caricatoIl.slice(0, 10))} · {fmtDimensione(a.dimensione)}
-                  </p>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button onClick={() => setInModifica(inModifica?.id === a.id ? null : { id: a.id, ddtNumero: a.ddtNumero || "", ddtData: a.ddtData || "", fornitore: a.fornitore || "" })}
+                    aria-label={"Dati del DDT per " + a.nomeFile} title="Dati del DDT (numero, data, fornitore)"
+                    className="p-1.5 rounded-lg btn" style={{ border: "1px solid var(--hairline)" }}>
+                    <Pencil size={12} strokeWidth={1.75} />
+                  </button>
+                  <button onClick={() => apri(a)} disabled={inApertura === a.id}
+                    aria-label={"Apri documento " + a.nomeFile} className="p-1.5 rounded-lg btn" style={{ border: "1px solid var(--hairline)" }}>
+                    {inApertura === a.id
+                      ? <Loader2 size={12} strokeWidth={1.75} className="animate-spin" />
+                      : <Download size={12} strokeWidth={1.75} />}
+                  </button>
+                  <button onClick={() => onElimina(a)} aria-label={"Elimina documento " + a.nomeFile}
+                    className="p-1.5 rounded-lg btn" style={{ border: "1px solid rgba(166,58,50,.22)", color: "#A63A32" }}>
+                    <Trash2 size={12} strokeWidth={1.75} />
+                  </button>
                 </div>
               </div>
-              <div className="flex items-center gap-1.5 shrink-0">
-                <button onClick={() => apri(a)} disabled={inApertura === a.id}
-                  aria-label={"Apri documento " + a.nomeFile} className="p-1.5 rounded-lg btn" style={{ border: "1px solid var(--hairline)" }}>
-                  {inApertura === a.id
-                    ? <Loader2 size={12} strokeWidth={1.75} className="animate-spin" />
-                    : <Download size={12} strokeWidth={1.75} />}
-                </button>
-                <button onClick={() => onElimina(a)} aria-label={"Elimina documento " + a.nomeFile}
-                  className="p-1.5 rounded-lg btn" style={{ border: "1px solid rgba(166,58,50,.22)", color: "#A63A32" }}>
-                  <Trash2 size={12} strokeWidth={1.75} />
-                </button>
-              </div>
+
+              {/* Completare i dati di un documento già archiviato: il file non
+                  si tocca. È la strada per rendere riconoscibili i DDT caricati
+                  prima che questi campi esistessero. */}
+              {inModifica?.id === a.id && (
+                <div className="mt-3 pt-3" style={{ borderTop: "1px solid var(--hairline)" }}>
+                  <CampiDDT valori={inModifica} onCambia={(patch) => setInModifica((m) => ({ ...m, ...patch }))}
+                    fornitoriNoti={fornitoriNoti} idElenco={`fornitori-${a.id}`} />
+                  <div className="flex flex-wrap justify-end gap-2 mt-3">
+                    <Bottone variante="fantasma" onClick={() => setInModifica(null)}>Annulla</Bottone>
+                    <Bottone onClick={salvaModifica} disabled={salvandoModifica}>
+                      {salvandoModifica
+                        ? <><Loader2 size={14} strokeWidth={1.75} className="animate-spin" /> Salvataggio…</>
+                        : <><Check size={14} strokeWidth={1.75} /> Salva i dati</>}
+                    </Bottone>
+                  </div>
+                </div>
+              )}
             </li>
           ))}
         </ul>
@@ -2944,10 +3090,69 @@ function SezioneDocumenti({ commessa, allegati, spazio, onCarica, onApri, onElim
      2. si assegnano le commesse (a gruppi di DDT o riga per riga) e si
         correggono i valori che servono;
      3. si conferma, e solo allora le righe diventano costi materiale.
+
+   ABBINAMENTO AUTOMATICO. Se un DDT citato dalla fattura è già archiviato su
+   una commessa, il momento 2 arriva in parte già fatto: la commessa è
+   pre-selezionata e lo dice a chiare lettere. Questo NON tocca il momento 3.
+   La pre-selezione vive soltanto qui, nello stato di questa schermata: l'unica
+   strada per cui un costo entra nei conti resta il bottone di conferma in
+   fondo. La macchina propone, l'utente conferma — e siccome è una proposta,
+   ogni pre-assegnazione si cambia con lo stesso menù di sempre.
 --------------------------------------------------------------------------- */
 
-/** Voce del menù commessa quando si decide di NON importare una riga. */
-const NON_IMPORTARE = "";
+/** La chiave del gruppo a cui appartiene una riga (stessa regola del backend,
+ *  in raggruppaPerDDT): il numero di DDT, o "senza-ddt" se non c'è. */
+const chiaveGruppoDi = (riga) => (riga.ddtNumero ? `ddt:${riga.ddtNumero}` : "senza-ddt");
+
+/**
+ * Come si presenta ogni stato di abbinamento. Il colore non è decorazione: il
+ * verde vuol dire "il software ha messo qui una commessa da solo, guardala", il
+ * giallo "c'è un candidato ma non ci metto la mano io", il grigio "tocca a te".
+ * A colpo d'occhio si deve capire dove serve attenzione senza leggere niente.
+ */
+const STILI_STATO = {
+  auto:      { icona: CheckCircle2,  colore: "var(--euro)",  velo: "rgba(30,115,80,.09)",  bordo: "rgba(30,115,80,.22)" },
+  possibile: { icona: HelpCircle,    colore: "#7C6027",      velo: "var(--velo-accento)",  bordo: "rgba(154,120,58,.22)" },
+  manuale:   { icona: Check,         colore: "var(--euro)",  velo: "rgba(30,115,80,.06)",  bordo: "rgba(30,115,80,.16)" },
+  misto:     { icona: CircleDot,     colore: "#7C6027",      velo: "var(--velo-accento)",  bordo: "rgba(154,120,58,.22)" },
+  vuoto:     { icona: CircleDot,     colore: "var(--muted)", velo: "var(--velo)",          bordo: "var(--hairline)" },
+};
+
+/**
+ * La pillola in testa a un gruppo-DDT: dice a che punto è l'assegnazione.
+ *
+ * Sull'abbinamento automatico dice anche, senza girarci intorno, che si può
+ * cambiare col menù qui accanto: è la parte che rende la proposta una proposta.
+ */
+function StatoAbbinamento({ stato, commessa }) {
+  const { tipo, abbinamento } = stato;
+  const s = STILI_STATO[tipo];
+  const Icona = s.icona;
+  const codice = commessa ? `${commessa.codice}${commessa.descrizione ? ` — ${commessa.descrizione}` : ""}` : "?";
+  const proposta = abbinamento?.commessaCodice || "?";
+
+  const testo = {
+    auto: <>Abbinato in automatico a <strong>{codice}</strong> · <span style={{ fontWeight: 400 }}>controlla e, se serve, cambialo col menù qui accanto</span></>,
+    possibile: <>Possibile abbinamento a <strong>{proposta}</strong> — da confermare</>,
+    manuale: <>Assegnato da te a <strong>{codice}</strong></>,
+    misto: <>Righe assegnate a commesse diverse</>,
+    vuoto: <>Da assegnare</>,
+  }[tipo];
+
+  return (
+    <div className="rounded-lg px-3 py-2 mt-2 inline-flex flex-col gap-1"
+      style={{ background: s.velo, border: `1px solid ${s.bordo}` }}>
+      <p className="text-xs flex items-start gap-1.5" style={{ color: s.colore }}>
+        <Icona size={13} strokeWidth={1.75} className="mt-0.5 shrink-0" /> <span>{testo}</span>
+      </p>
+      {/* Il perché: sul giallo è l'informazione che permette di decidere in due
+          secondi invece di andare a riaprire l'archivio. */}
+      {abbinamento?.motivo && tipo !== "manuale" && tipo !== "vuoto" && (
+        <p className="text-[11px] pl-[19px]" style={{ color: "var(--muted)" }}>{abbinamento.motivo}</p>
+      )}
+    </div>
+  );
+}
 
 /**
  * Da dove arrivano i numeri di questa fattura. Non è un dettaglio tecnico:
@@ -2964,7 +3169,7 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
   const refFile = useRef();
   const [inLettura, setInLettura] = useState(false);
   const [inImportazione, setInImportazione] = useState(false);
-  const [lettura, setLettura] = useState(null);  // { fattura, gruppi, avvisi, suggerimenti }
+  const [lettura, setLettura] = useState(null);  // { fattura, gruppi, avvisi, abbinamenti }
   const [righe, setRighe] = useState([]);        // righe modificabili, con la commessa assegnata
 
   const comById = useMemo(() => new Map(commesse.map((c) => [c.id, c])), [commesse]);
@@ -2976,36 +3181,95 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
     setInLettura(false);
     if (!ris.ok) return;
 
-    const { fattura, lettura: dati, suggerimenti } = ris.dati;
-    // Ogni riga diventa modificabile e parte senza commessa: l'assegnazione è
-    // una scelta dell'utente, mai un'ipotesi del software.
-    const perDDT = new Map(suggerimenti.map((s) => [s.ddtNumero, s]));
+    const { fattura, lettura: dati } = ris.dati;
+    const abbinamenti = Array.isArray(ris.dati.abbinamenti) ? ris.dati.abbinamenti : [];
+    const perDDT = new Map(abbinamenti.map((a) => [a.ddtNumero, a]));
+
+    /* La commessa di partenza di ogni riga la decide assegnazioneIniziale (in
+       statoGruppoDDT.js): solo un abbinamento FORTE pre-seleziona qualcosa.
+       "assegnazione" tiene traccia di CHI ha scelto, così l'interfaccia non
+       dice "abbinato in automatico" dopo che l'utente ha cambiato. */
     setRighe(dati.righe.map((r) => ({
       ...r,
       quantita: r.quantita ?? "",
       prezzoUnitario: r.prezzoUnitario ?? "",
-      commessaId: NON_IMPORTARE,
-      suggerimento: perDDT.get(r.ddtNumero) || null,
+      ...assegnazioneIniziale(perDDT.get(r.ddtNumero) || null),
     })));
     setLettura({
       fattura, gruppi: dati.gruppi, avvisi: dati.avvisi, documenti: dati.documenti,
-      fornitore: dati.fornitore, suggerimenti,
+      fornitore: dati.fornitore, abbinamenti,
       origine: dati.origine || "xml",
       scansione: dati.scansione === true,
     });
+
+    const forti = abbinamenti.filter((a) => a.forza === "forte").length;
+    const deboli = abbinamenti.length - forti;
+    if (forti > 0 || deboli > 0) {
+      notifica(
+        [forti > 0 && `${forti} ${forti === 1 ? "gruppo abbinato" : "gruppi abbinati"} in automatico`,
+         deboli > 0 && `${deboli} da confermare`].filter(Boolean).join(", ") + ": controlla prima di importare.",
+        forti > 0 ? "ok" : "avviso"
+      );
+    }
   };
 
+  /* Ogni modifica a mano marca la riga come "manuale": da quel momento
+     l'interfaccia non dice più che l'ha scelta il software. */
   const modificaRiga = (id, patch) => setRighe((rr) => rr.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   const assegnaGruppo = (chiaveGruppo, commessaId) =>
-    setRighe((rr) => rr.map((r) => (chiaveGruppo === (r.ddtNumero ? `ddt:${r.ddtNumero}` : "senza-ddt") ? { ...r, commessaId } : r)));
+    setRighe((rr) => rr.map((r) => (chiaveGruppo === chiaveGruppoDi(r) ? { ...r, commessaId, assegnazione: "manuale" } : r)));
   const cambiaDataGruppo = (chiaveGruppo, data) =>
-    setRighe((rr) => rr.map((r) => (chiaveGruppo === (r.ddtNumero ? `ddt:${r.ddtNumero}` : "senza-ddt") ? { ...r, data } : r)));
+    setRighe((rr) => rr.map((r) => (chiaveGruppo === chiaveGruppoDi(r) ? { ...r, data } : r)));
 
   const numero = (v) => (typeof v === "number" ? v : parseNumIt(String(v ?? "")));
   const totaleRiga = (r) => {
     const q = numero(r.quantita), p = numero(r.prezzoUnitario);
     return isNaN(q) || isNaN(p) ? null : q * p;
   };
+
+  /**
+   * Lo stato di ogni gruppo-DDT: cosa dice la pillola in testa al gruppo, e
+   * cosa si conta nel riepilogo. Si ricalcola a ogni modifica, perché deve
+   * dire la verità ADESSO: appena l'utente cambia un menù, il gruppo smette di
+   * essere "abbinato in automatico" e diventa "assegnato da te".
+   */
+  const statiGruppo = useMemo(() => {
+    const perNumero = new Map((lettura?.abbinamenti || []).map((a) => [a.ddtNumero, a]));
+    const stati = new Map();
+    for (const g of lettura?.gruppi || []) {
+      const righeGruppo = righe.filter((r) => chiaveGruppoDi(r) === g.chiave);
+      if (righeGruppo.length === 0) continue;
+
+      const abbinamento = perNumero.get(g.ddtNumero) || null;
+      const { tipo, commessaGruppo } = statoGruppo(righeGruppo, abbinamento);
+      stati.set(g.chiave, { tipo, abbinamento, commessaGruppo, righeGruppo });
+    }
+    return stati;
+  }, [lettura, righe]);
+
+  /** Quanti gruppi in ciascuno stato: è il numero che si legge nel riepilogo. */
+  const conteggioGruppi = useMemo(() => {
+    const c = { auto: 0, possibile: 0, manuale: 0, vuoto: 0, misto: 0 };
+    for (const s of statiGruppo.values()) c[s.tipo] += 1;
+    return c;
+  }, [statiGruppo]);
+
+  /** I gruppi ancora pre-assegnati dal software: si elencano per nome prima
+   *  della conferma, perché è su quelli che serve un occhio in più. */
+  const gruppiAutomatici = useMemo(() => {
+    const elenco = [];
+    for (const [chiave, s] of statiGruppo) {
+      if (s.tipo === "auto") {
+        elenco.push({
+          chiave,
+          ddtNumero: s.abbinamento?.ddtNumero || "",
+          commessa: comById.get(s.commessaGruppo),
+          righe: s.righeGruppo.length,
+        });
+      }
+    }
+    return elenco;
+  }, [statiGruppo, comById]);
 
   const daImportare = righe.filter((r) => r.commessaId !== NON_IMPORTARE);
   const totaleDaImportare = daImportare.reduce((s, r) => s + (totaleRiga(r) ?? 0), 0);
@@ -3056,7 +3320,7 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
         <input ref={refFile} type="file" accept=".xml,.p7m,.pdf,application/xml,text/xml,application/pdf" className="hidden"
           onChange={(e) => { const f = e.target.files[0]; e.target.value = ""; scegliFile(f); }} />
         <StatoVuoto icona={ReceiptText} titolo={inLettura ? "Lettura della fattura in corso…" : "Importa una fattura"}
-          testo="Carica il file XML della fattura (anche firmato .p7m) e il software ne legge le righe con i prezzi esatti, raggruppate per DDT. Se l'XML non ce l'hai, va bene anche un PDF: da quello i dati vengono interpretati, quindi vanno controllati con più attenzione. In ogni caso niente entra nei costi finché non confermi tu, riga per riga."
+          testo="Carica il file XML della fattura (anche firmato .p7m) e il software ne legge le righe con i prezzi esatti, raggruppate per DDT. Se un DDT è già archiviato su una commessa con numero, data e fornitore, la commessa viene proposta da sola. Se l'XML non ce l'hai va bene anche un PDF: da quello i dati vengono interpretati, quindi vanno controllati con più attenzione. In ogni caso niente entra nei costi finché non confermi tu."
           azione={inLettura
             ? <Bottone disabled><Loader2 size={14} strokeWidth={1.75} className="animate-spin" /> Lettura…</Bottone>
             : <Bottone onClick={() => refFile.current.click()}><Upload size={14} strokeWidth={1.75} /> Carica fattura (XML o PDF)</Bottone>} />
@@ -3140,15 +3404,17 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
       )}
 
       {lettura.gruppi.map((g) => {
-        const righeGruppo = righe.filter((r) => (r.ddtNumero ? `ddt:${r.ddtNumero}` : "senza-ddt") === g.chiave);
-        if (righeGruppo.length === 0) return null;
+        const stato = statiGruppo.get(g.chiave);
+        if (!stato) return null;
+        const { righeGruppo, commessaGruppo, abbinamento } = stato;
         const totaleGruppo = righeGruppo.reduce((s, r) => s + (totaleRiga(r) ?? 0), 0);
-        const comuni = new Set(righeGruppo.map((r) => r.commessaId));
-        const commessaGruppo = comuni.size === 1 ? [...comuni][0] : "";
-        const suggerimento = righeGruppo[0]?.suggerimento;
+        const stile = STILI_STATO[stato.tipo];
 
         return (
-          <section key={g.chiave} className="rounded-2xl overflow-hidden" style={{ background: "var(--card)", boxShadow: "var(--ombra-sm)" }}>
+          <section key={g.chiave} className="rounded-2xl overflow-hidden" style={{ background: "var(--card)", boxShadow: "var(--ombra-sm)",
+            /* Il filetto sul bordo: rende leggibile a colpo d'occhio, scorrendo
+               la pagina, quali gruppi sono a posto e quali chiedono qualcosa. */
+            borderLeft: `3px solid ${stato.tipo === "vuoto" ? "var(--hairline)" : stile.colore}` }}>
             <div className="px-6 py-4 flex flex-wrap items-end justify-between gap-4" style={{ borderBottom: "1px solid var(--hairline)", background: "var(--tela)" }}>
               <div>
                 <Micro>{g.ddtNumero ? "Documento di trasporto" : "Righe senza DDT"}</Micro>
@@ -3159,10 +3425,17 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
                 <p className="f-mono text-xs mt-1" style={{ color: "var(--muted)" }}>
                   {righeGruppo.length} {righeGruppo.length === 1 ? "riga" : "righe"} · {euro(totaleGruppo)}
                 </p>
-                {suggerimento && (
-                  <p className="text-xs mt-2 flex items-center gap-1.5" style={{ color: "var(--accent)" }}>
-                    <Link2 size={12} strokeWidth={1.75} />
-                    DDT {suggerimento.ddtNumero} già archiviato sulla commessa {suggerimento.commessaCodice} ({suggerimento.nomeFile})
+
+                <StatoAbbinamento stato={stato} commessa={comById.get(commessaGruppo)} />
+
+                {/* Quale documento in archivio ha fatto scattare la proposta:
+                    serve a poter andare a controllare la carta, se si vuole. */}
+                {abbinamento?.allegato?.nomeFile && (
+                  <p className="text-[11px] mt-1.5 flex items-start gap-1.5" style={{ color: "var(--muted)" }}>
+                    <Link2 size={11} strokeWidth={1.75} className="mt-0.5 shrink-0" />
+                    dal documento archiviato "{abbinamento.allegato.nomeFile}"
+                    {abbinamento.allegato.fornitore && ` · ${abbinamento.allegato.fornitore}`}
+                    {abbinamento.allegato.ddtData && ` · ${fmtData(abbinamento.allegato.ddtData)}`}
                   </p>
                 )}
               </div>
@@ -3171,9 +3444,13 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
                   <input type="date" value={righeGruppo[0]?.data || ""} onChange={(e) => cambiaDataGruppo(g.chiave, e.target.value)}
                     className={inputCls + " f-mono"} style={{ width: 150, background: "var(--card)" }} />
                 </Campo>
-                <Campo etichetta="Assegna tutto il gruppo a">
+                <Campo etichetta={stato.tipo === "auto" ? "Commessa proposta (modificabile)" : "Assegna tutto il gruppo a"}>
+                  {/* È il menù di sempre, nella stessa posizione di sempre.
+                      Sull'abbinamento automatico arriva già valorizzato: da qui
+                      si cambia, ed è questo che tiene la proposta una proposta. */}
                   <select value={commessaGruppo} onChange={(e) => assegnaGruppo(g.chiave, e.target.value)}
-                    className={inputCls} style={{ width: 230, background: "var(--card)" }}>
+                    className={inputCls} style={{ width: 230, background: "var(--card)",
+                      ...(stato.tipo === "auto" ? { borderColor: "rgba(30,115,80,.45)" } : {}) }}>
                     <option value={NON_IMPORTARE}>— non importare —</option>
                     {commesse.map((c) => <option key={c.id} value={c.id}>{c.codice} — {c.descrizione}</option>)}
                   </select>
@@ -3219,7 +3496,9 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
                           {tot == null ? "da controllare" : euro(tot)}
                         </td>
                         <td className="px-4 py-2.5">
-                          <select value={r.commessaId} onChange={(e) => modificaRiga(r.id, { commessaId: e.target.value })}
+                          {/* Anche la singola riga si cambia: e da quel momento
+                              l'assegnazione è dell'utente, non del software. */}
+                          <select value={r.commessaId} onChange={(e) => modificaRiga(r.id, { commessaId: e.target.value, assegnazione: "manuale" })}
                             className={inputCls + " py-1.5"} style={{ width: 200, background: "var(--tela)" }} aria-label={"Commessa per " + r.descrizione}>
                             <option value={NON_IMPORTARE}>— non importare —</option>
                             {commesse.map((c) => <option key={c.id} value={c.id}>{c.codice}</option>)}
@@ -3250,6 +3529,56 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
             </div>
           ))}
         </div>
+
+        {/* Come stanno i GRUPPI. È il conto che dice quanto lavoro resta e —
+            soprattutto — quanto di questa importazione l'ha proposto il
+            software e va guardato. */}
+        {statiGruppo.size > 0 && (
+          <div className="flex flex-wrap gap-2 mb-5">
+            {[
+              { tipo: "auto", n: conteggioGruppi.auto, testo: conteggioGruppi.auto === 1 ? "gruppo abbinato in automatico" : "gruppi abbinati in automatico" },
+              { tipo: "possibile", n: conteggioGruppi.possibile, testo: "da confermare" },
+              { tipo: "manuale", n: conteggioGruppi.manuale, testo: conteggioGruppi.manuale === 1 ? "assegnato da te" : "assegnati da te" },
+              { tipo: "vuoto", n: conteggioGruppi.vuoto + conteggioGruppi.misto, testo: "ancora da assegnare" },
+            ].filter((v) => v.n > 0).map((v) => {
+              const s = STILI_STATO[v.tipo];
+              const Icona = s.icona;
+              return (
+                <div key={v.tipo} className="rounded-lg px-3 py-2 flex items-center gap-2 text-xs"
+                  style={{ background: s.velo, border: `1px solid ${s.bordo}`, color: s.colore }}>
+                  <Icona size={13} strokeWidth={1.75} />
+                  <span className="f-mono font-medium">{v.n}</span> {v.testo}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Gli abbinamenti che il software ha fatto da solo, uno per uno. Se
+            qualcosa è finito sulla commessa sbagliata, si vede qui prima di
+            premere Conferma — che è l'unico momento in cui i costi entrano. */}
+        {gruppiAutomatici.length > 0 && (
+          <div className="rounded-xl px-4 py-3.5 mb-5" style={{ background: "rgba(30,115,80,.06)", border: "1px solid rgba(30,115,80,.18)" }}>
+            <p className="text-xs font-semibold mb-2" style={{ color: "var(--euro)" }}>
+              Abbinati in automatico, da controllare:
+            </p>
+            <div className="space-y-1">
+              {gruppiAutomatici.map((v) => (
+                <p key={v.chiave} className="text-sm flex items-start gap-2">
+                  <Check size={13} strokeWidth={1.75} className="mt-1 shrink-0" style={{ color: "var(--euro)" }} />
+                  <span>
+                    <span className="f-mono">DDT {v.ddtNumero}</span> ({v.righe} {v.righe === 1 ? "riga" : "righe"}) →{" "}
+                    <span className="f-mono font-medium">{v.commessa?.codice ?? "?"}</span>{" "}
+                    <span style={{ color: "var(--muted)" }}>{v.commessa?.descrizione}</span>
+                  </span>
+                </p>
+              ))}
+            </div>
+            <p className="text-xs mt-2.5" style={{ color: "var(--muted)" }}>
+              Sono proposte: finché non premi "Conferma e importa" nessun costo è entrato in nessuna commessa. Per cambiarne una, usa il menù nella testata del suo gruppo.
+            </p>
+          </div>
+        )}
 
         {perCommessa.length > 0 ? (
           <div className="space-y-2 mb-5">
