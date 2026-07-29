@@ -148,5 +148,15 @@ CREATE INDEX IF NOT EXISTS idx_fatture_azienda ON fatture(azienda_id);
 -- riferimento al documento di provenienza.
 ALTER TABLE materiali ADD COLUMN IF NOT EXISTS fattura_id TEXT REFERENCES fatture(id) ON DELETE SET NULL;
 
+-- Consumo di Google Document AI, mese per mese. Document AI è l'unico pezzo a
+-- pagamento di tutta l'applicazione e si paga a pagina: questo contatore serve
+-- a vedere quanto si sta spendendo e a fermarsi da soli al tetto stabilito,
+-- invece di scoprirlo dalla fattura di Google.
+CREATE TABLE IF NOT EXISTS consumi_documentai (
+  mese     TEXT PRIMARY KEY,          -- 'AAAA-MM'
+  pagine   INTEGER NOT NULL DEFAULT 0,
+  chiamate INTEGER NOT NULL DEFAULT 0
+);
+
 INSERT INTO aziende (id, nome) VALUES ('azienda-prova', 'Azienda di prova')
 ON CONFLICT (id) DO NOTHING;

@@ -289,22 +289,33 @@ function unisciCosti({ riep, materiali, commesse, dal, al }) {
 --------------------------------------------------------------------------- */
 const ESEMPIO_ORE = {"e1":{"P1":[[1,8],[14,5]],"P2":[[8,4]],"P3":[[2,8],[6,3],[19,8]],"P4":[[12,4]],"P5":[[4,3],[7,6],[15,5],[30,8]],"P6":[[20,8]],"P7":[[9,2]],"P8":[[5,5],[21,8],[24,6]],"P9":[[3,8],[16,8]],"P11":[[14,6],[22,8]],"P13":[[6,1],[9,4],[25,5],[31,5]],"P14":[[4,5]],"P16":[[5,8],[8,3],[23,8]],"P17":[[27,7]],"P18":[[11,2]],"P19":[[4,2],[18,8],[26,8]],"P20":[[7,1]],"P21":[[15,1]],"P22":[[12,4],[29,2]],"P23":[[11,5]],"P24":[[10,2],[28,4]]},"e2":{"P1":[[1,8]],"P2":[[2,8]],"P3":[[3,8]],"P4":[[4,8]],"P5":[[5,8]],"P6":[[6,8]],"P7":[[7,8],[13,6],[26,8]],"P8":[[8,8]],"P9":[[9,8]],"P10":[[10,8]],"P11":[[11,8],[22,5]],"P12":[[12,5],[27,8],[31,4]],"P13":[[12,3]],"P14":[[13,4]],"P16":[[14,3],[28,5]],"P17":[[15,6],[23,5],[25,5]],"P18":[[15,2],[24,5],[29,2],[31,4]],"P19":[[14,5]],"P20":[[16,8],[21,5],[30,3]],"P21":[[17,8]],"P22":[[18,8],[29,5]],"P23":[[19,8]],"P24":[[20,8]]}};
 
+/**
+ * Gli id qui devono essere UNICI a ogni generazione, non fissi.
+ * Nel database la chiave di dipendenti e commesse è l'id da solo, valido per
+ * tutte le aziende: con id fissi la seconda azienda che carica i dati
+ * d'esempio andrebbe in collisione con la prima e non riuscirebbe a salvare
+ * nulla. Si usa lo stesso uid() già usato per le registrazioni qui sotto e
+ * dall'import Excel.
+ */
 function creaDatiEsempio() {
   const dipendenti = [
-    { id: "e1", nome: "A", cognome: "A", lordoMensile: { "2026-07": 4587 } },
-    { id: "e2", nome: "A", cognome: "B", lordoMensile: { "2026-07": 3987 } },
+    { id: uid("e"), nome: "A", cognome: "A", lordoMensile: { "2026-07": 4587 } },
+    { id: uid("e"), nome: "A", cognome: "B", lordoMensile: { "2026-07": 3987 } },
   ];
   const codici = new Set();
   Object.values(ESEMPIO_ORE).forEach((m) => Object.keys(m).forEach((c) => codici.add(c)));
   const ordina = (a, b) => (parseInt(a.slice(1)) || 0) - (parseInt(b.slice(1)) || 0);
-  const commesse = [...codici].sort(ordina).map((c, i) => ({ id: "c" + (i + 1), codice: c, descrizione: "Commessa " + c }));
+  const commesse = [...codici].sort(ordina).map((c) => ({ id: uid("c"), codice: c, descrizione: "Commessa " + c }));
   const comId = new Map(commesse.map((c) => [c.codice, c.id]));
+  // Le chiavi di ESEMPIO_ORE ("e1", "e2") sono etichette del foglio di
+  // partenza, non id: vanno tradotte negli id appena generati, nell'ordine.
+  const dipId = new Map(Object.keys(ESEMPIO_ORE).map((etichetta, i) => [etichetta, dipendenti[i].id]));
   const registrazioni = [];
-  for (const [dipId, mappa] of Object.entries(ESEMPIO_ORE)) {
+  for (const [etichettaDip, mappa] of Object.entries(ESEMPIO_ORE)) {
     for (const [codice, giorni] of Object.entries(mappa)) {
       for (const [g, ore] of giorni) {
         registrazioni.push({
-          id: uid("r"), dipendenteId: dipId, commessaId: comId.get(codice),
+          id: uid("r"), dipendenteId: dipId.get(etichettaDip), commessaId: comId.get(codice),
           data: `2026-07-${String(g).padStart(2, "0")}`, ore,
         });
       }
@@ -1517,27 +1528,58 @@ export default function App() {
     return () => { annullato = true; };
   }, [token, notifica, verificandoPagamento, versioneAccesso]);
 
+  /**
+   * Esito dell'ultimo salvataggio. Serve a non mentire: se il salvataggio non
+   * riesce, l'utente deve saperlo subito, non scoprirlo ricaricando la pagina.
+   *
+   * L'avviso si mostra UNA VOLTA quando il salvataggio comincia a fallire, e
+   * una volta quando torna a funzionare: il salvataggio automatico scatta a
+   * ogni modifica, e un messaggio per ognuna sarebbe un tormento. Finché dura
+   * il guasto resta però una fascia fissa in alto, che non si può ignorare.
+   */
+  const salvataggioKO = useRef(false);
+  const [salvataggioNonRiuscito, setSalvataggioNonRiuscito] = useState(null);
+
+  const registraEsitoSalvataggio = useCallback((ris) => {
+    if (!ris || ris.gestito) return ris; // sessione scaduta o abbonamento: hanno già la loro schermata
+    if (ris.ok) {
+      if (salvataggioKO.current) {
+        salvataggioKO.current = false;
+        setSalvataggioNonRiuscito(null);
+        notifica("Collegamento ristabilito: le modifiche sono state salvate.");
+      }
+      return ris;
+    }
+    if (!salvataggioKO.current) {
+      salvataggioKO.current = true;
+      setSalvataggioNonRiuscito(ris.motivo || "motivo sconosciuto");
+      notifica("Non sono riuscito a salvare: le modifiche restano solo su questo schermo.", "errore");
+    }
+    return ris;
+  }, [notifica]);
+
   useEffect(() => {
     if (!pronto.current) return;
     const t = setTimeout(() => {
-      datiAPI.salva(null, { dipendenti, commesse, registrazioni, azienda });
+      datiAPI.salva(null, { dipendenti, commesse, registrazioni, azienda }).then(registraEsitoSalvataggio);
     }, 600);
     return () => clearTimeout(t);
-  }, [dipendenti, commesse, registrazioni, azienda]);
+  }, [dipendenti, commesse, registrazioni, azienda, registraEsitoSalvataggio]);
 
   /** Salvataggio immediato + snapshot di sicurezza forzato, per le operazioni
    *  che cambiano molti dati in un colpo (import, svuota, ripristino).
    *  I materiali si mandano SOLO se presenti nella patch: ometterli significa
    *  "lasciali come stanno" (li gestiscono le rotte /api/materiali). */
-  const salvaSubitoConBackup = useCallback((patch) => {
-    datiAPI.salva(null, {
+  const salvaSubitoConBackup = useCallback(async (patch) => {
+    const ris = await datiAPI.salva(null, {
       dipendenti: patch.dipendenti ?? dipendenti,
       commesse: patch.commesse ?? commesse,
       registrazioni: patch.registrazioni ?? registrazioni,
       azienda: patch.azienda ?? azienda,
       ...(Array.isArray(patch.materiali) ? { materiali: patch.materiali } : {}),
     }, { forzaBackup: true });
-  }, [dipendenti, commesse, registrazioni, azienda]);
+    return registraEsitoSalvataggio(ris);
+  }, [dipendenti, commesse, registrazioni, azienda, registraEsitoSalvataggio]);
 
   const erroreIntervallo = dal && al && al < dal;
   const riep = useMemo(() => {
@@ -1755,16 +1797,18 @@ export default function App() {
     testo: "Dipendenti, commesse, registrazioni, materiali e documenti allegati verranno cancellati. Prima di procedere puoi scaricare un backup dalla sezione Dati.",
     onOk: () => {
       setDipendenti([]); setCommesse([]); setRegistrazioni([]); setMateriali([]); setAllegati([]); setDettaglio(null);
-      salvaSubitoConBackup({ dipendenti: [], commesse: [], registrazioni: [], materiali: [] });
-      notifica("Tutti i dati sono stati cancellati.");
+      salvaSubitoConBackup({ dipendenti: [], commesse: [], registrazioni: [], materiali: [] })
+        .then((r) => r?.ok && notifica("Tutti i dati sono stati cancellati."));
     },
   });
-  const ricaricaEsempio = () => {
+  // Si conferma solo DOPO aver saputo che il salvataggio è andato a buon fine:
+  // dire "ricaricati" e non aver salvato niente è il modo peggiore di sbagliare.
+  const ricaricaEsempio = async () => {
     const d = creaDatiEsempio();
     setDipendenti(d.dipendenti); setCommesse(d.commesse); setRegistrazioni(d.registrazioni);
     setDal("2026-07-01"); setAl("2026-07-31");
-    salvaSubitoConBackup({ dipendenti: d.dipendenti, commesse: d.commesse, registrazioni: d.registrazioni });
-    notifica("Dati d'esempio (luglio 2026) ricaricati.");
+    const ris = await salvaSubitoConBackup({ dipendenti: d.dipendenti, commesse: d.commesse, registrazioni: d.registrazioni });
+    if (ris?.ok) notifica("Dati d'esempio (luglio 2026) ricaricati.");
   };
 
   /** "Backup (JSON)": salva su un file scelto dall'utente sul PC (non più un download del browser).
@@ -1795,11 +1839,11 @@ export default function App() {
     setDipendenti(d.dipendenti); setCommesse(d.commesse); setRegistrazioni(d.registrazioni);
     if (materialiBackup) setMateriali(materialiBackup);
     if (typeof d.azienda === "string") setAzienda(d.azienda);
-    salvaSubitoConBackup({
+    const esito = await salvaSubitoConBackup({
       dipendenti: d.dipendenti, commesse: d.commesse, registrazioni: d.registrazioni,
       azienda: d.azienda, ...(materialiBackup ? { materiali: materialiBackup } : {}),
     });
-    notifica("Backup ripristinato: i dati sono tornati com'erano.");
+    if (esito?.ok) notifica("Backup ripristinato: i dati sono tornati com'erano.");
   };
 
   /* --- import Excel con gestione dei conflitti dipendente+mese --- */
@@ -1825,12 +1869,12 @@ export default function App() {
     fr.readAsArrayBuffer(file);
   };
 
-  const concludiImport = (piani, decisioni, avvisi) => {
+  const concludiImport = async (piani, decisioni, avvisi) => {
     const ris = applicaImport({ dipendenti, commesse, registrazioni }, piani, decisioni);
     setDipendenti(ris.dipendenti); setCommesse(ris.commesse); setRegistrazioni(ris.registrazioni);
-    salvaSubitoConBackup({ dipendenti: ris.dipendenti, commesse: ris.commesse, registrazioni: ris.registrazioni });
+    const esito = await salvaSubitoConBackup({ dipendenti: ris.dipendenti, commesse: ris.commesse, registrazioni: ris.registrazioni });
     avvisi.forEach((a) => notifica(a, "avviso"));
-    notifica(`Import completato: ${piani.length} fogli letti · ${ris.aggiunte} registrazioni aggiunte · ${ris.sostituiti} mesi sostituiti · ${ris.saltati} saltati.`);
+    if (esito?.ok) notifica(`Import completato: ${piani.length} fogli letti · ${ris.aggiunte} registrazioni aggiunte · ${ris.sostituiti} mesi sostituiti · ${ris.saltati} saltati.`);
     const applicati = piani.filter((_, i) => decisioni[i] !== "salta");
     if (applicati.length) vaiMese(applicati[0].mese);
     setFlussoImport(null);
@@ -2005,6 +2049,23 @@ export default function App() {
         </header>
 
         <main key={vista} className="flex-1 px-5 md:px-10 py-8 max-w-6xl w-full noprint anim-vista">
+          {/* Finché il salvataggio non riesce, questa fascia resta lì: è
+              l'unico modo perché nessuno continui a lavorare credendo che i
+              dati vengano registrati mentre non lo sono. */}
+          {salvataggioNonRiuscito && (
+            <div className="mb-8 rounded-xl px-4 py-3.5 anim-pop" role="alert"
+              style={{ background: "rgba(166,58,50,.07)", border: "1px solid rgba(166,58,50,.28)" }}>
+              <p className="text-sm flex items-start gap-2 font-medium" style={{ color: "#A63A32" }}>
+                <AlertTriangle size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
+                Le modifiche non vengono salvate ({salvataggioNonRiuscito}).
+              </p>
+              <p className="text-xs mt-1.5 ml-6 leading-relaxed" style={{ color: "#A63A32" }}>
+                Quello che vedi è solo su questo schermo: se ricarichi la pagina lo perdi. Prima di continuare,
+                scarica un backup dalla sezione Dati; l'avviso sparirà da solo appena il salvataggio tornerà a funzionare.
+              </p>
+            </div>
+          )}
+
           {riep && riep.avvisi.length > 0 && (
             <div className="mb-8 rounded-xl px-4 py-3 space-y-1" style={{ background: "var(--velo-accento)", border: "1px solid rgba(154,120,58,.18)" }} role="alert">
               {riep.avvisi.map((a, i) => (
@@ -2888,6 +2949,17 @@ function SezioneDocumenti({ commessa, allegati, spazio, onCarica, onApri, onElim
 /** Voce del menù commessa quando si decide di NON importare una riga. */
 const NON_IMPORTARE = "";
 
+/**
+ * Da dove arrivano i numeri di questa fattura. Non è un dettaglio tecnico:
+ * dice a chi controlla quanta attenzione serve. Un XML è un dato scritto dal
+ * fornitore; un PDF è una stampa che qualcuno ha dovuto interpretare.
+ */
+const etichettaOrigine = {
+  xml: "letto da XML · valori esatti",
+  documentai: "letto con Document AI · controlla i valori",
+  pdf: "letto da PDF · controlla i valori",
+};
+
 function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) {
   const refFile = useRef();
   const [inLettura, setInLettura] = useState(false);
@@ -2915,7 +2987,12 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
       commessaId: NON_IMPORTARE,
       suggerimento: perDDT.get(r.ddtNumero) || null,
     })));
-    setLettura({ fattura, gruppi: dati.gruppi, avvisi: dati.avvisi, documenti: dati.documenti, fornitore: dati.fornitore, suggerimenti });
+    setLettura({
+      fattura, gruppi: dati.gruppi, avvisi: dati.avvisi, documenti: dati.documenti,
+      fornitore: dati.fornitore, suggerimenti,
+      origine: dati.origine || "xml",
+      scansione: dati.scansione === true,
+    });
   };
 
   const modificaRiga = (id, patch) => setRighe((rr) => rr.map((r) => (r.id === id ? { ...r, ...patch } : r)));
@@ -2976,24 +3053,63 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
           <Micro>Documenti</Micro>
           <h1 className="f-display text-[26px] mt-1" style={{ letterSpacing: "-0.01em" }}>Fatture</h1>
         </div>
-        <input ref={refFile} type="file" accept=".xml,.p7m,application/xml,text/xml" className="hidden"
+        <input ref={refFile} type="file" accept=".xml,.p7m,.pdf,application/xml,text/xml,application/pdf" className="hidden"
           onChange={(e) => { const f = e.target.files[0]; e.target.value = ""; scegliFile(f); }} />
-        <StatoVuoto icona={ReceiptText} titolo={inLettura ? "Lettura della fattura in corso…" : "Importa una fattura elettronica"}
-          testo="Carica il file XML della fattura (anche firmato .p7m): il software ne legge le righe con i prezzi esatti e te le mostra raggruppate per DDT. Niente entra nei costi finché non confermi tu, riga per riga."
+        <StatoVuoto icona={ReceiptText} titolo={inLettura ? "Lettura della fattura in corso…" : "Importa una fattura"}
+          testo="Carica il file XML della fattura (anche firmato .p7m) e il software ne legge le righe con i prezzi esatti, raggruppate per DDT. Se l'XML non ce l'hai, va bene anche un PDF: da quello i dati vengono interpretati, quindi vanno controllati con più attenzione. In ogni caso niente entra nei costi finché non confermi tu, riga per riga."
           azione={inLettura
             ? <Bottone disabled><Loader2 size={14} strokeWidth={1.75} className="animate-spin" /> Lettura…</Bottone>
-            : <Bottone onClick={() => refFile.current.click()}><Upload size={14} strokeWidth={1.75} /> Carica fattura XML</Bottone>} />
+            : <Bottone onClick={() => refFile.current.click()}><Upload size={14} strokeWidth={1.75} /> Carica fattura (XML o PDF)</Bottone>} />
+      </div>
+    );
+  }
+
+  /* --- PDF che è una scansione: non si interpreta niente --- */
+  if (lettura.scansione) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <Micro>Importazione fattura</Micro>
+          <h1 className="f-display text-[26px] mt-1" style={{ letterSpacing: "-0.01em" }}>{lettura.fattura.nomeFile}</h1>
+        </div>
+        <section className="rounded-2xl p-6" style={{ background: "var(--card)", boxShadow: "var(--ombra-sm)" }}>
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-4" style={{ background: "var(--velo-accento)" }}>
+            <AlertTriangle size={18} strokeWidth={1.75} style={{ color: "var(--accent)" }} />
+          </div>
+          <h2 className="f-display text-lg mb-2">Questo PDF è una scansione</h2>
+          <p className="text-sm leading-relaxed mb-4" style={{ color: "var(--muted)" }}>{lettura.avvisi[0]}</p>
+          <p className="text-sm leading-relaxed mb-6" style={{ color: "var(--muted)" }}>
+            Non provo a indovinare cosa c'è scritto: su un documento di spesa un numero sbagliato è peggio di un numero mancante.
+            Il file però è stato <strong style={{ color: "var(--txt)" }}>archiviato</strong>, quindi resta a disposizione.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Bottone onClick={vaiCommesse}><Plus size={14} strokeWidth={1.75} /> Inserisci i materiali a mano</Bottone>
+            <Bottone variante="fantasma" onClick={() => { setLettura(null); setRighe([]); }}>
+              <Upload size={14} strokeWidth={1.75} /> Carica un altro file
+            </Bottone>
+          </div>
+        </section>
       </div>
     );
   }
 
   /* --- fattura letta: assegnazione e conferma --- */
   const doc = lettura.documenti[0] || {};
+  const daPDF = lettura.origine !== "xml"; // PDF o Document AI: in entrambi i casi si interpreta una stampa
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <Micro>Importazione fattura</Micro>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <Micro>Importazione fattura</Micro>
+            {/* Da dove arrivano i numeri: un XML è un dato esatto, un PDF è
+                una stampa interpretata. Chi controlla deve saperlo. */}
+            <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-md" style={{ letterSpacing: ".08em",
+              background: daPDF ? "var(--velo-accento)" : "rgba(47,110,79,.10)",
+              color: daPDF ? "#7C6027" : "var(--euro)" }}>
+              {etichettaOrigine[lettura.origine] || etichettaOrigine.pdf}
+            </span>
+          </div>
           <h1 className="f-display text-[26px] mt-1" style={{ letterSpacing: "-0.01em" }}>{lettura.fornitore.denominazione || "Fornitore non letto"}</h1>
           <p className="f-mono text-[13px] mt-1.5" style={{ color: "var(--muted)" }}>
             {lettura.fornitore.partitaIVA && `P.IVA ${lettura.fornitore.partitaIVA} · `}

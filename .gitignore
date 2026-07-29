@@ -2,3 +2,17 @@ node_modules/
 dist/
 .env
 .claude/
+
+# Chiavi e credenziali: non devono MAI finire nel repository.
+# Le chiavi vere stanno fuori dal progetto (vedi backend/.env.example);
+# queste regole sono la rete di sicurezza, non il pavimento.
+chiavi/
+segreti/
+*service-account*.json
+*-service-account.json
+costi-commessa-fatture-*.json
+gcp-*.json
+*.pem
+*.key
+.env.*
+!.env.example

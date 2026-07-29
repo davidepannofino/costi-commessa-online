@@ -13,6 +13,10 @@ import {
   archivioEsterno, descrizioneArchivio, QUOTA_AZIENDA_BYTE, TETTO_GLOBALE_BYTE,
 } from "./archivio.js";
 import { leggiFatturaXML, raggruppaPerDDT, riconosciFormatoFattura, estraiXMLdaP7M } from "./fatturaPA.js";
+import { leggiFatturaPDF, eUnPDF, estraiRighePDF } from "./fatturaPDF.js";
+import {
+  leggiFatturaConDocumentAI, documentAIConfigurato, descrizioneDocumentAI, consumiDelMese,
+} from "./fatturaDocumentAI.js";
 
 const app = express();
 app.use(cors());
@@ -811,7 +815,9 @@ app.delete("/api/allegati/:id", richiedeAuth, richiedeAbbonamentoAttivo, async (
    ha assegnato le commesse e confermato (rotta /importa).
 --------------------------------------------------------------------------- */
 
-const MAX_FATTURA_BYTE = 10 * 1024 * 1024; // gli XML sono piccoli: 10 MB è già larghissimo
+// Gli XML sono piccoli; un PDF di fattura sta in qualche centinaio di kB, ma
+// una scansione a colori può arrivare a qualche MB: 10 MB copre tutto.
+const MAX_FATTURA_BYTE = 10 * 1024 * 1024;
 
 const corpoFattura = express.raw({ type: () => true, limit: "11mb" });
 const leggiCorpoFattura = (req, res, next) =>
@@ -869,6 +875,70 @@ async function suggerimentiDaDDT(aziendaId, numeriDDT) {
   return suggerimenti;
 }
 
+/**
+ * Legge un PDF scegliendo il lettore migliore disponibile, e ripiegando con
+ * garbo se quello migliore non c'è o non risponde.
+ *
+ *   1. Document AI, se configurato: legge anche le scansioni e riconosce le
+ *      righe molto meglio.
+ *   2. Riconoscimento testuale di base: gratuito, funziona sui PDF con testo.
+ *
+ * Non fallisce mai per colpa di Document AI: se qualcosa va storto si torna
+ * al lettore di base e si dice all'utente cos'è successo, invece di
+ * lasciarlo davanti a un errore.
+ */
+/**
+ * Riduce l'errore di Google a una frase leggibile. I casi che capitano
+ * davvero hanno un messaggio proprio: gli altri vengono accorciati.
+ */
+function riassumiErrore(e) {
+  const testo = String(e?.message || "motivo sconosciuto");
+  if (/billing/i.test(testo)) return "la fatturazione non è attiva sul progetto Google";
+  if (/PERMISSION_DENIED|403/i.test(testo)) return "permessi mancanti sul progetto Google";
+  if (/NOT_FOUND|404/i.test(testo)) return "processore non trovato: controlla id e regione";
+  if (/UNAUTHENTICATED|401/i.test(testo)) return "credenziali non valide";
+  if (/quota|RESOURCE_EXHAUSTED|429/i.test(testo)) return "quota Google esaurita";
+  if (/tetto mensile/i.test(testo)) return testo;   // è già un messaggio nostro
+  if (/pagine/i.test(testo) && /limite/i.test(testo)) return testo;
+  if (/DEADLINE|timeout|ETIMEDOUT|ENOTFOUND|ECONNRESET/i.test(testo)) return "il servizio non ha risposto in tempo";
+  return testo.length > 120 ? testo.slice(0, 117) + "…" : testo;
+}
+
+async function leggiPDF(contenuto) {
+  if (!documentAIConfigurato) {
+    const base = await leggiFatturaPDF(contenuto);
+    if (!base.scansione) {
+      base.avvisi.push("La lettura avanzata (Document AI) non è configurata: ho usato il riconoscimento di base, quindi controlla i valori con attenzione.");
+    }
+    return base;
+  }
+
+  let pagineStimate = null;
+  try {
+    pagineStimate = (await estraiRighePDF(contenuto)).pagine;
+  } catch {
+    // Se non si riesce nemmeno a contare le pagine si prosegue lo stesso:
+    // sarà Document AI a dire se il documento è troppo lungo.
+  }
+
+  try {
+    return await leggiFatturaConDocumentAI(contenuto, { pagineStimate });
+  } catch (e) {
+    // Il motivo tecnico completo va nei log; all'utente si dice l'essenziale,
+    // altrimenti si ritrova in faccia mezza pagina di errore di Google.
+    console.error("Document AI non utilizzabile:", e.message);
+    const base = await leggiFatturaPDF(contenuto);
+    const motivo = riassumiErrore(e);
+    if (base.scansione) {
+      // Senza Document AI una scansione resta illeggibile: si spiega perché.
+      base.avvisi = [`Non sono riuscito a usare la lettura avanzata (${motivo}), e questo PDF è una scansione: senza quella non c'è testo da leggere. Puoi inserire i materiali a mano, oppure caricare la fattura in XML. Il file resta comunque archiviato.`];
+    } else {
+      base.avvisi.push(`Non sono riuscito a usare la lettura avanzata (${motivo}): ho letto il PDF con il riconoscimento di base, controlla i valori con attenzione.`);
+    }
+    return base;
+  }
+}
+
 /** Carica una fattura XML/P7M, la conserva e restituisce le righe lette. */
 app.post("/api/fatture", richiedeAuth, richiedeAbbonamentoAttivo, leggiCorpoFattura, async (req, res) => {
   const contenuto = Buffer.isBuffer(req.body) ? req.body : null;
@@ -877,10 +947,13 @@ app.post("/api/fatture", richiedeAuth, richiedeAbbonamentoAttivo, leggiCorpoFatt
     return res.status(413).json({ errore: `Il file è troppo grande: il limite è ${inMB(MAX_FATTURA_BYTE)} MB.` });
   }
 
-  const formato = riconosciFormatoFattura(contenuto);
+  // Il PDF è il piano B: si usa quando l'XML non c'è. La lettura dell'XML
+  // resta esattamente quella di prima, questo è un ramo separato.
+  const pdf = eUnPDF(contenuto);
+  const formato = pdf ? "pdf" : riconosciFormatoFattura(contenuto);
   if (!formato) {
     return res.status(415).json({
-      errore: "Questo file non è una fattura elettronica: servono un XML FatturaPA (.xml) o la sua versione firmata (.xml.p7m).",
+      errore: "Questo file non è una fattura: servono un XML FatturaPA (.xml), la sua versione firmata (.xml.p7m) oppure un PDF.",
     });
   }
 
@@ -894,18 +967,28 @@ app.post("/api/fatture", richiedeAuth, richiedeAbbonamentoAttivo, leggiCorpoFatt
 
   let lettura;
   try {
-    try {
-      lettura = leggiFatturaXML(xml);
-    } catch (primoTentativo) {
-      // Il file sembrava un XML ma non si legge: può essere un involucro con
-      // l'XML dentro (capita con certe firme). Si prova a estrarlo prima di
-      // arrendersi; se non si trova nulla, vale l'errore originale.
-      const dentro = formato === "xml" ? estraiXMLdaP7M(contenuto) : null;
-      if (!dentro) throw primoTentativo;
-      xml = dentro;
-      lettura = leggiFatturaXML(xml);
+    if (formato === "pdf") {
+      lettura = await leggiPDF(contenuto);
+      lettura.gruppi = raggruppaPerDDT(lettura.righe);
+    } else {
+      try {
+        lettura = leggiFatturaXML(xml);
+      } catch (primoTentativo) {
+        // Il file sembrava un XML ma non si legge: può essere un involucro con
+        // l'XML dentro (capita con certe firme). Si prova a estrarlo prima di
+        // arrendersi; se non si trova nulla, vale l'errore originale.
+        const dentro = formato === "xml" ? estraiXMLdaP7M(contenuto) : null;
+        if (!dentro) throw primoTentativo;
+        xml = dentro;
+        lettura = leggiFatturaXML(xml);
+      }
+      lettura.gruppi = raggruppaPerDDT(lettura.righe);
     }
-    lettura.gruppi = raggruppaPerDDT(lettura.righe);
+    // Da dove vengono i dati: l'XML è esatto, il PDF è interpretato. Il
+    // frontend lo dice all'utente, che sui PDF deve guardare meglio.
+    // Il lettore PDF può aver già dichiarato "documentai": non si sovrascrive.
+    lettura.origine = lettura.origine || (formato === "pdf" ? "pdf" : "xml");
+    lettura.scansione = lettura.scansione === true;
   } catch (e) {
     // Errore di lettura: si risponde con il motivo, senza conservare nulla.
     return res.status(422).json({ errore: e.message });
@@ -914,14 +997,17 @@ app.post("/api/fatture", richiedeAuth, richiedeAbbonamentoAttivo, leggiCorpoFatt
   const id = randomUUID();
   const documento = lettura.documenti[0] || {};
   try {
-    const salvato = await salvaFile({ aziendaId: req.aziendaId, id, contenuto, tipo: "application/xml" });
+    const tipoFile = formato === "pdf" ? "application/pdf"
+      : formato === "p7m" ? "application/pkcs7-mime"
+      : "application/xml";
+    const salvato = await salvaFile({ aziendaId: req.aziendaId, id, contenuto, tipo: tipoFile });
     const ris = await pool.query(
       `INSERT INTO fatture (id, azienda_id, nome_file, tipo, dimensione, posizione, contenuto, chiave_esterna,
                             fornitore, partita_iva, numero, data)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NULLIF($12, '')::date)
        RETURNING id, nome_file, fornitore, partita_iva, numero, to_char(data, 'YYYY-MM-DD') AS data,
                  dimensione, caricata_il, importata_il, righe_importate`,
-      [id, req.aziendaId, nomeFilePulito(req.headers["x-nome-file"]), formato === "p7m" ? "application/pkcs7-mime" : "application/xml",
+      [id, req.aziendaId, nomeFilePulito(req.headers["x-nome-file"]), tipoFile,
        contenuto.length, salvato.posizione, salvato.contenuto, salvato.chiaveEsterna,
        lettura.fornitore.denominazione, lettura.fornitore.partitaIVA, documento.numero || "", documento.data || ""]
     );
@@ -1053,7 +1139,16 @@ app.get("/api/fatture/:id/file", richiedeAuth, richiedeAbbonamentoAttivo, async 
 });
 
 const port = process.env.PORT || 3001;
-app.listen(port, () => {
+app.listen(port, async () => {
   console.log(`Backend in ascolto sulla porta ${port}`);
   console.log(`Documenti DDT: ${descrizioneArchivio} · quota per azienda ${inMB(QUOTA_AZIENDA_BYTE)} MB`);
+  console.log(`Fatture PDF: ${descrizioneDocumentAI}`);
+  if (documentAIConfigurato) {
+    try {
+      const c = await consumiDelMese();
+      console.log(`  consumo di ${c.mese}: ${c.pagine} pagine su un tetto di ${c.tetto} · ${c.chiamate} letture`);
+    } catch (e) {
+      console.error("  (contatore dei consumi non leggibile:", e.message + ")");
+    }
+  }
 });

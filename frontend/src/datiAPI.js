@@ -123,19 +123,39 @@ export const datiAPI = {
     }
   },
 
+  /**
+   * Salva l'intero stato e DICE COM'È ANDATA.
+   *
+   * Prima questa funzione inghiottiva gli errori con un console.error: chi la
+   * chiamava mostrava comunque "salvato", e l'utente continuava a lavorare
+   * credendo che i dati fossero al sicuro mentre non lo erano. Un salvataggio
+   * fallito in silenzio è peggio di un errore: se ne accorge solo al
+   * ricaricamento della pagina, quando il lavoro è già perso.
+   *
+   * Ritorna { ok } oppure { ok: false, motivo, gestito }. "gestito" indica i
+   * casi che hanno già una loro schermata (sessione scaduta, abbonamento):
+   * lì un avviso in più sarebbe solo rumore.
+   */
   async salva(_aziendaId, dati) {
+    let res;
     try {
-      const res = await fetch(`${API_BASE}/api/stato`, {
+      res = await fetch(`${API_BASE}/api/stato`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", ...headerAuth() },
         body: JSON.stringify(dati),
       });
-      if (res.status === 401) { gestoreSessioneScaduta?.(); return; }
-      if (res.status === 402) { gestoreAbbonamentoRichiesto?.(); return; }
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
     } catch (e) {
-      console.error("Salvataggio non riuscito:", e);
+      console.error("Salvataggio non riuscito (server irraggiungibile):", e);
+      return { ok: false, motivo: "server irraggiungibile" };
     }
+    if (res.status === 401) { gestoreSessioneScaduta?.(); return { ok: false, motivo: "sessione scaduta", gestito: true }; }
+    if (res.status === 402) { gestoreAbbonamentoRichiesto?.(); return { ok: false, motivo: "abbonamento richiesto", gestito: true }; }
+    if (!res.ok) {
+      const dettaglio = await res.json().catch(() => null);
+      console.error("Salvataggio non riuscito:", res.status, dettaglio);
+      return { ok: false, motivo: dettaglio?.errore || `errore ${res.status} del server` };
+    }
+    return { ok: true };
   },
 
   /**

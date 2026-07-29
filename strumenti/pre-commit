@@ -1,0 +1,61 @@
+#!/bin/sh
+#
+# Blocca il commit se fra le modifiche in stage compare una credenziale.
+#
+# Serve a rendere IMPOSSIBILE, non solo improbabile, pubblicare una chiave.
+# Il .gitignore evita che certi file entrino; questo controlla il CONTENUTO,
+# perché una chiave incollata dentro un file qualsiasi passerebbe comunque.
+#
+# Installazione (già fatta, si rifà così se serve):
+#   cp strumenti/pre-commit .git/hooks/pre-commit
+#
+# In un caso legittimo di falso allarme si può saltare con "git commit
+# --no-verify", ma pensaci due volte: questo controllo esiste per i giorni
+# in cui si va di fretta.
+
+trovato=0
+
+segnala() {
+  if [ "$trovato" -eq 0 ]; then
+    echo ""
+    echo "  COMMIT BLOCCATO: fra le modifiche c'è qualcosa che sembra una credenziale."
+    echo ""
+  fi
+  trovato=1
+  echo "   → $1"
+}
+
+# 1. Contenuto: chiavi private e service account di Google
+if git diff --cached -U0 | grep -qE '^\+.*-----BEGIN [A-Z ]*PRIVATE KEY-----'; then
+  # Il testo qui sotto NON deve contenere il marcatore per intero, altrimenti
+  # questo file farebbe scattare il controllo su sé stesso.
+  segnala "una chiave privata (intestazione BEGIN ... PRIVATE KEY)"
+fi
+if git diff --cached -U0 | grep -qE '^\+.*"private_key"[[:space:]]*:'; then
+  segnala "un campo \"private_key\" (chiave di service account)"
+fi
+if git diff --cached -U0 | grep -qE '^\+.*"type"[[:space:]]*:[[:space:]]*"service_account"'; then
+  segnala "un file di service account Google"
+fi
+
+# 2. Nomi di file che non dovrebbero mai essere in stage
+for file in $(git diff --cached --name-only --diff-filter=ACM); do
+  case "$file" in
+    *.pem|*.key|*service-account*.json|gcp-*.json|.env|.env.*)
+      case "$file" in
+        .env.example) ;;                      # il modello senza valori va bene
+        *) segnala "il file $file" ;;
+      esac
+      ;;
+  esac
+done
+
+if [ "$trovato" -eq 1 ]; then
+  echo ""
+  echo "  Le chiavi vere vanno tenute FUORI dal progetto (vedi backend/.env.example)."
+  echo "  Se una chiave è già uscita, non basta toglierla dal commit: va revocata e rifatta."
+  echo ""
+  exit 1
+fi
+
+exit 0
