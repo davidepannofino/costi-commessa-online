@@ -1067,7 +1067,7 @@ function SchermataAccesso({ alSuccesso, messaggio }) {
           </p>
         </div>
 
-        <p className="relative t-piccolo" style={{ color: "var(--txt-fioco)" }}>
+        <p className="relative t-piccolo" style={{ color: "var(--txt-tenue)" }}>
           Calcoli in piena precisione. Ogni azienda, dati isolati.
         </p>
       </div>
@@ -2317,7 +2317,7 @@ export default function App() {
             <span className="truncate" style={{ color: "var(--txt-tenue)", maxWidth: "18ch" }}>
               {azienda || "La tua azienda"}
             </span>
-            <ChevronRight size={12} strokeWidth={1.75} style={{ color: "var(--txt-fioco)" }} className="shrink-0" />
+            <ChevronRight size={12} strokeWidth={1.75} style={{ color: "var(--txt-tenue)" }} className="shrink-0" />
             <span style={{ color: "var(--txt-chiaro)", fontWeight: 500 }}>
               {NAV.find((v) => v.id === vista)?.nome ?? "Dashboard"}
             </span>
@@ -2334,7 +2334,7 @@ export default function App() {
               </button>
               <input type="date" value={dal} onChange={(e) => setDal(e.target.value)} aria-label="Inizio intervallo"
                 className="f-mono t-piccolo px-1.5 py-1 outline-none campo-nudo" />
-              <span style={{ color: "var(--txt-fioco)" }}>–</span>
+              <span style={{ color: "var(--txt-tenue)" }}>–</span>
               <input type="date" value={al} onChange={(e) => setAl(e.target.value)} aria-label="Fine intervallo"
                 className="f-mono t-piccolo px-1.5 py-1 outline-none campo-nudo"
                 style={erroreIntervallo ? { color: "var(--errore)" } : undefined} />
@@ -2731,11 +2731,11 @@ function BandaEroe({ costi, dal, al, titolo = "Costo del periodo", metriche = []
             <span key={v.e} className="flex items-baseline gap-2">
               <span aria-hidden="true" className="shrink-0" style={{ width: 6, height: 6, borderRadius: 2, background: v.tono, transform: "translateY(-1px)" }} />
               <span style={{ color: "var(--txt-tenue)" }}>{v.e}</span>
-              <span className="f-mono" style={{ color: v.v > 0 ? "var(--verde)" : "var(--txt-debole)" }}>{euro(v.v)}</span>
+              <span className="f-mono" style={{ color: v.v > 0 ? "var(--verde)" : "var(--txt-tenue)" }}>{euro(v.v)}</span>
             </span>
           ))}
           {dal && (
-            <span className="f-mono ml-auto" style={{ color: "var(--txt-fioco)" }}>
+            <span className="f-mono ml-auto" style={{ color: "var(--txt-tenue)" }}>
               {fmtData(dal)} – {fmtData(al)}
             </span>
           )}
@@ -2753,7 +2753,7 @@ function BandaEroe({ costi, dal, al, titolo = "Costo del periodo", metriche = []
                   {m.v}
                 </span>
                 {m.u && <span className="t-piccolo ml-1" style={{ color: "var(--txt-tenue)" }}>{m.u}</span>}
-                {m.sub && <span className="block t-piccolo mt-0.5" style={{ color: "var(--txt-fioco)" }}>{m.sub}</span>}
+                {m.sub && <span className="block t-piccolo mt-0.5" style={{ color: "var(--txt-tenue)" }}>{m.sub}</span>}
               </dd>
             </div>
           ))}
@@ -2853,6 +2853,9 @@ function Dashboard({ riep, costi, dal, al, dipendenti, serieMensile, vaiCommesse
                 <button onClick={() => apri(r)}
                   className="w-full text-left px-6 py-3 flex items-center gap-4 btn riga"
                   title={`Apri il dettaglio di ${r.commessa.codice}`}>
+                  {/* La numerazione è l'unico posto dove --txt-fioco è
+                      ammesso: non è testo da leggere, è un appiglio per
+                      l'occhio quando si scorre. */}
                   <span className="f-mono shrink-0 text-right" style={{ width: 14, fontSize: 11, color: "var(--txt-fioco)" }}>{i + 1}</span>
                   <span className={"shrink-0 badge-codice" + (i === 0 ? " badge-codice-primo" : "")}>{r.commessa.codice}</span>
                   <span className="truncate t-piccolo" style={{ color: "var(--txt-attenuato)" }}>{r.commessa.descrizione}</span>
@@ -2889,7 +2892,7 @@ function Dashboard({ riep, costi, dal, al, dipendenti, serieMensile, vaiCommesse
                     <p className="f-mono t-corpo shrink-0" style={{ color: "var(--euro)", fontWeight: 500 }}>{euro(d.costo)}</p>
                   </div>
                   <BarraQuota quota={totCosto > 0 ? d.costo / totCosto : 0} colore={TONO_MANODOPERA} />
-                  <p className="f-mono t-piccolo mt-2" style={{ color: "var(--txt-fioco)" }}>
+                  <p className="f-mono t-piccolo mt-2" style={{ color: "var(--txt-tenue)" }}>
                     {fmtOre.format(d.ore)} h · {fmtPerc.format(totCosto > 0 ? (d.costo / totCosto) * 100 : 0)}% del costo
                   </p>
                 </div>
@@ -3138,11 +3141,11 @@ function PannelloDettaglio({ riga, riep, costi, dal, al, serieMensile, allegati,
               <span key={v.e} className="flex items-baseline gap-2">
                 <span aria-hidden="true" className="shrink-0" style={{ width: 6, height: 6, borderRadius: 2, background: v.tono, transform: "translateY(-1px)" }} />
                 <span style={{ color: "var(--txt-tenue)" }}>{v.e}</span>
-                <span className="f-mono" style={{ color: v.v > 0 ? "var(--verde)" : "var(--txt-debole)" }}>{euro(v.v)}</span>
+                <span className="f-mono" style={{ color: v.v > 0 ? "var(--verde)" : "var(--txt-tenue)" }}>{euro(v.v)}</span>
               </span>
             ))}
           </div>
-          <p className="t-piccolo f-mono mt-4" style={{ color: "var(--txt-fioco)" }}>
+          <p className="t-piccolo f-mono mt-4" style={{ color: "var(--txt-tenue)" }}>
             {fmtOre.format(riga.ore)} h · {fmtPerc.format(quota * 100)}% del periodo · {fmtData(dal)} – {fmtData(al)}
           </p>
         </div>
@@ -3158,7 +3161,7 @@ function PannelloDettaglio({ riga, riep, costi, dal, al, serieMensile, allegati,
                     <p className="f-mono t-corpo shrink-0" style={{ color: "var(--euro)", fontWeight: 500 }}>{euro(d.costo)}</p>
                   </div>
                   <BarraQuota quota={maxDip > 0 ? d.costo / maxDip : 0} colore={TONO_MANODOPERA} />
-                  <p className="t-piccolo f-mono mt-2" style={{ color: "var(--txt-fioco)" }}>{fmtOre.format(d.ore)} h · tariffa media {fmtNum4.format(d.tariffaMedia)} €/h</p>
+                  <p className="t-piccolo f-mono mt-2" style={{ color: "var(--txt-tenue)" }}>{fmtOre.format(d.ore)} h · tariffa media {fmtNum4.format(d.tariffaMedia)} €/h</p>
                 </div>
               ))}
             </div>
@@ -4159,7 +4162,7 @@ function VistaDipendenti({ dipendenti, setDipendenti, riep, elimina, notifica })
                       style={{ width: 32, height: 32, color: "var(--txt-attenuato)" }}>{iniziali}</span>
                     <div className="min-w-0">
                       <p className="t-sotto truncate">{dip.nome} {dip.cognome}</p>
-                      <p className="t-piccolo f-mono mt-1" style={{ color: "var(--txt-fioco)" }}>
+                      <p className="t-piccolo f-mono mt-1" style={{ color: "var(--txt-tenue)" }}>
                         {nel ? `${fmtOre.format(nel.ore)} h nell'intervallo · ` : "nessuna ora nell'intervallo"}
                         {nel && <span style={{ color: "var(--verde)" }}>{euro(nel.costo)}</span>}
                       </p>
@@ -4202,7 +4205,7 @@ function VistaDipendenti({ dipendenti, setDipendenti, riep, elimina, notifica })
                                     : <span className="font-sans t-piccolo" style={{ color: "var(--errore)" }}>manca</span>}
                                 </td>
                                 <td className="text-right" style={{ padding: "9px 0" }}>{fmtOre.format(ore)}</td>
-                                <td className="text-right" style={{ padding: "9px 0", color: tar != null ? "var(--txt)" : "var(--txt-debole)" }}>
+                                <td className="text-right" style={{ padding: "9px 0", color: tar != null ? "var(--txt)" : "var(--txt-tenue)" }}>
                                   {tar != null ? fmtNum4.format(tar) + " €/h" : "—"}
                                 </td>
                               </tr>
@@ -4386,7 +4389,7 @@ function VistaDati({ dipendenti, commesse, registrazioni, setCommesse, aggiungi,
               </Campo>
               <Bottone onClick={registra}><Plus size={14} strokeWidth={1.75} /> Registra</Bottone>
             </div>
-            <p className="t-piccolo mt-3.5" style={{ color: "var(--txt-fioco)" }}>
+            <p className="t-piccolo mt-3.5" style={{ color: "var(--txt-tenue)" }}>
               Il modulo resta impostato: cambia solo le ore e premi Invio per inserire una giornata dopo l'altra.
             </p>
           </div>
@@ -4526,7 +4529,7 @@ function VistaDati({ dipendenti, commesse, registrazioni, setCommesse, aggiungi,
               <Bottone variante="fantasma" onClick={esempio}><RotateCcw size={14} strokeWidth={1.75} /> Ricarica esempio</Bottone>
               <Bottone variante="pericolo" onClick={svuota}><Eraser size={14} strokeWidth={1.75} /> Svuota tutto</Bottone>
             </div>
-            <p className="t-piccolo mt-3" style={{ color: "var(--txt-fioco)" }}>
+            <p className="t-piccolo mt-3" style={{ color: "var(--txt-tenue)" }}>
               «Ricarica esempio» sostituisce i tuoi dati con quelli dimostrativi. Entrambe chiedono conferma.
             </p>
           </div>
@@ -4659,10 +4662,10 @@ function ReportStampa({ riep, costi, dal, al, azienda }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", borderBottom: "2px solid #171B22", paddingBottom: 10, marginBottom: 16 }}>
         <div>
           <div style={{ width: 120, height: 34, border: "1px dashed #999", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "#999", marginBottom: 6 }}>spazio logo</div>
-          <p style={{ fontWeight: 700, fontSize: 16, margin: 0 }}>{azienda || "________________________"}</p>
+          <p style={{ fontWeight: 600, fontSize: 16, margin: 0 }}>{azienda || "________________________"}</p>
         </div>
         <div style={{ textAlign: "right", fontSize: 11 }}>
-          <p style={{ margin: 0, fontWeight: 700 }}>Costi per commessa</p>
+          <p style={{ margin: 0, fontWeight: 600 }}>Costi per commessa</p>
           <p style={{ margin: 0 }}>Periodo: {fmtData(dal)} — {fmtData(al)}</p>
           <p style={{ margin: 0 }}>Stampato il {fmtData(oggiISO())}</p>
         </div>
@@ -4691,7 +4694,7 @@ function ReportStampa({ riep, costi, dal, al, azienda }) {
           ))}
         </tbody>
         <tfoot>
-          <tr style={{ borderTop: "1.5px solid #171B22", fontWeight: 700 }}>
+          <tr style={{ borderTop: "1.5px solid #171B22", fontWeight: 600 }}>
             <td style={{ padding: "7px 8px" }} colSpan={2}>TOTALE</td>
             <td style={{ padding: "7px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtOre.format(riep.totOre)}</td>
             <td style={{ padding: "7px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtNum.format(costi?.totManodopera ?? riep.totCosto)}</td>
@@ -4744,10 +4747,14 @@ function ReportStampa({ riep, costi, dal, al, azienda }) {
 function StileGlobale() {
   return (
     <style>{`
-      /* Inter si carica da index.html, non da qui: un @import dentro uno stile
-         iniettato a runtime viene scoperto tardissimo e fa saltare il
-         numero-eroe al primo disegno. Se un giorno serve toglierlo dalla rete
-         e ospitarlo in proprio, si tocca solo la testa del documento. */
+      /* Il carattere — Fira Sans — si carica da index.html, non da qui: un
+         @import dentro uno stile iniettato a runtime viene scoperto
+         tardissimo e fa saltare il numero-eroe al primo disegno. Se un giorno
+         serve toglierlo dalla rete e ospitarlo in proprio, si tocca solo la
+         testa del documento.
+         Nota per chi legge: questo commento diceva "Inter" ed è rimasto
+         indietro di un giro quando il carattere è cambiato. Se cambi di nuovo
+         faccia, il nome sta scritto in due punti — qui e in index.html. */
       :root{
         /* ============ TEMA SCURO — la tavolozza approvata ============
            Sei livelli di fondo, dal più profondo al più rialzato. In un tema
@@ -4870,15 +4877,17 @@ function StileGlobale() {
          ragionati, non guardati a schermo: se una riga ti sembra ancora larga
          o stretta, si muove di mezzo centesimo per volta. */
       .t-eroe-xl{ font-size:56px; line-height:.98; font-weight:600; letter-spacing:-.03em; font-variant-numeric:tabular-nums; color:var(--txt); }
-      .t-eroe{ font-size:45px; line-height:1.02; font-weight:600; letter-spacing:-.028em; color:var(--txt); }
+      /* Il grassetto si ferma a 600, che è il peso più alto che carichiamo.
+         Otto <strong> chiedevano il 700 del browser: non essendoci, il
+         browser lo fabbricava ingrassando le aste, e su Fira Sans si vede. */
+      strong, b{ font-weight:600; }
       .t-titolo{ font-size:21px; line-height:1.25; font-weight:600; letter-spacing:-.012em; color:var(--txt); }
       .t-sezione{ font-size:17px; line-height:1.3; font-weight:600; letter-spacing:-.008em; color:var(--txt-chiaro); }
       .t-sotto{ font-size:13.5px; line-height:1.4; font-weight:500; letter-spacing:0; color:var(--txt-chiaro); }
       .t-corpo{ font-size:13px; line-height:1.6; }
       .t-piccolo{ font-size:12px; line-height:1.5; }
       .t-micro{ font-size:11px; font-weight:500; letter-spacing:.06em; text-transform:uppercase; color:var(--txt-etichetta); }
-      .t-leggibile{ max-width:66ch; }
-      @media (max-width:640px){ .t-eroe-xl{ font-size:37px; letter-spacing:-.022em; } .t-eroe{ font-size:34px; } .t-titolo{ font-size:19px; } }
+      @media (max-width:640px){ .t-eroe-xl{ font-size:37px; letter-spacing:-.022em; } .t-titolo{ font-size:19px; } }
 
       .f-display{ font-weight:600; letter-spacing:-.01em; }
       /* Cifre a larghezza fissa: si incolonnano come in una tabella. Nessun
@@ -4925,7 +4934,14 @@ function StileGlobale() {
          non si riempie mai di rosso — resta un contorno, perché un bottone
          rosso pieno chiede di essere premuto. */
       .btn-pieno{ background:var(--accento); color:var(--accento-testo); }
-      .btn-pieno:hover:not(:disabled){ background:var(--accento-chiaro); }
+      /* Al passaggio del mouse il bronzo si SCURISCE, non si schiarisce.
+         Su un tema scuro il riflesso è schiarire, e infatti prima faceva così
+         — ma l'inchiostro di questo bottone è quasi bianco, quindi schiarire
+         il campo si mangia il contrasto: #FFFBF5 su --accento-chiaro fa
+         3,11:1, cioè la correzione a 4,66:1 si disfaceva proprio sul bottone
+         "Registra" per cui era stata scritta. Scurendo si arriva a 5,69:1 e
+         il cambiamento si legge lo stesso. */
+      .btn-pieno:hover:not(:disabled){ background:#7A6042; }
       .btn-fantasma{ background:var(--bg-elevato); color:var(--txt-chiaro); border:.5px solid var(--bordo-input); }
       .btn-fantasma:hover:not(:disabled){ background:var(--bg-hover); border-color:#2E2E36; }
       .btn-pericolo{ background:transparent; color:var(--rosso); border:.5px solid var(--rosso-bordo); }
@@ -4943,8 +4959,11 @@ function StileGlobale() {
       /* --- CARD: in un tema scuro la profondità è il fondo più chiaro
              più un filo di bordo. Le ombre non hanno niente da scurire. --- */
       .card{ background:var(--bg-card); border:.5px solid var(--bordo); border-radius:var(--r-md); }
-      .card-viva{ transition:border-color var(--moto); }
-      .card-viva:hover{ border-color:var(--bordo-input); }
+      /* Qui c'erano .t-eroe, .t-leggibile e .card-viva: definite e mai usate
+         da nessun elemento. È lo stesso peccato per cui è stato cancellato
+         il componente Valore — regole morte in un sistema di design sono peggio di
+         nessuna regola, perché il prossimo che cerca "come si fa un titolo
+         grande" ne trova due e sceglie quella sbagliata. */
 
       /* --- BOX: il contenitore rialzato di icone, campi, contatori --- */
       .box{ background:var(--bg-elevato); border:.5px solid var(--bordo-input); border-radius:var(--r-sm); }
