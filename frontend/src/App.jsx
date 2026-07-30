@@ -2587,6 +2587,52 @@ export default function App() {
           onChiudi={() => setIdDettaglio(null)} />
       )}
 
+      {/* Hai chiesto una commessa che nell'intervallo scelto non ha niente.
+          Prima, in questo caso, non si apriva nulla — e in un'applicazione di
+          numeri il silenzio si legge come guasto: hai premuto, non è successo
+          niente, quindi è rotto. Qui si dice cos'è successo, con il nome della
+          commessa e le date in chiaro, e si offre la via d'uscita: allargare
+          l'intervallo a tutto quello che c'è. */}
+      {idDettaglio && !dettaglio && (() => {
+        const c = commesse.find((x) => x.id === idDettaglio);
+        return (
+          <Modale titolo={c ? "Niente da mostrare in queste date" : "Commessa non trovata"}
+            onChiudi={() => setIdDettaglio(null)}>
+            {c ? (
+              <>
+                <p className="t-corpo leading-relaxed mb-3" style={{ color: "var(--txt-medio)" }}>
+                  <span className="badge-codice">{c.codice}</span>
+                  {c.descrizione && <span style={{ color: "var(--txt-attenuato)" }}> — {c.descrizione}</span>}
+                </p>
+                <p className="t-corpo leading-relaxed mb-6" style={{ color: "var(--txt-attenuato)" }}>
+                  Non ha né ore né materiali fra il <span className="f-mono" style={{ color: "var(--txt-medio)" }}>{fmtData(dal)}</span> e
+                  il <span className="f-mono" style={{ color: "var(--txt-medio)" }}>{fmtData(al)}</span>.
+                  La commessa esiste: in questo intervallo non c'è niente da mostrare.
+                </p>
+                <div className="flex flex-wrap justify-end gap-2">
+                  <Bottone variante="fantasma" onClick={() => setIdDettaglio(null)}>Chiudi</Bottone>
+                  {estremiDati && (
+                    <Bottone onClick={() => { setDal(estremiDati.min); setAl(estremiDati.max); }}>
+                      <CalendarDays size={14} strokeWidth={1.75} /> Allarga a tutti i dati
+                    </Bottone>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="t-corpo leading-relaxed mb-6" style={{ color: "var(--txt-attenuato)" }}>
+                  L'indirizzo indica una commessa che non esiste più, oppure che non
+                  appartiene a questa azienda. Non è stato modificato niente.
+                </p>
+                <div className="flex justify-end">
+                  <Bottone onClick={() => setIdDettaglio(null)}>Ho capito</Bottone>
+                </div>
+              </>
+            )}
+          </Modale>
+        );
+      })()}
+
       {/* conflitto d'import: sostituisci / salta / annulla tutto */}
       {pianoConflitto && (
         <Modale titolo="Ore già presenti" onChiudi={() => decidiConflitto("annulla")} bloccante>
