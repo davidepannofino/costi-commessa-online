@@ -640,18 +640,49 @@ function useContatore(valore, durata = 700) {
 }
 
 /** Micro-etichetta: l'unico posto dove è ammesso il maiuscolo. */
+/* ---------------------------------------------------------------------------
+   COMPONENTI BASE — definiti una volta, riusati in ogni schermata.
+   Se un bottone o un campo va cambiato, si cambia QUI: è ciò che tiene
+   l'applicazione coerente da una schermata all'altra.
+--------------------------------------------------------------------------- */
+
+/** Sovratitolo: la parolina in maiuscoletto sopra un titolo o un valore. */
 const Micro = ({ children, tono }) => (
-  <p className="text-[11px] font-semibold uppercase" style={{ letterSpacing: ".12em", color: tono || "var(--muted)" }}>{children}</p>
+  <p className="t-micro" style={{ color: tono || "var(--tenue)" }}>{children}</p>
 );
 
 const Campo = ({ etichetta, children, errore }) => (
   <label className="block">
-    <span className="block text-[11px] font-semibold uppercase mb-1.5" style={{ letterSpacing: ".1em", color: "var(--muted)" }}>{etichetta}</span>
+    <span className="block t-micro mb-2" style={{ color: "var(--tenue)" }}>{etichetta}</span>
     {children}
-    {errore && <span className="block text-xs mt-1.5" style={{ color: "#A63A32" }}>{errore}</span>}
+    {errore && <span className="block t-piccolo mt-2" style={{ color: "var(--errore)" }}>{errore}</span>}
   </label>
 );
-const inputCls = "w-full rounded-lg px-3 py-2 text-sm outline-none transition-shadow campo";
+const inputCls = "w-full px-3.5 py-2.5 text-sm outline-none campo";
+
+/**
+ * Il valore in evidenza: sovratitolo, cifra grande, eventuale nota sotto.
+ * I numeri sono il contenuto di questa applicazione, e questo è il componente
+ * che li mette al centro invece di annegarli fra le etichette.
+ */
+const Valore = ({ etichetta, valore, nota, tono, grande }) => (
+  <div>
+    <Micro>{etichetta}</Micro>
+    <p className="cifra-grande mt-2" style={{ fontSize: grande ? 30 : 23, lineHeight: 1.1, color: tono || "var(--txt)" }}>{valore}</p>
+    {nota && <p className="t-piccolo mt-1.5" style={{ color: "var(--tenue)" }}>{nota}</p>}
+  </div>
+);
+
+/** Pillola: stato, conteggio, etichetta breve. Tre toni, non uno di più. */
+const Pillola = ({ tono = "neutro", children }) => {
+  const toni = {
+    neutro: { background: "var(--velo)", color: "var(--muted)" },
+    euro: { background: "var(--velo-euro)", color: "var(--euro)" },
+    accento: { background: "var(--velo-accento)", color: "#7C6027" },
+    errore: { background: "var(--velo-errore)", color: "var(--errore)" },
+  }[tono];
+  return <span className="pill" style={toni}>{children}</span>;
+};
 
 /** Campo password con lucchetto a sinistra e occhio/occhio-barrato a destra
  *  per alternare testo in chiaro e puntini, come su qualunque sito moderno. */
@@ -685,14 +716,26 @@ function CampoPassword({ value, onChange, placeholder, minLength, required, auto
   );
 }
 
+/**
+ * Quattro varianti, e non di più: pieno (l'azione della schermata), accento
+ * (la conferma che chiude un percorso), fantasma (tutto il resto), pericolo.
+ * Al passaggio del mouse cambia il colore, non la dimensione: gli elementi che
+ * si gonfiano sotto il puntatore fanno sembrare l'interfaccia un giocattolo.
+ */
 function Bottone({ variante = "primario", className = "", ...p }) {
   const stile = {
-    primario: { background: "var(--ink)", color: "#F6F4EE" },
+    primario: { background: "var(--ink)", color: "#FAF8F4" },
     accento: { background: "var(--accent)", color: "#FFFDF8" },
-    fantasma: { background: "var(--card)", color: "var(--txt)", border: "1px solid var(--hairline)", boxShadow: "var(--ombra-xs)" },
-    pericolo: { background: "transparent", color: "#A63A32", border: "1px solid rgba(166,58,50,.25)" },
+    fantasma: { background: "var(--card)", color: "var(--txt)", boxShadow: "var(--ombra-md)" },
+    pericolo: { background: "transparent", color: "var(--errore)", boxShadow: "0 0 0 1px rgba(166,58,50,.22)" },
   }[variante];
-  return <button className={"inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-all btn " + className} style={stile} {...p} />;
+  return (
+    <button
+      className={"inline-flex items-center justify-center gap-2 text-sm font-medium btn " + className}
+      style={{ padding: "9px 15px", borderRadius: "var(--r-sm)", letterSpacing: "-.005em", ...stile }}
+      {...p}
+    />
+  );
 }
 
 function Modale({ titolo, children, onChiudi, largo, bloccante }) {
@@ -702,26 +745,41 @@ function Modale({ titolo, children, onChiudi, largo, bloccante }) {
   }, [onChiudi, bloccante]);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 noprint" role="dialog" aria-modal="true" aria-label={titolo}>
-      <div className="absolute inset-0 anim-velo" style={{ background: "rgba(18,21,26,.45)", backdropFilter: "blur(2px)" }} onClick={() => !bloccante && onChiudi()} />
-      <div className={`relative rounded-2xl w-full ${largo ? "max-w-2xl" : "max-w-md"} anim-pop`} style={{ background: "var(--card)", boxShadow: "var(--ombra-lg)" }}>
-        <div className="flex items-center justify-between px-6 pt-5 pb-4">
-          <h3 className="f-display text-lg" style={{ color: "var(--txt)" }}>{titolo}</h3>
-          {!bloccante && <button onClick={onChiudi} aria-label="Chiudi" className="p-1.5 rounded-lg btn" style={{ color: "var(--muted)" }}><X size={17} strokeWidth={1.75} /></button>}
+      <div className="absolute inset-0 anim-velo" style={{ background: "rgba(26,26,24,.32)", backdropFilter: "blur(3px)" }} onClick={() => !bloccante && onChiudi()} />
+      {/* È il caso in cui un'ombra vera serve: il modale sta davvero sopra il
+          resto, e deve leggersi come un piano staccato. */}
+      <div className={`relative w-full ${largo ? "max-w-2xl" : "max-w-md"} anim-pop`}
+        style={{ background: "var(--card)", borderRadius: "var(--r-lg)", boxShadow: "var(--ombra-lg)" }}>
+        <div className="flex items-start justify-between gap-4 px-7 pt-6 pb-5">
+          <h3 className="t-sotto" style={{ color: "var(--txt)" }}>{titolo}</h3>
+          {!bloccante && (
+            <button onClick={onChiudi} aria-label="Chiudi" className="p-1.5 btn -mt-0.5 -mr-1.5"
+              style={{ color: "var(--tenue)", borderRadius: "var(--r-xs)" }}>
+              <X size={17} strokeWidth={1.75} />
+            </button>
+          )}
         </div>
-        <div className="px-6 pb-6">{children}</div>
+        <div className="px-7 pb-7">{children}</div>
       </div>
     </div>
   );
 }
 
+/**
+ * Stato vuoto: un'icona sobria, una riga di titolo, una di spiegazione, e
+ * l'azione che porta fuori dal vuoto. Niente illustrazioni, niente allegria
+ * forzata: è un momento di lavoro, non una festa.
+ */
 function StatoVuoto({ icona: Icona, titolo, testo, azione }) {
   return (
-    <div className="flex flex-col items-center justify-center text-center py-20 px-6 rounded-2xl" style={{ background: "var(--card)", boxShadow: "var(--ombra-sm)" }}>
-      <div className="w-11 h-11 rounded-xl flex items-center justify-center mb-4" style={{ background: "var(--velo-accento)" }}>
-        <Icona size={20} strokeWidth={1.75} style={{ color: "var(--accent)" }} />
+    <div className="flex flex-col items-center justify-center text-center px-6"
+      style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)", paddingTop: 88, paddingBottom: 88 }}>
+      <div className="flex items-center justify-center mb-5"
+        style={{ width: 44, height: 44, borderRadius: "var(--r-md)", background: "var(--velo)" }}>
+        <Icona size={19} strokeWidth={1.5} style={{ color: "var(--muted)" }} />
       </div>
-      <p className="f-display text-lg mb-1.5" style={{ color: "var(--txt)" }}>{titolo}</p>
-      <p className="text-sm mb-6 max-w-sm leading-relaxed" style={{ color: "var(--muted)" }}>{testo}</p>
+      <p className="t-sotto mb-2" style={{ color: "var(--txt)" }}>{titolo}</p>
+      <p className="t-piccolo mb-7" style={{ color: "var(--muted)", maxWidth: "46ch" }}>{testo}</p>
       {azione}
     </div>
   );
@@ -729,19 +787,19 @@ function StatoVuoto({ icona: Icona, titolo, testo, azione }) {
 
 /** Barra di quota sottile. */
 const BarraQuota = ({ quota, colore }) => (
-  <div className="h-1 rounded-full w-full" style={{ background: "var(--velo)" }}>
-    <div className="h-1 rounded-full anim-barra" style={{ width: `${Math.max(1.5, quota * 100)}%`, background: colore || "var(--accent)" }} />
+  <div className="w-full" style={{ height: 4, borderRadius: 99, background: "var(--velo)" }}>
+    <div className="anim-barra" style={{ height: 4, borderRadius: 99, width: `${Math.max(1.5, quota * 100)}%`, background: colore || "var(--accent)" }} />
   </div>
 );
 
-/** Riquadro con intestazione (titolo + azione opzionale) usato in VistaDati. */
+/** Riquadro con intestazione (titolo + azione opzionale). */
 const Sezione = ({ titolo, extra, children }) => (
-  <section className="rounded-2xl" style={{ background: "var(--card)", boxShadow: "var(--ombra-sm)" }}>
-    <div className="px-6 py-4 flex flex-wrap items-center justify-between gap-3" style={{ borderBottom: "1px solid var(--hairline)" }}>
-      <h2 className="f-display text-base">{titolo}</h2>
+  <section style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
+    <div className="px-7 py-5 flex flex-wrap items-center justify-between gap-3" style={{ borderBottom: "1px solid var(--hairline)" }}>
+      <h2 className="t-sotto">{titolo}</h2>
       {extra}
     </div>
-    <div className="p-6">{children}</div>
+    <div className="p-7">{children}</div>
   </section>
 );
 
@@ -4107,49 +4165,166 @@ function ReportStampa({ riep, costi, dal, al, azienda }) {
    STILE GLOBALE — sistema: tela avorio, inchiostro profondo, un accento
    bronzo spento; verde solo per gli importi; ombre morbide a più livelli.
 --------------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------------
+   DESIGN SYSTEM — definito qui, in un punto solo, e usato da tutto il resto.
+
+   Le tre regole che tengono insieme l'insieme:
+
+   1. UNA FAMIGLIA DI CARATTERI. Inter, nella versione variabile: un file solo
+      per tutti i pesi da 400 a 600. Prima erano tre famiglie (Instrument Sans,
+      IBM Plex Mono, Inter) per sette file: più roba da scaricare e tre voci
+      diverse nella stessa frase. I numeri non hanno bisogno di un carattere
+      monospaziato per incolonnarsi: basta font-variant-numeric:tabular-nums,
+      che Inter fa benissimo. Una voce sola, e i numeri restano allineati.
+
+   2. LINEE, NON OMBRE. Le variabili --ombra-* non disegnano più ombre diffuse
+      ma ANELLI di un pixel (box-shadow senza sfocatura). Le card quindi non
+      galleggiano più: sono appoggiate, delimitate da un filo grigio chiarissimo.
+      L'ombra vera resta solo dove serve davvero un'elevazione — modali e
+      pannelli che si aprono sopra il resto — e sull'hover, appena percettibile.
+      Passando dalle variabili, tutte le superfici dell'applicazione cambiano
+      insieme senza toccarne una per una.
+
+   3. IL NUMERO È IL PROTAGONISTA. Il colore forte è riservato agli importi
+      (verde) e agli errori (rosso). Il bronzo è l'accento e si usa con
+      parsimonia: azione primaria, voce attiva, poco altro. Tutto il resto è
+      inchiostro, grigio caldo e spazio bianco.
+--------------------------------------------------------------------------- */
 function StileGlobale() {
   return (
     <style>{`
-      @import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@500;600&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap');
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400..600&display=swap');
       :root{
-        --ink:#181C23;
-        --tela:#F5F3EE; --card:#FEFDFB;
-        --hairline:rgba(24,28,35,.08);
-        --velo:rgba(24,28,35,.05);
+        /* --- superfici: avorio caldo per la pagina, bianco puro per le card,
+               così il contenuto stacca senza bisogno di ombre --- */
+        --tela:#FBFAF7; --card:#FFFFFF; --tela-alt:#F6F4EF;
+        --ink:#1A1A18;
+
+        /* --- testo: tre livelli, non uno di più --- */
+        --txt:#1A1A18; --muted:#6B6B66; --tenue:#9C9A93;
+
+        /* --- linee: il filo che sostituisce l'ombra --- */
+        --hairline:rgba(26,26,24,.09); --hairline-forte:rgba(26,26,24,.15);
+        --velo:rgba(26,26,24,.04);
+
+        /* --- accento bronzo: con parsimonia --- */
         --accent:#9A783A; --accent-chiaro:#C4A265;
-        --velo-accento:rgba(154,120,58,.08);
-        --euro:#1E7350;
-        --txt:#22262E; --muted:#7A7F87;
-        --ombra-xs:0 1px 2px rgba(24,28,35,.04);
-        --ombra-sm:0 1px 2px rgba(24,28,35,.04), 0 4px 16px rgba(24,28,35,.05);
-        --ombra-md:0 2px 6px rgba(24,28,35,.06), 0 10px 28px rgba(24,28,35,.08);
-        --ombra-lg:0 4px 12px rgba(24,28,35,.10), 0 24px 60px rgba(24,28,35,.18);
+        --velo-accento:rgba(154,120,58,.07);
+
+        /* --- semantici: verde solo per gli euro, rosso solo per gli errori --- */
+        --euro:#1E7350; --velo-euro:rgba(30,115,80,.07);
+        --errore:#A63A32; --velo-errore:rgba(166,58,50,.06);
+
+        /* --- superficie scura (sidebar, testata): calda, non bluastra --- */
+        --scuro:#191917; --scuro-txt:#EDEAE3; --scuro-muted:#A8A49B;
+        --scuro-velo:rgba(255,255,255,.055); --scuro-linea:rgba(255,255,255,.07);
+
+        /* --- raggi: card 14, controlli 9. Sempre questi --- */
+        --r-xs:6px; --r-sm:9px; --r-md:14px; --r-lg:18px;
+
+        /* --- elevazioni: anelli di 1px, non ombre --- */
+        --ombra-xs:0 0 0 1px rgba(26,26,24,.06);
+        --ombra-sm:0 0 0 1px rgba(26,26,24,.075);
+        --ombra-md:0 0 0 1px rgba(26,26,24,.085), 0 1px 2px rgba(26,26,24,.035);
+        --ombra-lg:0 0 0 1px rgba(26,26,24,.08), 0 32px 64px -20px rgba(26,26,24,.28);
+        --ombra-hover:0 0 0 1px rgba(26,26,24,.11), 0 2px 10px -2px rgba(26,26,24,.07);
+
+        /* --- moto: un tempo solo per tutta l'applicazione --- */
+        --moto:180ms cubic-bezier(.2,.7,.3,1);
       }
-      body{ font-family:'Inter',system-ui,sans-serif; -webkit-font-smoothing:antialiased; }
-      .f-display{ font-family:'Instrument Sans','Inter',sans-serif; font-weight:600; letter-spacing:-0.015em; }
-      .f-mono{ font-family:'IBM Plex Mono',monospace; font-variant-numeric:tabular-nums; }
-      .superficie-scura{ background:linear-gradient(175deg,#1C212A 0%,#161A21 100%); }
-      .campo{ background:var(--card); border:1px solid var(--hairline); box-shadow:var(--ombra-xs); }
-      .campo:focus{ box-shadow:0 0 0 3px rgba(154,120,58,.18); border-color:rgba(154,120,58,.5); }
-      .campo-scuro{ background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.09); color:#DDD9CF; color-scheme:dark; }
-      .campo-scuro:focus{ box-shadow:0 0 0 2px rgba(196,162,101,.35); }
-      .tasto-scuro{ background:rgba(255,255,255,.05); color:#AEB4BD; }
-      .tasto-scuro:hover{ background:rgba(255,255,255,.09); }
-      .btn{ transition:all .16s ease; }
-      .btn:focus-visible{ box-shadow:0 0 0 3px rgba(154,120,58,.3); outline:none; }
-      .btn:hover{ filter:brightness(1.03); }
-      .btn:active{ transform:translateY(1px); }
-      .riga{ transition:background .14s ease; }
-      .riga:hover{ background:rgba(24,28,35,.025); }
-      tr.riga:focus-visible{ outline:2px solid rgba(154,120,58,.5); outline-offset:-2px; }
-      @keyframes pop{ from{opacity:0; transform:translateY(8px) scale(.985);} to{opacity:1; transform:none;} }
-      .anim-pop{ animation:pop .22s cubic-bezier(.2,.9,.3,1.02); }
+      body{
+        font-family:'Inter',-apple-system,system-ui,sans-serif;
+        font-size:15px; line-height:1.6; color:var(--txt);
+        -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+        font-feature-settings:'cv05' 1,'cv11' 1;   /* l/1 più distinguibili */
+      }
+      ::selection{ background:rgba(154,120,58,.18); }
+
+      /* --- SCALA TIPOGRAFICA: usare queste classi, non misure a caso ------- */
+      .t-titolo{ font-size:33px; line-height:1.15; font-weight:600; letter-spacing:-.023em; }
+      .t-sezione{ font-size:21px; line-height:1.28; font-weight:600; letter-spacing:-.016em; }
+      .t-sotto{ font-size:17px; line-height:1.4; font-weight:500; letter-spacing:-.009em; }
+      .t-corpo{ font-size:15px; line-height:1.62; }
+      .t-piccolo{ font-size:13.5px; line-height:1.55; }
+      .t-micro{ font-size:11px; font-weight:500; letter-spacing:.09em; text-transform:uppercase; }
+      /* Le misure di lettura: nessuna riga di testo deve diventare un nastro. */
+      .t-leggibile{ max-width:64ch; }
+      @media (max-width:640px){ .t-titolo{ font-size:27px; } .t-sezione{ font-size:19px; } }
+
+      .f-display{ font-weight:600; letter-spacing:-.019em; }
+      /* Non più un carattere monospaziato: cifre a larghezza fissa dentro Inter.
+         Si incolonnano come in una tabella, ma restano nella stessa voce. */
+      .f-mono{ font-variant-numeric:tabular-nums; font-feature-settings:'tnum' 1; letter-spacing:-.006em; }
+      .cifra-grande{ font-variant-numeric:tabular-nums; font-weight:600; letter-spacing:-.028em; }
+
+      .superficie-scura{ background:var(--scuro); }
+
+      /* --- CAMPI: anello di messa a fuoco sobrio, niente alone --- */
+      .campo{
+        background:var(--card); border:1px solid var(--hairline);
+        border-radius:var(--r-sm); color:var(--txt);
+        transition:border-color var(--moto), box-shadow var(--moto);
+      }
+      .campo:hover{ border-color:var(--hairline-forte); }
+      .campo:focus{ box-shadow:0 0 0 3px rgba(154,120,58,.14); border-color:var(--accent); outline:none; }
+      .campo::placeholder{ color:var(--tenue); }
+      .campo-scuro{
+        background:var(--scuro-velo); border:1px solid var(--scuro-linea);
+        border-radius:var(--r-sm); color:var(--scuro-txt); color-scheme:dark;
+        transition:border-color var(--moto), box-shadow var(--moto);
+      }
+      .campo-scuro:focus{ box-shadow:0 0 0 3px rgba(196,162,101,.18); border-color:rgba(196,162,101,.55); outline:none; }
+      .campo-scuro::placeholder{ color:var(--scuro-muted); }
+      .tasto-scuro{ background:var(--scuro-velo); color:var(--scuro-muted); }
+      .tasto-scuro:hover{ background:rgba(255,255,255,.1); color:var(--scuro-txt); }
+
+      /* --- BOTTONI: nessun cambio di dimensione al passaggio del mouse ----- */
+      .btn{ transition:background var(--moto), color var(--moto), box-shadow var(--moto), opacity var(--moto); }
+      .btn:focus-visible{ box-shadow:0 0 0 3px rgba(154,120,58,.28); outline:none; }
+      .btn:active{ opacity:.9; }
+      .btn:disabled{ opacity:.45; cursor:not-allowed; }
+
+      /* --- CARD: appoggiata, delimitata da un filo. L'ombra solo in hover --- */
+      .card{ background:var(--card); border-radius:var(--r-md); box-shadow:var(--ombra-sm); }
+      .card-viva{ transition:box-shadow var(--moto); }
+      .card-viva:hover{ box-shadow:var(--ombra-hover); }
+
+      /* --- TABELLE: righe alte, sole linee fini, nessuna zebra --- */
+      .tabella{ width:100%; border-collapse:collapse; }
+      .tabella th{
+        font-size:11px; font-weight:500; letter-spacing:.09em; text-transform:uppercase;
+        color:var(--tenue); text-align:left; padding:11px 16px; white-space:nowrap;
+        border-bottom:1px solid var(--hairline);
+      }
+      .tabella td{ padding:14px 16px; border-top:1px solid var(--hairline); }
+      .tabella tbody tr:first-child td{ border-top:none; }
+      .riga{ transition:background var(--moto); }
+      .riga:hover{ background:var(--velo); }
+      tr.riga:focus-visible{ outline:2px solid rgba(154,120,58,.45); outline-offset:-2px; }
+
+      /* --- PILLOLE --- */
+      .pill{
+        display:inline-flex; align-items:center; gap:6px;
+        font-size:11px; font-weight:500; letter-spacing:.06em; text-transform:uppercase;
+        padding:4px 9px; border-radius:var(--r-xs); white-space:nowrap;
+      }
+
+      /* --- BARRE DI SCORRIMENTO: presenti ma discrete --- */
+      *{ scrollbar-width:thin; scrollbar-color:rgba(26,26,24,.18) transparent; }
+      *::-webkit-scrollbar{ width:10px; height:10px; }
+      *::-webkit-scrollbar-track{ background:transparent; }
+      *::-webkit-scrollbar-thumb{ background:rgba(26,26,24,.16); border:3px solid transparent; background-clip:content-box; border-radius:99px; }
+      *::-webkit-scrollbar-thumb:hover{ background:rgba(26,26,24,.28); background-clip:content-box; }
+      /* --- MOTO: sobrio. Nessun rimbalzo, nessun lampeggio: solo un accenno
+             di movimento che accompagna, e sempre in uscita (ease-out). --- */
+      @keyframes pop{ from{opacity:0; transform:translateY(6px) scale(.99);} to{opacity:1; transform:none;} }
+      .anim-pop{ animation:pop .2s cubic-bezier(.2,.7,.3,1); }
       @keyframes velo{ from{opacity:0;} }
-      .anim-velo{ animation:velo .2s ease; }
-      @keyframes slide{ from{transform:translateX(40px); opacity:0;} to{transform:none; opacity:1;} }
-      .anim-slide{ animation:slide .32s cubic-bezier(.19,1,.22,1); }
-      @keyframes vista{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;} }
-      .anim-vista{ animation:vista .24s ease; }
+      .anim-velo{ animation:velo .18s ease-out; }
+      @keyframes slide{ from{transform:translateX(28px); opacity:0;} to{transform:none; opacity:1;} }
+      .anim-slide{ animation:slide .26s cubic-bezier(.2,.7,.3,1); }
+      @keyframes vista{ from{opacity:0; transform:translateY(3px);} to{opacity:1; transform:none;} }
+      .anim-vista{ animation:vista .22s cubic-bezier(.2,.7,.3,1); }
       @keyframes cresci{ from{width:0;} }
       .anim-barra{ animation:cresci .6s cubic-bezier(.19,1,.22,1); transition:width .4s ease; }
       /* Barra indeterminata: il caricamento di un file non espone una
