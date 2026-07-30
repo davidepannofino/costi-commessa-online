@@ -8,7 +8,7 @@ import {
   FileSpreadsheet, FileText, AlertTriangle, CheckCircle2, X, ChevronRight, ChevronLeft,
   Search, RotateCcw, Save, Eraser, Info, FileDown, LogOut, Mail, Lock, Building2, ArrowRight, Loader2,
   Clock, Sparkles, Eye, EyeOff, CreditCard, Gift, PartyPopper, ShieldCheck, FileImage,
-  ReceiptText, Link2, CheckCircle, Check, HelpCircle, CircleDot, CalendarDays,
+  ReceiptText, Link2, CheckCircle, Check, HelpCircle, CircleDot, CalendarDays, TrendingUp,
 } from "lucide-react";
 import { datiAPI, suSessioneScaduta, suAbbonamentoRichiesto, API_BASE } from "./datiAPI.js";
 import { statoGruppo, assegnazioneIniziale, NON_IMPORTARE } from "./statoGruppoDDT.js";
@@ -2359,7 +2359,7 @@ export default function App() {
       {mostraBenvenuto && (
         <Modale titolo="Benvenuto in Costi Commessa" onChiudi={() => setMostraBenvenuto(false)}>
           <div className="w-10 h-10 rounded-[var(--r-sm)] flex items-center justify-center mb-4" style={{ background: "var(--velo-accento)" }}>
-            <PartyPopper size={18} strokeWidth={1.75} style={{ color: "var(--accent)" }} />
+            <PartyPopper size={18} strokeWidth={1.75} style={{ color: "var(--accento-chiaro)" }} />
           </div>
           <p className="text-sm leading-relaxed mb-3" style={{ color: "var(--txt)" }}>
             Il tuo account è pronto: hai <strong>14 giorni di prova gratuita</strong>, senza nessuna carta da inserire.
@@ -2504,23 +2504,32 @@ function AndamentoMensile({ serieMensile }) {
  * materiale"); il totale è solo la loro somma.
  */
 function FasciaCosti({ costi, titolo = "Costo del periodo" }) {
-  const voci = [
-    { e: "Manodopera", v: euro(costi.totManodopera), c: "var(--euro)" },
-    { e: "Materiali", v: euro(costi.totMateriali), c: "var(--euro)" },
-    { e: "Costo totale", v: euro(costi.totTotale), c: "var(--accent)", forte: true },
-  ];
+  /* Prima erano tre numeri delle stesse dimensioni in tre colonne uguali: la
+     griglia diceva che contano allo stesso modo, e non è vero. Il totale è la
+     risposta alla domanda, manodopera e materiali sono come ci si arriva —
+     quindi il totale diventa il numero-eroe e gli altri due gli stanno
+     accanto, più piccoli, in una griglia asimmetrica. Gli importi non
+     cambiano: sono gli stessi tre di prima. */
   return (
-    <section className="overflow-hidden" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
-      <div className="px-7 pt-6"><Micro>{titolo}</Micro></div>
-      <div className="grid grid-cols-1 sm:grid-cols-3 mt-2">
-        {voci.map((k, i) => (
-          <div key={k.e} className="px-7 py-6"
-            style={{ borderLeft: i > 0 ? ".5px solid var(--hairline)" : "none", background: k.forte ? "var(--tela-alt)" : "transparent" }}>
-            <Micro>{k.e}</Micro>
-            <p className="cifra-grande mt-2.5" style={{ fontSize: k.forte ? 29 : 24, lineHeight: 1, color: k.c }}>{k.v}</p>
-            {k.forte && <p className="t-piccolo mt-2.5" style={{ color: "var(--tenue)" }}>manodopera + materiali</p>}
-          </div>
-        ))}
+    <section className="card overflow-hidden">
+      <div className="grid grid-cols-1 sm:grid-cols-[1.35fr_1fr]">
+        <div className="px-6 py-7 sm:px-7">
+          <p className="t-micro">{titolo}</p>
+          <p className="t-eroe mt-3" style={{ color: "var(--verde)" }}>{euro(costi.totTotale)}</p>
+          <p className="t-piccolo mt-3" style={{ color: "var(--txt-tenue)" }}>manodopera + materiali</p>
+        </div>
+        <div className="grid grid-rows-2" style={{ borderLeft: ".5px solid var(--bordo-tenue)" }}>
+          {[
+            { e: "Manodopera", v: euro(costi.totManodopera) },
+            { e: "Materiali", v: euro(costi.totMateriali) },
+          ].map((k, i) => (
+            <div key={k.e} className="px-6 py-5 sm:px-7 flex items-center justify-between gap-4"
+              style={{ borderTop: i > 0 ? ".5px solid var(--bordo-tenue)" : "none" }}>
+              <p className="t-micro">{k.e}</p>
+              <p className="cifra-grande" style={{ fontSize: 20, lineHeight: 1, color: "var(--verde)" }}>{k.v}</p>
+            </div>
+          ))}
+        </div>
       </div>
     </section>
   );
@@ -2578,10 +2587,10 @@ function Dashboard({ riep, costi, dal, al, dipendenti, serieMensile, vaiCommesse
   // orario invece resta di sola manodopera, perché è una tariffa del lavoro.
   const piuCostosa = costi.righe[0] || top;
   const kpi = [
-    { e: "Commesse attive", v: String(Math.max(righe.length, costi.righe.length)) },
-    { e: "Costo medio orario", v: fmtNum.format(costoMedioOra), u: "€/h", sub: "solo manodopera", subMuto: true },
-    { e: "Commessa più costosa", v: piuCostosa.commessa.codice, sub: euro(piuCostosa.costoTotale ?? piuCostosa.costo) },
-    { e: "Dipendenti attivi", v: String(perDip.length), sub: `su ${dipendenti.length} totali`, muto: true },
+    { e: "Commesse attive", v: String(Math.max(righe.length, costi.righe.length)), ic: FolderKanban },
+    { e: "Costo medio orario", v: fmtNum.format(costoMedioOra), u: "€/h", sub: "solo manodopera", subMuto: true, ic: Clock },
+    { e: "Commessa più costosa", v: piuCostosa.commessa.codice, sub: euro(piuCostosa.costoTotale ?? piuCostosa.costo), ic: TrendingUp },
+    { e: "Dipendenti attivi", v: String(perDip.length), sub: `su ${dipendenti.length} totali`, muto: true, ic: Users },
   ];
 
   return (
@@ -2593,15 +2602,21 @@ function Dashboard({ riep, costi, dal, al, dipendenti, serieMensile, vaiCommesse
 
       <FasciaCosti costi={costi} />
 
-      {/* KPI: una fascia unica, separatori a filo */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 overflow-hidden" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
+      {/* KPI: una fascia unica, separatori a filo. L'icona in un box rialzato
+          serve a far riconoscere la metrica prima di leggerla. */}
+      <div className="card grid grid-cols-2 xl:grid-cols-4 overflow-hidden">
         {kpi.map((k, i) => (
-          <div key={k.e} className="px-7 py-6" style={{ borderLeft: i > 0 ? ".5px solid var(--hairline)" : "none" }}>
-            <Micro>{k.e}</Micro>
-            <p className="cifra-grande mt-2.5" style={{ fontSize: 23, lineHeight: 1, color: k.muto ? "var(--muted)" : "var(--txt)" }}>
-              {k.v}{k.u && <span className="t-piccolo ml-1" style={{ fontWeight: 400, color: "var(--tenue)" }}>{k.u}</span>}
+          <div key={k.e} className="px-6 py-6 xl:px-7" style={{ borderLeft: i > 0 ? ".5px solid var(--bordo-tenue)" : "none" }}>
+            <div className="flex items-center gap-2.5">
+              <span className="flex items-center justify-center shrink-0 box" style={{ width: 26, height: 26 }}>
+                <k.ic size={13} strokeWidth={1.75} style={{ color: "var(--txt-tenue)" }} />
+              </span>
+              <p className="t-micro">{k.e}</p>
+            </div>
+            <p className="cifra-grande mt-3" style={{ fontSize: 23, lineHeight: 1, color: k.muto ? "var(--txt-attenuato)" : "var(--txt)" }}>
+              {k.v}{k.u && <span className="t-piccolo ml-1" style={{ fontWeight: 400, color: "var(--txt-tenue)" }}>{k.u}</span>}
             </p>
-            {k.sub && <p className="f-mono t-piccolo mt-2" style={{ color: k.muto || k.subMuto ? "var(--tenue)" : "var(--euro)" }}>{k.sub}</p>}
+            {k.sub && <p className="f-mono t-piccolo mt-2" style={{ color: k.muto || k.subMuto ? "var(--txt-tenue)" : "var(--verde)" }}>{k.sub}</p>}
           </div>
         ))}
       </div>
@@ -2611,7 +2626,7 @@ function Dashboard({ riep, costi, dal, al, dipendenti, serieMensile, vaiCommesse
         <section className="xl:col-span-3 p-7" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
           <div className="flex items-baseline justify-between gap-4 mb-6">
             <h2 className="t-sotto">Costo per commessa</h2>
-            <button onClick={vaiCommesse} className="t-piccolo font-medium flex items-center gap-1 btn shrink-0" style={{ color: "var(--accent)" }}>
+            <button onClick={vaiCommesse} className="t-piccolo font-medium flex items-center gap-1 btn shrink-0" style={{ color: "var(--accento-chiaro)" }}>
               Riepilogo <ChevronRight size={13} strokeWidth={1.75} />
             </button>
           </div>
@@ -3151,7 +3166,7 @@ function SezioneDocumenti({ commessa, allegati, spazio, fornitoriNoti = [], onCa
       {inCaricamento ? (
         <div className="rounded-[var(--r-sm)] px-4 py-3.5" style={{ background: "var(--tela-alt)", borderRadius: "var(--r-sm)", boxShadow: "var(--ombra-xs)" }}>
           <div className="flex items-center gap-2.5">
-            <Loader2 size={14} strokeWidth={1.75} className="animate-spin" style={{ color: "var(--accent)" }} />
+            <Loader2 size={14} strokeWidth={1.75} className="animate-spin" style={{ color: "var(--accento-chiaro)" }} />
             <p className="text-sm truncate">Caricamento di {inCaricamento}…</p>
           </div>
           <div className="mt-3 h-1 rounded-full overflow-hidden" style={{ background: "var(--hairline)" }}>
@@ -3193,15 +3208,15 @@ function SezioneDocumenti({ commessa, allegati, spazio, fornitoriNoti = [], onCa
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-9 h-9 rounded-[var(--r-sm)] flex items-center justify-center shrink-0" style={{ background: "var(--velo-accento)" }}>
                     {a.tipo === "application/pdf"
-                      ? <FileText size={16} strokeWidth={1.75} style={{ color: "var(--accent)" }} />
-                      : <FileImage size={16} strokeWidth={1.75} style={{ color: "var(--accent)" }} />}
+                      ? <FileText size={16} strokeWidth={1.75} style={{ color: "var(--accento-chiaro)" }} />
+                      : <FileImage size={16} strokeWidth={1.75} style={{ color: "var(--accento-chiaro)" }} />}
                   </div>
                   <div className="min-w-0">
                     <p className="text-sm font-medium truncate">{a.nomeFile}</p>
                     {/* I dati del DDT compaiono solo se ci sono: un documento
                         archiviato senza compilarli si legge come prima. */}
                     {rigaDDT(a) && (
-                      <p className="f-mono t-piccolo mt-0.5 truncate" style={{ color: "var(--accent)" }}>{rigaDDT(a)}</p>
+                      <p className="f-mono t-piccolo mt-0.5 truncate" style={{ color: "var(--accento-chiaro)" }}>{rigaDDT(a)}</p>
                     )}
                     <p className="f-mono t-piccolo mt-0.5" style={{ color: "var(--muted)" }}>
                       {fmtData(a.caricatoIl.slice(0, 10))} · {fmtDimensione(a.dimensione)}
@@ -3521,7 +3536,7 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
         </div>
         <section className="p-7" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
           <div className="w-10 h-10 rounded-[var(--r-sm)] flex items-center justify-center mb-4" style={{ background: "var(--velo-accento)" }}>
-            <AlertTriangle size={18} strokeWidth={1.75} style={{ color: "var(--accent)" }} />
+            <AlertTriangle size={18} strokeWidth={1.75} style={{ color: "var(--accento-chiaro)" }} />
           </div>
           <h2 className="t-sezione mb-3">Questo PDF è una scansione</h2>
           <p className="text-sm leading-relaxed mb-4" style={{ color: "var(--muted)" }}>{lettura.avvisi[0]}</p>
