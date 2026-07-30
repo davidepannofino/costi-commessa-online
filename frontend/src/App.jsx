@@ -1248,57 +1248,54 @@ function VistaAbbonamento({ info }) {
   };
 
   const STATI = {
-    esente: { etichetta: "Accesso illimitato", colore: "#1E7350", icona: Sparkles },
-    attivo: { etichetta: "Abbonamento attivo", colore: "#1E7350", icona: CheckCircle2 },
-    prova: { etichetta: "Prova gratuita", colore: "var(--accent)", icona: Clock },
-    scaduto: { etichetta: "Prova terminata", colore: "#A63A32", icona: AlertTriangle },
+    esente: { etichetta: "Accesso illimitato", tono: "euro", icona: Sparkles },
+    attivo: { etichetta: "Abbonamento attivo", tono: "euro", icona: CheckCircle2 },
+    prova: { etichetta: "Prova gratuita", tono: "accento", icona: Clock },
+    scaduto: { etichetta: "Prova terminata", tono: "errore", icona: AlertTriangle },
   };
   const s = STATI[info?.stato] || STATI.prova;
   const Icona = s.icona;
 
   return (
-    <div className="max-w-lg">
-      <Sezione titolo="Abbonamento">
+    <div style={{ maxWidth: 560 }}>
+      <div className="mb-8">
+        <Micro>Account</Micro>
+        <h1 className="t-titolo mt-2">Abbonamento</h1>
+      </div>
+      <Sezione titolo="Stato">
         {!info ? (
-          <p className="text-sm" style={{ color: "var(--muted)" }}>Caricamento…</p>
+          <p className="t-piccolo" style={{ color: "var(--muted)" }}>Caricamento…</p>
         ) : (
           <>
-            <div className="flex items-center gap-3.5 mb-6">
-              <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{ background: "var(--velo-accento)" }}>
-                <Icona size={20} strokeWidth={1.75} style={{ color: s.colore }} />
-              </div>
-              <div>
-                <p className="t-sotto" style={{ color: "var(--txt)" }}>{s.etichetta}</p>
-                {info.stato === "prova" && (
-                  <p className="text-sm" style={{ color: "var(--muted)" }}>
-                    {info.giorniProvaRestanti === 1 ? "Ultimo giorno" : `${info.giorniProvaRestanti} giorni rimanenti`}
-                  </p>
-                )}
-              </div>
+            {/* Lo stato si legge da una pillola, non da un'icona colorata in un
+                quadrato: è la stessa forma usata per gli stati altrove. */}
+            <div className="flex items-center gap-3 mb-7">
+              <Pillola tono={s.tono}><Icona size={13} strokeWidth={1.75} /> {s.etichetta}</Pillola>
+              {info.stato === "prova" && (
+                <span className="t-piccolo" style={{ color: "var(--muted)" }}>
+                  {info.giorniProvaRestanti === 1 ? "ultimo giorno" : `${info.giorniProvaRestanti} giorni rimanenti`}
+                </span>
+              )}
             </div>
 
-            <div className="rounded-xl px-5 py-4 mb-5" style={{ background: "var(--velo)" }}>
-              <p className="f-mono text-2xl font-medium" style={{ color: "var(--txt)" }}>
-                29 €<span className="text-sm font-normal" style={{ color: "var(--muted)" }}> / mese</span>
+            <div className="px-6 py-6 mb-6" style={{ background: "var(--tela-alt)", borderRadius: "var(--r-sm)" }}>
+              <p className="cifra-grande" style={{ fontSize: 34, lineHeight: 1 }}>
+                29 €<span className="t-corpo" style={{ fontWeight: 400, color: "var(--tenue)", letterSpacing: 0 }}> / mese</span>
               </p>
-              <p className="t-piccolo mt-1" style={{ color: "var(--muted)" }}>Fatturazione mensile ricorrente. Disdici quando vuoi.</p>
+              <p className="t-piccolo mt-3" style={{ color: "var(--muted)" }}>Fatturazione mensile ricorrente. Disdici quando vuoi.</p>
             </div>
 
-            {errore && (
-              <div className="flex items-start gap-2.5 rounded-xl px-3.5 py-3 text-sm mb-5" style={{ background: "rgba(166,58,50,.07)", border: "1px solid rgba(166,58,50,.2)", color: "#A63A32" }}>
-                <AlertTriangle size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" /> {errore}
-              </div>
-            )}
+            {errore && <div className="mb-6"><Avviso tono="errore">{errore}</Avviso></div>}
 
             {info.stato === "esente" ? (
-              <p className="text-sm" style={{ color: "var(--muted)" }}>Il tuo account ha accesso completo e illimitato, senza bisogno di abbonamento.</p>
+              <p className="t-piccolo" style={{ color: "var(--muted)" }}>Il tuo account ha accesso completo e illimitato, senza bisogno di abbonamento.</p>
             ) : info.stato === "attivo" ? (
               <Bottone variante="fantasma" onClick={() => vai("portale")} disabled={caricando}>
                 {caricando ? <Loader2 size={14} strokeWidth={1.75} className="animate-spin" /> : <CreditCard size={14} strokeWidth={1.75} />}
                 {caricando ? "Un attimo…" : "Gestisci abbonamento"}
               </Bottone>
             ) : (
-              <Bottone variante="accento" onClick={() => vai("checkout")} disabled={caricando}>
+              <Bottone variante="primario" onClick={() => vai("checkout")} disabled={caricando}>
                 {caricando ? <Loader2 size={14} strokeWidth={1.75} className="animate-spin" /> : <ArrowRight size={14} strokeWidth={1.75} />}
                 {caricando ? "Un attimo…" : "Abbonati ora"}
               </Bottone>
@@ -1311,7 +1308,7 @@ function VistaAbbonamento({ info }) {
 }
 
 const ETICHETTE_STATO_ADMIN = { prova: "Prova", attivo: "Attivo", scaduto: "Scaduto", esente: "Esente" };
-const COLORI_STATO_ADMIN = { prova: "var(--accent)", attivo: "#1E7350", scaduto: "#A63A32", esente: "#1E7350" };
+const COLORI_STATO_ADMIN = { prova: "var(--accent)", attivo: "var(--euro)", scaduto: "var(--errore)", esente: "var(--euro)" };
 
 /** Pannello di amministrazione, visibile solo a chi il server riconosce come
  *  admin (voce di navigazione già filtrata, controllo reale sulle rotte
@@ -1374,7 +1371,7 @@ function VistaAdmin() {
       </div>
 
       {errore && (
-        <div className="flex items-start gap-2.5 rounded-xl px-4 py-3 text-sm" style={{ background: "rgba(166,58,50,.07)", border: "1px solid rgba(166,58,50,.2)", color: "#A63A32" }}>
+        <div className="flex items-start gap-2.5 rounded-xl px-4 py-3 text-sm" style={{ background: "var(--velo-errore)", border: "1px solid rgba(166,58,50,.2)", color: "var(--errore)" }}>
           <AlertTriangle size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" /> {errore}
         </div>
       )}
@@ -2315,13 +2312,15 @@ export default function App() {
         </Modale>
       )}
 
-      <div className="fixed bottom-16 lg:bottom-5 right-5 z-50 space-y-2 noprint" aria-live="polite">
+      {/* Notifiche: inchiostro pieno, un'ombra vera (stanno sopra tutto) e
+          l'icona come unico tocco di colore. */}
+      <div className="fixed bottom-20 lg:bottom-6 right-6 z-50 space-y-2.5 noprint" aria-live="polite">
         {toasts.map((t) => (
-          <div key={t.id} className="flex items-start gap-2.5 rounded-xl px-4 py-3 text-sm max-w-sm anim-pop"
-            style={{ background: "var(--ink)", color: "#EDEAE2", boxShadow: "var(--ombra-lg)" }}>
-            {t.tipo === "errore" ? <AlertTriangle size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: "#E2A29B" }} />
+          <div key={t.id} className="flex items-start gap-3 px-4 py-3.5 t-piccolo anim-pop"
+            style={{ maxWidth: 380, background: "var(--ink)", color: "#EDEAE3", borderRadius: "var(--r-sm)", boxShadow: "var(--ombra-lg)" }}>
+            {t.tipo === "errore" ? <AlertTriangle size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: "#E5A9A2" }} />
               : t.tipo === "avviso" ? <AlertTriangle size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: "#D9B36A" }} />
-              : <CheckCircle2 size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: "#8CD6AC" }} />}
+              : <CheckCircle2 size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: "#7FCBA4" }} />}
             {t.testo}
           </div>
         ))}
@@ -2384,7 +2383,7 @@ function AndamentoMensile({ serieMensile }) {
             <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>
               {fmtMese(ultimoMese.mese)}: <span className="f-mono" style={{ color: "var(--euro)" }}>{euro(ultimoMese.costo)}</span>
               {" · "}
-              <span className="f-mono" style={{ color: variazione > 0 ? "#A6753A" : variazione < 0 ? "#1E7350" : "var(--muted)" }}>
+              <span className="f-mono" style={{ color: variazione > 0 ? "#A6753A" : variazione < 0 ? "var(--euro)" : "var(--muted)" }}>
                 {variazione > 0 ? "▲" : variazione < 0 ? "▼" : "="} {fmtPerc.format(Math.abs(variazione) * 100)}%
               </span>
               {" rispetto a "}{fmtMese(penultimoMese.mese)}
@@ -2973,7 +2972,7 @@ function SezioneMateriali({ commessa, voci, totale, dal, al, onAggiungi, onAggio
                   <Pencil size={12} strokeWidth={1.75} />
                 </button>
                 <button onClick={async () => { if (inModifica === m.id) annulla(); await onElimina(m); }}
-                  aria-label={"Elimina materiale " + m.descrizione} className="p-1.5 rounded-lg btn" style={{ border: "1px solid rgba(166,58,50,.22)", color: "#A63A32" }}>
+                  aria-label={"Elimina materiale " + m.descrizione} className="p-1.5 rounded-lg btn" style={{ border: "1px solid rgba(166,58,50,.22)", color: "var(--errore)" }}>
                   <Trash2 size={12} strokeWidth={1.75} />
                 </button>
               </div>
@@ -3158,7 +3157,7 @@ function SezioneDocumenti({ commessa, allegati, spazio, fornitoriNoti = [], onCa
                       : <Download size={12} strokeWidth={1.75} />}
                   </button>
                   <button onClick={() => onElimina(a)} aria-label={"Elimina documento " + a.nomeFile}
-                    className="p-1.5 rounded-lg btn" style={{ border: "1px solid rgba(166,58,50,.22)", color: "#A63A32" }}>
+                    className="p-1.5 rounded-lg btn" style={{ border: "1px solid rgba(166,58,50,.22)", color: "var(--errore)" }}>
                     <Trash2 size={12} strokeWidth={1.75} />
                   </button>
                 </div>
@@ -3190,11 +3189,11 @@ function SezioneDocumenti({ commessa, allegati, spazio, fornitoriNoti = [], onCa
         <div className="mt-4">
           <div className="flex items-baseline justify-between gap-3">
             <Micro>Spazio archivio</Micro>
-            <p className="f-mono t-piccolo" style={{ color: quotaPiena > 0.9 ? "#A63A32" : "var(--muted)" }}>
+            <p className="f-mono t-piccolo" style={{ color: quotaPiena > 0.9 ? "var(--errore)" : "var(--muted)" }}>
               {fmtDimensione(usato)} di {fmtDimensione(quota)}
             </p>
           </div>
-          <div className="mt-2"><BarraQuota quota={quotaPiena} colore={quotaPiena > 0.9 ? "#A63A32" : BARRA_ALTRE} /></div>
+          <div className="mt-2"><BarraQuota quota={quotaPiena} colore={quotaPiena > 0.9 ? "var(--errore)" : BARRA_ALTRE} /></div>
         </div>
       )}
     </div>
@@ -3231,11 +3230,11 @@ const chiaveGruppoDi = (riga) => (riga.ddtNumero ? `ddt:${riga.ddtNumero}` : "se
  * A colpo d'occhio si deve capire dove serve attenzione senza leggere niente.
  */
 const STILI_STATO = {
-  auto:      { icona: CheckCircle2,  colore: "var(--euro)",  velo: "rgba(30,115,80,.09)",  bordo: "rgba(30,115,80,.22)" },
-  possibile: { icona: HelpCircle,    colore: "#7C6027",      velo: "var(--velo-accento)",  bordo: "rgba(154,120,58,.22)" },
-  manuale:   { icona: Check,         colore: "var(--euro)",  velo: "rgba(30,115,80,.06)",  bordo: "rgba(30,115,80,.16)" },
-  misto:     { icona: CircleDot,     colore: "#7C6027",      velo: "var(--velo-accento)",  bordo: "rgba(154,120,58,.22)" },
-  vuoto:     { icona: CircleDot,     colore: "var(--muted)", velo: "var(--velo)",          bordo: "var(--hairline)" },
+  auto:      { icona: CheckCircle2,  colore: "var(--euro)",  velo: "var(--velo-euro)",     bordo: "rgba(30,115,80,.2)" },
+  possibile: { icona: HelpCircle,    colore: "#7C6027",      velo: "var(--velo-accento)",  bordo: "rgba(154,120,58,.2)" },
+  manuale:   { icona: Check,         colore: "var(--euro)",  velo: "rgba(30,115,80,.05)",  bordo: "rgba(30,115,80,.14)" },
+  misto:     { icona: CircleDot,     colore: "#7C6027",      velo: "var(--velo-accento)",  bordo: "rgba(154,120,58,.2)" },
+  vuoto:     { icona: CircleDot,     colore: "var(--tenue)", velo: "var(--velo)",          bordo: "var(--hairline)" },
 };
 
 /**
@@ -3515,7 +3514,7 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
       )}
 
       {commesse.length === 0 && (
-        <div className="rounded-xl px-4 py-3 text-sm flex items-start gap-2" style={{ background: "rgba(166,58,50,.07)", border: "1px solid rgba(166,58,50,.2)", color: "#A63A32" }}>
+        <div className="rounded-xl px-4 py-3 text-sm flex items-start gap-2" style={{ background: "var(--velo-errore)", border: "1px solid rgba(166,58,50,.2)", color: "var(--errore)" }}>
           <Info size={14} strokeWidth={1.75} className="mt-0.5 shrink-0" />
           Non ci sono commesse a cui assegnare le righe: creane una nella sezione Dati, poi torna qui.
         </div>
@@ -3609,7 +3608,7 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
                           <input value={r.prezzoUnitario} onChange={(e) => modificaRiga(r.id, { prezzoUnitario: e.target.value })}
                             className={inputCls + " f-mono text-right py-1.5"} style={{ width: 110, background: "var(--tela)" }} aria-label="Prezzo unitario" />
                         </td>
-                        <td className="f-mono text-right whitespace-nowrap" style={{ color: tot == null ? "#A63A32" : "var(--euro)" }}>
+                        <td className="f-mono text-right whitespace-nowrap" style={{ color: tot == null ? "var(--errore)" : "var(--euro)" }}>
                           {tot == null ? "da controllare" : euro(tot)}
                         </td>
                         <td >
@@ -3780,7 +3779,7 @@ function VistaDipendenti({ dipendenti, setDipendenti, riep, elimina, notifica })
                   </div>
                   <div className="ml-auto flex gap-1 shrink-0">
                     <button onClick={() => setEditor({ dip })} aria-label="Modifica dipendente" className="p-2 rounded-lg btn" style={{ border: "1px solid var(--hairline)" }}><Pencil size={13} strokeWidth={1.75} /></button>
-                    <button onClick={() => elimina(dip)} aria-label="Elimina dipendente" className="p-2 rounded-lg btn" style={{ border: "1px solid rgba(166,58,50,.22)", color: "#A63A32" }}><Trash2 size={13} strokeWidth={1.75} /></button>
+                    <button onClick={() => elimina(dip)} aria-label="Elimina dipendente" className="p-2 rounded-lg btn" style={{ border: "1px solid rgba(166,58,50,.22)", color: "var(--errore)" }}><Trash2 size={13} strokeWidth={1.75} /></button>
                   </div>
                 </div>
                 {elenco.length === 0 ? (
@@ -3802,7 +3801,7 @@ function VistaDipendenti({ dipendenti, setDipendenti, riep, elimina, notifica })
                         return (
                           <tr key={m} style={{ borderTop: "1px solid var(--hairline)" }}>
                             <td className="py-3">{fmtMese(m)}</td>
-                            <td className="py-3 text-right">{lordo != null ? euro(lordo) : <span className="font-sans" style={{ color: "#A63A32" }}>manca</span>}</td>
+                            <td className="py-3 text-right">{lordo != null ? euro(lordo) : <span className="font-sans" style={{ color: "var(--errore)" }}>manca</span>}</td>
                             <td className="py-3 text-right">{fmtOre.format(ore)}</td>
                             <td className="py-3 text-right">{tar != null ? fmtNum4.format(tar) + " €/h" : "—"}</td>
                           </tr>
@@ -3859,7 +3858,7 @@ function EditorDipendente({ iniziale, onSalva, onChiudi }) {
         <span className="t-micro" style={{ letterSpacing: ".1em", color: "var(--muted)" }}>Lordo mensile (per mese)</span>
         <Bottone variante="fantasma" onClick={() => setLordi((l) => [...l, { mese: oggiISO().slice(0, 7), importo: "" }])} className="py-1 px-2.5 t-piccolo"><Plus size={12} strokeWidth={1.75} /> Aggiungi mese</Bottone>
       </div>
-      {errori.lordi && <p className="t-piccolo mb-2" style={{ color: "#A63A32" }}>{errori.lordi}</p>}
+      {errori.lordi && <p className="t-piccolo mb-2" style={{ color: "var(--errore)" }}>{errori.lordi}</p>}
       <div className="space-y-2 mb-7">
         {lordi.length === 0 && <p className="text-sm" style={{ color: "var(--muted)" }}>Nessun mese: aggiungine uno per poter calcolare le tariffe.</p>}
         {lordi.map((riga, i) => (
@@ -4017,7 +4016,7 @@ function VistaDati({ dipendenti, commesse, registrazioni, setCommesse, aggiungi,
                       <td className="px-6 py-3 f-mono text-right">{fmtOre.format(r.ore)}</td>
                       <td className="px-6 py-3 text-right whitespace-nowrap">
                         <button onClick={() => setModifica(r)} aria-label="Modifica registrazione" className="p-1.5 rounded-lg mr-1 btn" style={{ border: "1px solid var(--hairline)" }}><Pencil size={12} strokeWidth={1.75} /></button>
-                        <button onClick={() => { eliminaReg(r.id); notifica("Registrazione eliminata."); }} aria-label="Elimina registrazione" className="p-1.5 rounded-lg btn" style={{ border: "1px solid rgba(166,58,50,.22)", color: "#A63A32" }}><Trash2 size={12} strokeWidth={1.75} /></button>
+                        <button onClick={() => { eliminaReg(r.id); notifica("Registrazione eliminata."); }} aria-label="Elimina registrazione" className="p-1.5 rounded-lg btn" style={{ border: "1px solid rgba(166,58,50,.22)", color: "var(--errore)" }}><Trash2 size={12} strokeWidth={1.75} /></button>
                       </td>
                     </tr>
                   );
