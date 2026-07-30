@@ -1288,8 +1288,7 @@ function VistaAbbonamento({ info }) {
   return (
     <div style={{ maxWidth: 560 }}>
       <div className="mb-8">
-        <Micro>Account</Micro>
-        <h1 className="t-titolo mt-2">Abbonamento</h1>
+        <h1 className="t-titolo">Abbonamento</h1>
       </div>
       <Sezione titolo="Stato">
         {!info ? (
@@ -1394,8 +1393,7 @@ function VistaAdmin() {
   return (
     <div className="space-y-8">
       <div>
-        <Micro>Amministrazione</Micro>
-        <h1 className="t-titolo mt-2">Aziende registrate</h1>
+        <h1 className="t-titolo">Aziende registrate</h1>
       </div>
 
       {errore && (
@@ -3629,8 +3627,10 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
     return (
       <div className="space-y-8">
         <div>
-          <Micro>Documenti</Micro>
-          <h1 className="t-titolo mt-2">Fatture</h1>
+          <h1 className="t-titolo">Fatture</h1>
+          <p className="t-piccolo mt-1.5" style={{ color: "var(--txt-tenue)" }}>
+            Dalla fattura del fornitore al costo di commessa, raggruppata per DDT.
+          </p>
         </div>
         <input ref={refFile} type="file" accept=".xml,.p7m,.pdf,application/xml,text/xml,application/pdf" className="hidden"
           onChange={(e) => { const f = e.target.files[0]; e.target.value = ""; scegliFile(f); }} />
@@ -3648,8 +3648,11 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
     return (
       <div className="space-y-6">
         <div>
-          <Micro>Importazione fattura</Micro>
-          <h1 className="t-titolo mt-2">{lettura.fattura.nomeFile}</h1>
+          {/* Il titolo della pagina è quello che stai facendo; il nome del file
+              è il soggetto, e va sotto in tondo monospaziato — un nome di file
+              non è un'intestazione. */}
+          <h1 className="t-titolo">Importazione fattura</h1>
+          <p className="t-piccolo f-mono mt-2" style={{ color: "var(--txt-attenuato)" }}>{lettura.fattura.nomeFile}</p>
         </div>
         <section className="card p-7">
           <div className="w-10 h-10 rounded-[var(--r-sm)] flex items-center justify-center mb-4" style={{ background: "var(--velo-accento)" }}>
