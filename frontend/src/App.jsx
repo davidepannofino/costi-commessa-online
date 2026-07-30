@@ -754,11 +754,12 @@ const BARRA_ALTRE = "#2E2E36";
 const BARRA_ULTIMA = "#52525B";
 const TRATTO_GRAFICO = "#71717A";
 
-/** Pillola: stato, conteggio, etichetta breve. Tre toni, non uno di più. */
+/** Pillola: stato, conteggio, etichetta breve. */
 const Pillola = ({ tono = "neutro", children }) => {
   const toni = {
     neutro: { background: "var(--velo)", color: "var(--muted)" },
     euro: { background: "var(--velo-euro)", color: "var(--euro)" },
+    ambra: { background: "var(--ambra-bg)", color: "var(--ambra)" },
     accento: { background: "var(--velo-accento)", color: "var(--accento-chiaro)" },
     errore: { background: "var(--velo-errore)", color: "var(--errore)" },
   }[tono];
@@ -3454,11 +3455,13 @@ function SezioneDocumenti({ commessa, allegati, spazio, fornitoriNoti = [], onCa
       {inCaricamento ? (
         <div className="rounded-[var(--r-sm)] px-4 py-3.5" style={{ background: "var(--tela-alt)", borderRadius: "var(--r-sm)", boxShadow: "var(--ombra-xs)" }}>
           <div className="flex items-center gap-2.5">
-            <Loader2 size={14} strokeWidth={1.75} className="animate-spin" style={{ color: "var(--accento-chiaro)" }} />
-            <p className="text-sm truncate">Caricamento di {inCaricamento}…</p>
+            {/* Un caricamento in corso non è né un'azione né un avviso: è una
+                cosa che sta succedendo. Non prende né il bronzo né l'ambra. */}
+            <Loader2 size={14} strokeWidth={1.75} className="animate-spin" style={{ color: "var(--txt-tenue)" }} />
+            <p className="t-corpo truncate">Caricamento di {inCaricamento}…</p>
           </div>
           <div className="mt-3 h-1 rounded-full overflow-hidden" style={{ background: "var(--hairline)" }}>
-            <div className="h-full anim-scorre" style={{ background: "var(--accento)", width: "40%" }} />
+            <div className="h-full anim-scorre" style={{ background: "#52525B", width: "40%" }} />
           </div>
         </div>
       ) : form ? (
@@ -3494,17 +3497,20 @@ function SezioneDocumenti({ commessa, allegati, spazio, fornitoriNoti = [], onCa
             <li key={a.id} className="rounded-[var(--r-sm)] px-3.5 py-3" style={{ boxShadow: "var(--ombra-sm)" }}>
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-9 h-9 rounded-[var(--r-sm)] flex items-center justify-center shrink-0" style={{ background: "var(--velo-accento)" }}>
+                  {/* Il box dell'icona era in bronzo su OGNI documento
+                      archiviato: l'accento addosso a un elenco intero. Un tipo
+                      di file non è una cosa notevole, è una constatazione. */}
+                  <div className="w-9 h-9 flex items-center justify-center shrink-0 box">
                     {a.tipo === "application/pdf"
-                      ? <FileText size={16} strokeWidth={1.75} style={{ color: "var(--accento-chiaro)" }} />
-                      : <FileImage size={16} strokeWidth={1.75} style={{ color: "var(--accento-chiaro)" }} />}
+                      ? <FileText size={16} strokeWidth={1.75} style={{ color: "var(--txt-tenue)" }} />
+                      : <FileImage size={16} strokeWidth={1.75} style={{ color: "var(--txt-tenue)" }} />}
                   </div>
                   <div className="min-w-0">
                     <p className="text-sm font-medium truncate">{a.nomeFile}</p>
                     {/* I dati del DDT compaiono solo se ci sono: un documento
                         archiviato senza compilarli si legge come prima. */}
                     {rigaDDT(a) && (
-                      <p className="f-mono t-piccolo mt-0.5 truncate" style={{ color: "var(--accento-chiaro)" }}>{rigaDDT(a)}</p>
+                      <p className="f-mono t-piccolo mt-0.5 truncate" style={{ color: "var(--txt-medio)" }}>{rigaDDT(a)}</p>
                     )}
                     <p className="f-mono t-piccolo mt-0.5" style={{ color: "var(--muted)" }}>
                       {fmtData(a.caricatoIl.slice(0, 10))} · {fmtDimensione(a.dimensione)}
@@ -3591,17 +3597,34 @@ function SezioneDocumenti({ commessa, allegati, spazio, fornitoriNoti = [], onCa
 const chiaveGruppoDi = (riga) => (riga.ddtNumero ? `ddt:${riga.ddtNumero}` : "senza-ddt");
 
 /**
- * Come si presenta ogni stato di abbinamento. Il colore non è decorazione: il
- * verde vuol dire "il software ha messo qui una commessa da solo, guardala", il
- * giallo "c'è un candidato ma non ci metto la mano io", il grigio "tocca a te".
- * A colpo d'occhio si deve capire dove serve attenzione senza leggere niente.
+ * Come si presenta ogni stato di abbinamento.
+ *
+ * Il colore qui non è decorazione: è il canale che permette di scorrere venti
+ * gruppi e vedere dove serve un occhio senza leggere una parola. Ma per farlo
+ * si era preso in prestito il VERDE — che in questo prodotto significa "euro" —
+ * e il BRONZO, che è l'accento. Nella stessa riga di tabella il totale era verde
+ * perché è denaro e l'intestazione del gruppo era verde perché l'abbinamento
+ * era automatico: due significati, un colore, a due centimetri di distanza.
+ *
+ * Adesso l'attenzione ha la sua ambra, e gli stati sono ordinati per QUELLO CHE
+ * DEVI FARE, con una gradazione invece di un semaforo:
+ *   manuale   — sistemato da te: neutro, silenzioso
+ *   auto      — l'ha messo il software: neutro, ma con un filo d'ambra addosso
+ *               («l'abbiamo riempito noi, dagli un'occhiata»)
+ *   possibile — c'è un candidato e tocca a te decidere: ambra piena
+ *   misto     — righe su commesse diverse: ambra piena
+ *   vuoto     — non c'è niente: grigio quieto
+ * Il verde resta agli importi, il bronzo al marchio e ai link.
+ *
+ * `filo` è il colore del bordo spesso a sinistra della card: più spento del
+ * testo, perché è un segnale periferico, non una scritta.
  */
 const STILI_STATO = {
-  auto:      { icona: CheckCircle2,  colore: "var(--euro)",  velo: "var(--velo-euro)",     bordo: "var(--verde-bordo)" },
-  possibile: { icona: HelpCircle,    colore: "var(--accento-chiaro)",      velo: "var(--velo-accento)",  bordo: "var(--accento-bordo)" },
-  manuale:   { icona: Check,         colore: "var(--euro)",  velo: "var(--verde-bg)",  bordo: "var(--verde-bordo)" },
-  misto:     { icona: CircleDot,     colore: "var(--accento-chiaro)",      velo: "var(--velo-accento)",  bordo: "var(--accento-bordo)" },
-  vuoto:     { icona: CircleDot,     colore: "var(--tenue)", velo: "var(--velo)",          bordo: "var(--hairline)" },
+  auto:      { icona: CheckCircle2, colore: "var(--txt-chiaro)", velo: "var(--bg-elevato)", bordo: "var(--ambra-bordo)", filo: "var(--ambra-bordo)" },
+  possibile: { icona: HelpCircle,   colore: "var(--ambra)",      velo: "var(--ambra-bg)",   bordo: "var(--ambra-bordo)", filo: "var(--ambra)" },
+  manuale:   { icona: Check,        colore: "var(--txt-chiaro)", velo: "var(--bg-elevato)", bordo: "var(--bordo-input)", filo: "var(--bordo-input)" },
+  misto:     { icona: CircleDot,    colore: "var(--ambra)",      velo: "var(--ambra-bg)",   bordo: "var(--ambra-bordo)", filo: "var(--ambra)" },
+  vuoto:     { icona: CircleDot,    colore: "var(--txt-tenue)",  velo: "var(--velo)",       bordo: "var(--bordo)",       filo: "var(--bordo-input)" },
 };
 
 /**
@@ -3828,8 +3851,8 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
           <p className="t-piccolo f-mono mt-2" style={{ color: "var(--txt-attenuato)" }}>{lettura.fattura.nomeFile}</p>
         </div>
         <section className="card p-7">
-          <div className="w-10 h-10 rounded-[var(--r-sm)] flex items-center justify-center mb-4" style={{ background: "var(--velo-accento)" }}>
-            <AlertTriangle size={18} strokeWidth={1.75} style={{ color: "var(--accento-chiaro)" }} />
+          <div className="w-10 h-10 rounded-[var(--r-sm)] flex items-center justify-center mb-4" style={{ background: "var(--ambra-bg)" }}>
+            <AlertTriangle size={18} strokeWidth={1.75} style={{ color: "var(--ambra)" }} />
           </div>
           <h2 className="t-sezione mb-3">Questo PDF è una scansione</h2>
           <p className="text-sm leading-relaxed mb-4" style={{ color: "var(--muted)" }}>{lettura.avvisi[0]}</p>
@@ -3855,15 +3878,19 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <Micro>Importazione fattura</Micro>
-            {/* Da dove arrivano i numeri: un XML è un dato esatto, un PDF è
-                una stampa interpretata. Chi controlla deve saperlo. */}
-            <Pillola tono={daPDF ? "accento" : "euro"}>
+          {/* Il fornitore è il titolo, non un sottotitolo sotto un'etichetta
+              che ripeteva il nome della schermata. Accanto, da dove arrivano i
+              numeri: un XML è un dato scritto dal fornitore, un PDF è una
+              stampa che qualcuno ha dovuto interpretare. Il PDF prende
+              l'ambra perché chiede di ricontrollare; l'XML resta neutro,
+              perché non chiede niente — prima era verde, e il verde qui
+              significa "euro", non "va bene". */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="t-titolo">{lettura.fornitore.denominazione || "Fornitore non letto"}</h1>
+            <Pillola tono={daPDF ? "ambra" : "neutro"}>
               {etichettaOrigine[lettura.origine] || etichettaOrigine.pdf}
             </Pillola>
           </div>
-          <h1 className="t-titolo mt-2">{lettura.fornitore.denominazione || "Fornitore non letto"}</h1>
           <p className="f-mono t-piccolo mt-1.5" style={{ color: "var(--muted)" }}>
             {lettura.fornitore.partitaIVA && `P.IVA ${lettura.fornitore.partitaIVA} · `}
             Fattura {doc.numero || "—"} del {doc.data ? fmtData(doc.data) : "—"}
@@ -3876,9 +3903,9 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
       </div>
 
       {lettura.avvisi.length > 0 && (
-        <div className="rounded-[var(--r-sm)] px-4 py-3 space-y-1" style={{ background: "var(--velo-accento)", border: ".5px solid var(--accento-bordo)" }} role="alert">
+        <div className="rounded-[var(--r-sm)] px-4 py-3 space-y-1" style={{ background: "var(--ambra-bg)", border: ".5px solid var(--ambra-bordo)" }} role="alert">
           {lettura.avvisi.map((a, i) => (
-            <p key={i} className="text-sm flex items-start gap-2" style={{ color: "var(--accento-chiaro)" }}>
+            <p key={i} className="t-corpo flex items-start gap-2" style={{ color: "var(--ambra)" }}>
               <AlertTriangle size={14} strokeWidth={1.75} className="mt-0.5 shrink-0" /> {a}
             </p>
           ))}
@@ -3904,7 +3931,7 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
             /* Il filetto sul bordo: rende leggibile a colpo d'occhio, scorrendo
                la pagina, quali gruppi sono a posto e quali chiedono qualcosa.
                È l'unico bordo spesso dell'applicazione, e se lo merita. */
-            borderLeft: `3px solid ${stato.tipo === "vuoto" ? "var(--bordo-input)" : stile.colore}` }}>
+            borderLeft: `3px solid ${stile.filo}` }}>
             <div className="px-7 py-5 flex flex-wrap items-end justify-between gap-5" style={{ borderBottom: ".5px solid var(--hairline)", background: "var(--tela-alt)" }}>
               <div>
                 <Micro>{g.ddtNumero ? "Documento di trasporto" : "Righe senza DDT"}</Micro>
@@ -3940,7 +3967,10 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
                       si cambia, ed è questo che tiene la proposta una proposta. */}
                   <select value={commessaGruppo} onChange={(e) => assegnaGruppo(g.chiave, e.target.value)}
                     className={inputCls} style={{ width: 230, background: "var(--card)",
-                      ...(stato.tipo === "auto" ? { borderColor: "var(--verde-bordo-forte)" } : {}) }}>
+                      /* Il menù pre-riempito dal software porta un filo
+                         d'ambra: è l'unico campo della schermata che qualcuno
+                         deve rileggere prima di confermare. */
+                      ...(stato.tipo === "auto" ? { borderColor: "var(--ambra-bordo)" } : {}) }}>
                     <option value={NON_IMPORTARE}>— non importare —</option>
                     {commesse.map((c) => <option key={c.id} value={c.id}>{c.codice} — {c.descrizione}</option>)}
                   </select>
@@ -3962,12 +3992,12 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
                     const tot = totaleRiga(r);
                     const daControllare = r.daControllare.length > 0;
                     return (
-                      <tr key={r.id} style={{ borderTop: ".5px solid var(--hairline)", background: daControllare ? "var(--velo-accento)" : "transparent" }}>
+                      <tr key={r.id} style={{ borderTop: ".5px solid var(--hairline)", background: daControllare ? "var(--ambra-bg)" : "transparent" }}>
                         <td  style={{ minWidth: 280 }}>
                           <input value={r.descrizione} onChange={(e) => modificaRiga(r.id, { descrizione: e.target.value })}
                             className={inputCls + " py-1.5"} style={{ background: "var(--tela-alt)" }} aria-label="Descrizione della riga" />
                           {daControllare && (
-                            <p className="t-piccolo mt-1 flex items-center gap-1" style={{ color: "var(--accento-chiaro)" }}>
+                            <p className="t-piccolo mt-1 flex items-center gap-1" style={{ color: "var(--ambra)" }}>
                               <AlertTriangle size={11} strokeWidth={1.75} /> da controllare: {r.daControllare.join(", ")}
                             </p>
                           )}
@@ -4010,7 +4040,9 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
           {[
             { e: "Righe da importare", v: `${daImportare.length} di ${righe.length}` },
             { e: "Totale materiali", v: euro(totaleDaImportare), c: "var(--euro)" },
-            { e: "Righe escluse", v: String(righe.length - daImportare.length), c: righe.length - daImportare.length > 0 ? "var(--accento-chiaro)" : "var(--muted)" },
+            /* Escludere una riga è una scelta, non un problema: si nota, ma
+               non chiede niente. Quindi bianco pieno, non ambra. */
+            { e: "Righe escluse", v: String(righe.length - daImportare.length), c: righe.length - daImportare.length > 0 ? "var(--txt-chiaro)" : "var(--muted)" },
           ].map((k) => (
             <div key={k.e} className="rounded-[var(--r-sm)] px-4 py-3" style={{ boxShadow: "var(--ombra-sm)" }}>
               <Micro>{k.e}</Micro>
@@ -4856,7 +4888,15 @@ function StileGlobale() {
            toccare il bronzo, che resta il colore fissato. */
         --accento-testo:#FFFBF5; --accento-bg:#211B12; --accento-bordo:#3A2E1E;
 
-        /* --- significato, mai decorazione --- */
+        /* --- significato, mai decorazione ---
+           L'ambra è nata da un difetto preciso: nel sistema non esisteva un
+           colore per "guarda qui", e allora se l'era preso il bronzo. Risultato:
+           nella schermata Fatture l'accento compariva sette volte — pastiglia
+           d'origine, filo del gruppo, box dello stato, blocco avvisi, riga da
+           controllare — e quando l'accento è ovunque non indica più niente.
+           Adesso l'attenzione ha una tinta sua, e il bronzo torna a essere il
+           bronzo. 8,90:1 sul fondo dell'app, 7,54:1 sul proprio velo. */
+        --ambra:#D9A441; --ambra-bg:#241B0C; --ambra-bordo:#4A3818;
         --verde:#4ADE80; --verde-bg:#0D2318; --verde-bordo:#16432A;
         /* Un verde di bordo più marcato: serve solo dove il verde è un
            SEGNALE da notare (la commessa proposta in automatico), non una
