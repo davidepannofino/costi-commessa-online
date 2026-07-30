@@ -4076,7 +4076,78 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            {/* ============ SOTTO I 640px: UNA SCHEDA PER RIGA ============
+                Cinque colonne di cui TRE editabili — descrizione, quantità,
+                prezzo — più il totale e il menù della commessa: circa 930px di
+                larghezza minima. Su un telefono significava scorrere di lato
+                per compilare un campo, e poi ancora per vedere che effetto
+                aveva fatto. Qui si conferma denaro: è l'ultimo posto
+                dell'applicazione dove far lavorare qualcuno alla cieca.
+
+                L'ordine è quello in cui si ragiona: cosa è (descrizione),
+                quanto e a quanto (i due campi che si toccano davvero,
+                affiancati), quanto fa (il totale, subito sotto i suoi
+                ingredienti, così un prezzo sbagliato si vede appena scritto),
+                e infine dove va (la commessa). Le etichette diventano visibili
+                perché su mobile le intestazioni di colonna non ci sono più. */}
+            <ul className="sm:hidden">
+              {righeGruppo.map((r, i) => {
+                const tot = totaleRiga(r);
+                const daControllare = r.daControllare.length > 0;
+                return (
+                  <li key={r.id} className="px-5 py-5"
+                    style={{
+                      borderTop: i > 0 ? ".5px solid var(--bordo)" : ".5px solid var(--bordo-tenue)",
+                      background: daControllare ? "var(--ambra-bg)" : "transparent",
+                    }}>
+                    <Campo etichetta="Descrizione">
+                      <input value={r.descrizione} onChange={(e) => modificaRiga(r.id, { descrizione: e.target.value })}
+                        className={inputCls + " py-2"} style={{ background: "var(--tela-alt)" }} />
+                    </Campo>
+                    {daControllare && (
+                      <p className="t-piccolo mt-2 flex items-start gap-1.5" style={{ color: "var(--ambra)" }}>
+                        <AlertTriangle size={12} strokeWidth={1.75} className="mt-0.5 shrink-0" />
+                        da controllare: {r.daControllare.join(", ")}
+                      </p>
+                    )}
+                    {r.unitaMisura && (
+                      <p className="t-piccolo f-mono mt-1.5" style={{ color: "var(--txt-tenue)" }}>unità: {r.unitaMisura}</p>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-3 mt-4">
+                      <Campo etichetta="Quantità">
+                        <input value={r.quantita} onChange={(e) => modificaRiga(r.id, { quantita: e.target.value })}
+                          className={inputCls + " f-mono text-right py-2"} style={{ background: "var(--tela-alt)" }} inputMode="decimal" />
+                      </Campo>
+                      <Campo etichetta="Prezzo unitario">
+                        <input value={r.prezzoUnitario} onChange={(e) => modificaRiga(r.id, { prezzoUnitario: e.target.value })}
+                          className={inputCls + " f-mono text-right py-2"} style={{ background: "var(--tela-alt)" }} inputMode="decimal" />
+                      </Campo>
+                    </div>
+
+                    <div className="flex items-baseline justify-between gap-3 mt-4 pt-3.5"
+                      style={{ borderTop: ".5px solid var(--bordo-tenue)" }}>
+                      <span className="t-micro">Totale riga</span>
+                      <span className="f-mono" style={{ fontSize: 15, fontWeight: 500, color: tot == null ? "var(--errore)" : "var(--euro)" }}>
+                        {tot == null ? "da controllare" : euro(tot)}
+                      </span>
+                    </div>
+
+                    <div className="mt-4">
+                      <Campo etichetta="Commessa">
+                        <select value={r.commessaId} onChange={(e) => modificaRiga(r.id, { commessaId: e.target.value, assegnazione: "manuale" })}
+                          className={inputCls + " py-2"} style={{ background: "var(--tela-alt)" }}>
+                          <option value={NON_IMPORTARE}>— non importare —</option>
+                          {commesse.map((c) => <option key={c.id} value={c.id}>{c.codice} — {c.descrizione}</option>)}
+                        </select>
+                      </Campo>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+
+            <div className="hidden sm:block overflow-x-auto">
               <table className="tabella text-sm">
                 <thead>
                   <tr className="text-left">
