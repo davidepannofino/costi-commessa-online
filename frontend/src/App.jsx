@@ -4162,18 +4162,39 @@ function VistaDati({ dipendenti, commesse, registrazioni, setCommesse, aggiungi,
   }, [registrazioni, filtro, dipById, comById]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div>
-        <Micro>Gestione</Micro>
-        <h1 className="t-titolo mt-2">Dati</h1>
+        <h1 className="t-titolo">Dati</h1>
+        <p className="t-piccolo mt-1.5" style={{ color: "var(--txt-tenue)" }}>
+          Le ore giorno per giorno. Tutto il resto di questa schermata si usa una volta al mese.
+        </p>
       </div>
 
-      <Sezione titolo="Registra ore">
+      {/* ================= LA BANDA D'INSERIMENTO =================
+          Prima era la prima di quattro sezioni identiche, e la schermata
+          diceva che registrare un'ora conta quanto azzerare il database.
+          Non è vero: questa è la cosa che l'impiegata fa cento volte, e le
+          altre tre si usano una volta al mese. Quindi qui la banda ha un
+          fondo rialzato, sta appiccicata in alto quando si scorre, e i campi
+          stanno su una riga sola nell'ordine in cui si compilano — chi, dove,
+          quando, quante. L'ultimo campo è Ore perché è l'unico che cambia
+          davvero fra due inserimenti di fila.
+
+          Nota: qui starebbe bene anche `sticky`, per averla sotto mano mentre
+          si scorre l'elenco. Non c'è, perché l'altezza della testata non è
+          costante (su mobile va a capo, e con l'intervallo sbagliato cresce di
+          una riga) e un offset fisso sbagliato la fa finire sotto la testata.
+          Si mette quando l'altezza della testata diventa una misura vera. */}
+      <div className="card" style={{ background: "var(--bg-elevato)", borderColor: "var(--bordo-input)" }}>
         {dipendenti.length === 0 || commesse.length === 0 ? (
-          <p className="text-sm flex items-center gap-2" style={{ color: "var(--muted)" }}><Info size={14} strokeWidth={1.75} /> Per registrare ore servono almeno un dipendente e una commessa: creali qui sotto.</p>
+          <p className="px-6 py-5 t-corpo flex items-center gap-2" style={{ color: "var(--txt-attenuato)" }}>
+            <Info size={14} strokeWidth={1.75} className="shrink-0" />
+            Per registrare ore servono almeno un dipendente e una commessa: creali qui sotto.
+          </p>
         ) : (
-          <>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end" onKeyDown={(e) => e.key === "Enter" && registra()}>
+          <div className="px-6 py-5">
+            <div className="grid gap-4 items-end lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1.6fr)_150px_110px_auto]"
+              onKeyDown={(e) => e.key === "Enter" && registra()}>
               <Campo etichetta="Dipendente" errore={erroriForm.dip}>
                 <select value={form.dipendenteId} onChange={(e) => setForm((f) => ({ ...f, dipendenteId: e.target.value }))} className={inputCls}>
                   <option value="">—</option>
@@ -4190,50 +4211,43 @@ function VistaDati({ dipendenti, commesse, registrazioni, setCommesse, aggiungi,
                 <input type="date" value={form.data} onChange={(e) => setForm((f) => ({ ...f, data: e.target.value }))} className={inputCls + " f-mono"} />
               </Campo>
               <Campo etichetta="Ore" errore={erroriForm.ore}>
-                <input ref={refOre} value={form.ore} onChange={(e) => setForm((f) => ({ ...f, ore: e.target.value }))} placeholder="es. 8 o 0,5" className={inputCls + " f-mono text-right"} />
+                <input ref={refOre} value={form.ore} onChange={(e) => setForm((f) => ({ ...f, ore: e.target.value }))} placeholder="8 o 0,5" className={inputCls + " f-mono text-right"} />
               </Campo>
               <Bottone onClick={registra}><Plus size={14} strokeWidth={1.75} /> Registra</Bottone>
             </div>
-            <p className="t-piccolo mt-4" style={{ color: "var(--muted)" }}>Dopo ogni registrazione il modulo resta impostato: cambia solo le ore e premi Invio per inserire una giornata dopo l'altra.</p>
-          </>
-        )}
-      </Sezione>
-
-      <Sezione titolo="Commesse">
-        <div className="grid sm:grid-cols-3 gap-4 items-end mb-5" onKeyDown={(e) => e.key === "Enter" && creaCommessa()}>
-          <Campo etichetta="Codice"><input value={nuovaCom.codice} onChange={(e) => setNuovaCom((c) => ({ ...c, codice: e.target.value }))} placeholder="es. P25 o VILLA-ROSSI" className={inputCls + " f-mono"} /></Campo>
-          <Campo etichetta="Descrizione"><input value={nuovaCom.descrizione} onChange={(e) => setNuovaCom((c) => ({ ...c, descrizione: e.target.value }))} placeholder="es. Ristrutturazione Villa Rossi" className={inputCls} /></Campo>
-          <Bottone onClick={creaCommessa}><Plus size={14} strokeWidth={1.75} /> Nuova commessa</Bottone>
-        </div>
-        {commesse.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {commesse.map((c) => (
-              <span key={c.id} className="inline-flex items-center gap-1.5 t-piccolo rounded-[var(--r-sm)] pl-2.5 pr-1 py-1" style={{ border: ".5px solid var(--hairline)", background: "var(--tela-alt)" }} title={c.descrizione}>
-                <span className="f-mono font-medium">{c.codice}</span>
-                <button onClick={() => setRinomina(c)} aria-label={"Rinomina commessa " + c.codice} title="Rinomina" className="p-0.5 rounded btn" style={{ color: "var(--muted)" }}><Pencil size={10} strokeWidth={1.75} /></button>
-                <button onClick={() => eliminaCommessa(c)} aria-label={"Elimina commessa " + c.codice} className="p-0.5 rounded btn" style={{ color: "var(--muted)" }}><X size={11} strokeWidth={1.75} /></button>
-              </span>
-            ))}
+            <p className="t-piccolo mt-3.5" style={{ color: "var(--txt-fioco)" }}>
+              Il modulo resta impostato: cambia solo le ore e premi Invio per inserire una giornata dopo l'altra.
+            </p>
           </div>
         )}
-      </Sezione>
+      </div>
 
-      <Sezione titolo={<>Registrazioni <span className="f-mono t-piccolo" style={{ color: "var(--muted)" }}>({registrazioni.length})</span></>}
-        extra={
+      {/* ================= QUELLO CHE HAI REGISTRATO =================
+          La tabella è la verifica dell'inserimento, quindi viene subito dopo
+          la banda e prende tutta la pagina. */}
+      <section className="card overflow-hidden">
+        <div className="px-6 py-4 flex flex-wrap items-center justify-between gap-3"
+          style={{ borderBottom: ".5px solid var(--bordo)" }}>
+          <h2 className="t-sotto">
+            Registrazioni <span className="f-mono t-piccolo" style={{ color: "var(--txt-fioco)" }}>{registrazioni.length}</span>
+          </h2>
           <div className="relative">
-            <Search size={13} strokeWidth={1.75} className="absolute left-3 top-2.5" style={{ color: "var(--muted)" }} />
-            <input value={filtro} onChange={(e) => setFiltro(e.target.value)} placeholder="Cerca…" className={inputCls + " pl-8 py-1.5"} style={{ width: 200, background: "var(--tela-alt)" }} aria-label="Filtra registrazioni" />
+            <Search size={13} strokeWidth={1.75} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--txt-tenue)" }} />
+            <input value={filtro} onChange={(e) => setFiltro(e.target.value)} placeholder="Cerca…"
+              className="pl-8 pr-3 py-1.5 t-corpo outline-none campo" style={{ width: 200 }} aria-label="Filtra registrazioni" />
           </div>
-        }>
+        </div>
         {registrazioni.length === 0 ? (
-          <p className="text-sm py-2" style={{ color: "var(--muted)" }}>Le ore che registri compariranno qui, ordinate dalla più recente.</p>
+          <p className="px-6 py-6 t-corpo" style={{ color: "var(--txt-attenuato)" }}>
+            Le ore che registri compariranno qui, dalla più recente.
+          </p>
         ) : (
-          <div className="overflow-x-auto -mx-6 -mb-6">
-            <table className="tabella text-sm">
+          <div className="overflow-x-auto">
+            <table className="tabella t-corpo">
               <thead>
-                <tr className="text-left">
+                <tr>
                   {["Data", "Dipendente", "Commessa", "Ore", ""].map((h, i) => (
-                    <th key={i} className={`px-6 py-2.5 t-micro ${h === "Ore" ? "text-right" : ""}`} style={{ letterSpacing: ".1em", color: "var(--muted)" }}>{h}</th>
+                    <th key={i} className={h === "Ore" ? "text-right" : ""}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -4241,44 +4255,85 @@ function VistaDati({ dipendenti, commesse, registrazioni, setCommesse, aggiungi,
                 {elenco.map((r) => {
                   const d = dipById.get(r.dipendenteId), c = comById.get(r.commessaId);
                   return (
-                    <tr key={r.id} className="riga" style={{ borderTop: ".5px solid var(--hairline)" }}>
-                      <td className="px-6 py-3 f-mono">{fmtData(r.data)}</td>
-                      <td className="px-6 py-3">{d ? d.nome + " " + d.cognome : "—"}</td>
-                      <td className="px-6 py-3 f-mono">{c ? c.codice : "—"}</td>
-                      <td className="px-6 py-3 f-mono text-right">{fmtOre.format(r.ore)}</td>
-                      <td className="px-6 py-3 text-right whitespace-nowrap">
-                        <button onClick={() => setModifica(r)} aria-label="Modifica registrazione" className="p-1.5 rounded-[var(--r-sm)] mr-1 btn" style={{ boxShadow: "var(--ombra-sm)" }}><Pencil size={12} strokeWidth={1.75} /></button>
-                        <button onClick={() => { eliminaReg(r.id); notifica("Registrazione eliminata."); }} aria-label="Elimina registrazione" className="p-1.5 rounded-[var(--r-sm)] btn" style={{ border: ".5px solid var(--rosso-bordo)", color: "var(--errore)" }}><Trash2 size={12} strokeWidth={1.75} /></button>
+                    <tr key={r.id} className="riga">
+                      <td className="f-mono">{fmtData(r.data)}</td>
+                      <td>{d ? d.nome + " " + d.cognome : "—"}</td>
+                      <td><span className="badge-codice">{c ? c.codice : "—"}</span></td>
+                      <td className="f-mono text-right" style={{ color: "var(--txt)" }}>{fmtOre.format(r.ore)}</td>
+                      <td className="text-right whitespace-nowrap">
+                        <button onClick={() => setModifica(r)} aria-label={`Modifica la registrazione del ${fmtData(r.data)}`}
+                          className="p-1.5 mr-1.5 btn btn-fantasma" style={{ borderRadius: "var(--r-sm)" }}><Pencil size={12} strokeWidth={1.75} /></button>
+                        <button onClick={() => { eliminaReg(r.id); notifica("Registrazione eliminata."); }} aria-label={`Elimina la registrazione del ${fmtData(r.data)}`}
+                          className="p-1.5 btn btn-pericolo" style={{ borderRadius: "var(--r-sm)" }}><Trash2 size={12} strokeWidth={1.75} /></button>
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
-            {registrazioni.length > 300 && elenco.length === 300 && <p className="t-piccolo px-6 py-3" style={{ color: "var(--muted)" }}>Mostrate le prime 300 righe: usa la ricerca per trovarne altre.</p>}
+            {registrazioni.length > 300 && elenco.length === 300 && (
+              <p className="t-piccolo px-6 py-3.5" style={{ color: "var(--txt-tenue)", borderTop: ".5px solid var(--bordo-tenue)" }}>
+                Mostrate le prime 300 righe: usa la ricerca per trovarne altre.
+              </p>
+            )}
           </div>
         )}
-      </Sezione>
+      </section>
 
-      <Sezione titolo="Importa, esporta, azzera">
-        <div className="grid sm:grid-cols-2 gap-4 mb-6">
+      {/* ================= LE COSE DA UNA VOLTA AL MESE =================
+          Anagrafica commesse e travasi di file: non sparite, ma messe a
+          fianco e in tono minore, in una griglia asimmetrica. */}
+      <div className="grid gap-7 items-start xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
+        <Sezione titolo="Commesse">
+          <div className="grid sm:grid-cols-[1fr_1fr] gap-4 items-end mb-5" onKeyDown={(e) => e.key === "Enter" && creaCommessa()}>
+            <Campo etichetta="Codice"><input value={nuovaCom.codice} onChange={(e) => setNuovaCom((c) => ({ ...c, codice: e.target.value }))} placeholder="es. P25" className={inputCls + " f-mono"} /></Campo>
+            <Campo etichetta="Descrizione"><input value={nuovaCom.descrizione} onChange={(e) => setNuovaCom((c) => ({ ...c, descrizione: e.target.value }))} placeholder="es. Villa Rossi" className={inputCls} /></Campo>
+          </div>
+          <Bottone variante="fantasma" onClick={creaCommessa}><Plus size={14} strokeWidth={1.75} /> Nuova commessa</Bottone>
+          {commesse.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-6 pt-6" style={{ borderTop: ".5px solid var(--bordo-tenue)" }}>
+              {commesse.map((c) => (
+                <span key={c.id} className="inline-flex items-center gap-1.5 pl-2.5 pr-1 py-1 box" title={c.descrizione}>
+                  <span className="f-mono t-piccolo" style={{ fontWeight: 500, color: "var(--txt-medio)" }}>{c.codice}</span>
+                  <button onClick={() => setRinomina(c)} aria-label={"Rinomina commessa " + c.codice} title="Rinomina" className="p-0.5 rounded btn" style={{ color: "var(--txt-tenue)" }}><Pencil size={10} strokeWidth={1.75} /></button>
+                  <button onClick={() => eliminaCommessa(c)} aria-label={"Elimina commessa " + c.codice} className="p-0.5 rounded btn" style={{ color: "var(--txt-tenue)" }}><X size={11} strokeWidth={1.75} /></button>
+                </span>
+              ))}
+            </div>
+          )}
+        </Sezione>
+
+        <Sezione titolo="File e backup">
           <Campo etichetta="Nome azienda (per l'intestazione del PDF)">
             <input value={azienda} onChange={(e) => setAzienda(e.target.value)} placeholder="es. Rossi Costruzioni S.r.l." className={inputCls} />
           </Campo>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <input ref={refExcel} type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => { const f = e.target.files[0]; if (f) caricaExcel(f); e.target.value = ""; }} />
-          <Bottone onClick={() => refExcel.current.click()}><Upload size={14} strokeWidth={1.75} /> Importa da Excel</Bottone>
-          <Bottone variante="fantasma" onClick={esportaTutto}><FileDown size={14} strokeWidth={1.75} /> Esporta tutto in Excel</Bottone>
-          <Bottone variante="fantasma" onClick={backup}><Download size={14} strokeWidth={1.75} /> Backup (JSON)</Bottone>
-          <Bottone variante="fantasma" onClick={ripristina}><Upload size={14} strokeWidth={1.75} /> Ripristina backup</Bottone>
-          <Bottone variante="fantasma" onClick={esempio}><RotateCcw size={14} strokeWidth={1.75} /> Ricarica esempio</Bottone>
-          <Bottone variante="pericolo" onClick={svuota}><Eraser size={14} strokeWidth={1.75} /> Svuota tutto</Bottone>
-        </div>
-        <p className="t-piccolo mt-5 flex items-start gap-1.5 leading-relaxed" style={{ color: "var(--muted)" }}>
-          <Info size={12} strokeWidth={1.75} className="mt-0.5 shrink-0" /> I dati vengono salvati automaticamente su questo PC a ogni modifica, con backup di sicurezza a data e ora conservati in caso di problemi. "Backup (JSON)" resta utile per portare una copia dei dati altrove o archiviarla a parte. Se reimporti un file con dipendenti e mesi già presenti, l'app ti chiederà se sostituire o saltare, senza mai creare doppioni.
-        </p>
-      </Sezione>
+          <div className="flex flex-wrap gap-2 mt-6">
+            <input ref={refExcel} type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => { const f = e.target.files[0]; if (f) caricaExcel(f); e.target.value = ""; }} />
+            <Bottone onClick={() => refExcel.current.click()}><Upload size={14} strokeWidth={1.75} /> Importa da Excel</Bottone>
+            <Bottone variante="fantasma" onClick={esportaTutto}><FileDown size={14} strokeWidth={1.75} /> Esporta tutto</Bottone>
+            <Bottone variante="fantasma" onClick={backup}><Download size={14} strokeWidth={1.75} /> Backup</Bottone>
+            <Bottone variante="fantasma" onClick={ripristina}><Upload size={14} strokeWidth={1.75} /> Ripristina</Bottone>
+          </div>
+          <p className="t-piccolo mt-5 flex items-start gap-1.5 leading-relaxed" style={{ color: "var(--txt-tenue)" }}>
+            <Info size={12} strokeWidth={1.75} className="mt-0.5 shrink-0" /> I dati si salvano da soli a ogni modifica, con copie di sicurezza a data e ora. Il backup JSON serve a portarne una copia altrove. Se reimporti un file con dipendenti e mesi già presenti, l'app chiede se sostituire o saltare: doppioni non ne crea.
+          </p>
+
+          {/* Azzerare tutto e ricaricare l'esempio non stanno in fila con i
+              backup: sono le due azioni che CANCELLANO quello che c'è, e una
+              fila di sei bottoni uguali le fa sembrare la sesta cosa da
+              provare. Stanno sotto un filo, con scritto cosa fanno. */}
+          <div className="mt-7 pt-6" style={{ borderTop: ".5px solid var(--bordo)" }}>
+            <p className="t-micro">Azioni che cancellano</p>
+            <div className="flex flex-wrap gap-2 mt-3.5">
+              <Bottone variante="fantasma" onClick={esempio}><RotateCcw size={14} strokeWidth={1.75} /> Ricarica esempio</Bottone>
+              <Bottone variante="pericolo" onClick={svuota}><Eraser size={14} strokeWidth={1.75} /> Svuota tutto</Bottone>
+            </div>
+            <p className="t-piccolo mt-3" style={{ color: "var(--txt-fioco)" }}>
+              «Ricarica esempio» sostituisce i tuoi dati con quelli dimostrativi. Entrambe chiedono conferma.
+            </p>
+          </div>
+        </Sezione>
+      </div>
 
       {modifica && (
         <Modale titolo="Modifica registrazione" onChiudi={() => setModifica(null)}>
