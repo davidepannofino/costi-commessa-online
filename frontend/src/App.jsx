@@ -65,6 +65,53 @@ const parseNumIt = (s) => {
 };
 const dataValida = (iso) => /^\d{4}-\d{2}-\d{2}$/.test(iso) && !isNaN(new Date(iso + "T00:00:00").getTime());
 
+/* ---------------------------------------------------------------------------
+   LO STATO CHE STA NELL'URL
+
+   Vista, periodo e commessa aperta vivevano solo in useState. Conseguenze, in
+   ordine di fastidio: il tasto Indietro del browser USCIVA dall'applicazione;
+   un dettaglio di commessa non si poteva mettere fra i preferiti né mandare a
+   qualcuno; e a ogni ricaricamento il periodo tornava al luglio scritto nel
+   codice, anche se stavi guardando marzo.
+
+   Il titolare apre il telefono, tocca una commessa, gli arriva una chiamata,
+   torna: era sulla Dashboard, nel mese sbagliato.
+
+   Niente libreria di instradamento per quattro parametri: la query string, due
+   funzioni pure qui sotto, e un ascoltatore di popstate. I nomi sono in chiaro
+   perché un indirizzo si legge anche quando lo si incolla in una chat.
+--------------------------------------------------------------------------- */
+
+/** Deve restare allineato agli id di NAV. Un valore sconosciuto nell'URL viene
+ *  ignorato invece di rompere la schermata: gli indirizzi si scrivono a mano. */
+const VISTE_VALIDE = new Set(["dashboard", "commesse", "dipendenti", "fatture", "dati", "abbonamento", "admin"]);
+
+function leggiStatoDaURL() {
+  const p = new URLSearchParams(window.location.search);
+  const vista = p.get("vista");
+  const dal = p.get("dal");
+  const al = p.get("al");
+  return {
+    vista: VISTE_VALIDE.has(vista) ? vista : null,
+    dal: dataValida(dal) ? dal : null,
+    al: dataValida(al) ? al : null,
+    commessa: p.get("commessa") || null,
+  };
+}
+
+/** La query string che rappresenta uno stato. Solo i parametri nostri: quelli
+ *  di passaggio (token di reset, ritorno da Stripe) li consuma chi li gestisce
+ *  e non devono sopravvivere qui. */
+function scriviStatoInURL({ vista, dal, al, commessa }) {
+  const p = new URLSearchParams();
+  if (vista && vista !== "dashboard") p.set("vista", vista);
+  if (dal) p.set("dal", dal);
+  if (al) p.set("al", al);
+  if (commessa) p.set("commessa", commessa);
+  const q = p.toString();
+  return q ? `?${q}` : window.location.pathname;
+}
+
 // === CALC-START (sezione pura, testabile) ===
 
 /** Ore totali per (dipendenteId, mese 'AAAA-MM') su TUTTE le registrazioni. */
@@ -1565,11 +1612,18 @@ export default function App() {
   const [allegati, setAllegati] = useState([]); // documenti DDT: solo metadati, i file si scaricano a richiesta
   const [spazioAllegati, setSpazioAllegati] = useState(null); // { usatoAzienda, quotaAzienda, maxFile }
   const [fornitoriNoti, setFornitoriNoti] = useState([]); // per la tendina del campo Fornitore, non è un vincolo
-  const [vista, setVista] = useState("dashboard");
-  const [dal, setDal] = useState("2026-07-01");
-  const [al, setAl] = useState("2026-07-31");
+  /* Vista, periodo e commessa aperta nascono dall'URL: un indirizzo incollato
+     o ricaricato deve riportare esattamente dov'eri. Se non c'è niente
+     nell'indirizzo valgono i valori di sempre. */
+  const [vista, setVista] = useState(() => leggiStatoDaURL().vista ?? "dashboard");
+  const [dal, setDal] = useState(() => leggiStatoDaURL().dal ?? "2026-07-01");
+  const [al, setAl] = useState(() => leggiStatoDaURL().al ?? "2026-07-31");
   const [azienda, setAzienda] = useState("");
-  const [dettaglio, setDettaglio] = useState(null);
+  /* La commessa aperta è un ID, non l'oggetto della riga: l'oggetto si ricava
+     dai costi correnti (vedi `dettaglio` più sotto). Così il pannello mostra
+     sempre i numeri del periodo che stai guardando, e — non meno importante —
+     una cosa che sta nell'URL può essere solo un identificatore. */
+  const [idDettaglio, setIdDettaglio] = useState(() => leggiStatoDaURL().commessa);
   const [toasts, setToasts] = useState([]);
   const [conferma, setConferma] = useState(null);
   const [flussoImport, setFlussoImport] = useState(null); // {piani, avvisi, conflitti[], idx, decisioni{}}
@@ -1784,6 +1838,55 @@ export default function App() {
     return unisciCosti({ riep, materiali, commesse, dal, al });
   }, [riep, materiali, commesse, dal, al, erroreIntervallo]);
 
+  /**
+   * La riga aperta nel pannello, ricavata dall'id e dai costi del periodo
+   * corrente. Prima il pannello teneva una COPIA della riga presa al momento
+   * del clic, e su quella copia bisognava poi ricordarsi di riapplicare le
+   * rinomine e i ricalcoli. Adesso è un derivato: cambia il periodo, cambiano
+   * i numeri; rinomini la commessa, cambia il titolo — senza una riga di codice
+   * che lo tenga allineato.
+   *
+   * Se l'id non compare fra le righe del periodo (un indirizzo condiviso con un
+   * intervallo che non contiene quella commessa) il pannello semplicemente non
+   * si apre: meglio niente che numeri di un altro periodo.
+   */
+  const dettaglio = useMemo(
+    () => (idDettaglio ? costi.righe.find((r) => r.commessa.id === idDettaglio) ?? null : null),
+    [idDettaglio, costi]
+  );
+
+  /* --- l'URL segue lo stato, e lo stato segue il tasto Indietro ---
+     Il primo giro normalizza l'indirizzo senza aggiungere una voce alla
+     cronologia (replace); dopo, ogni cambio ne aggiunge una (push), così
+     Indietro torna alla vista precedente invece di uscire dall'applicazione.
+     L'effetto confronta prima di scrivere: quando è popstate a cambiare lo
+     stato, la stringa calcolata coincide già con quella nella barra e non si
+     spinge niente — è il modo più semplice per non entrare in circolo. */
+  const primoGiroURL = useRef(true);
+  useEffect(() => {
+    // Finché sono in ballo il token di reset o il ritorno da Stripe, l'indirizzo
+    // appartiene a loro: non lo tocchiamo.
+    if (tokenReset || verificandoPagamento) return;
+    const atteso = scriviStatoInURL({ vista, dal, al, commessa: idDettaglio });
+    const corrente = window.location.search || window.location.pathname;
+    if (atteso === corrente) return;
+    if (primoGiroURL.current) window.history.replaceState({}, "", atteso);
+    else window.history.pushState({}, "", atteso);
+    primoGiroURL.current = false;
+  }, [vista, dal, al, idDettaglio, tokenReset, verificandoPagamento]);
+
+  useEffect(() => {
+    const alPopstate = () => {
+      const s = leggiStatoDaURL();
+      setVista(s.vista ?? "dashboard");
+      if (s.dal) setDal(s.dal);
+      if (s.al) setAl(s.al);
+      setIdDettaglio(s.commessa);
+    };
+    window.addEventListener("popstate", alPopstate);
+    return () => window.removeEventListener("popstate", alPopstate);
+  }, []);
+
   /** Serie storiche per i grafici di andamento. Calcolata una sola volta e
    *  condivisa fra Dashboard e pannello di dettaglio: dipende solo dai dati,
    *  non dall'intervallo selezionato, quindi non si ricalcola quando si
@@ -1847,7 +1950,7 @@ export default function App() {
       // (cascata sulla chiave esterna): qui si allinea subito la copia locale.
       setMateriali((m) => m.filter((x) => x.commessaId !== com.id));
       setAllegati((a) => a.filter((x) => x.commessaId !== com.id));
-      setDettaglio(null);
+      setIdDettaglio(null);
       notifica(`Commessa ${com.codice} eliminata.`);
     },
   });
@@ -1863,9 +1966,9 @@ export default function App() {
     try {
       const aggiornata = await datiAPI.rinominaCommessa(id, { codice, descrizione });
       setCommesse((c) => c.map((x) => (x.id === aggiornata.id ? { ...x, codice: aggiornata.codice, descrizione: aggiornata.descrizione } : x)));
-      setDettaglio((d) => (d && d.commessa.id === aggiornata.id
-        ? { ...d, commessa: { ...d.commessa, codice: aggiornata.codice, descrizione: aggiornata.descrizione } }
-        : d));
+      /* Qui c'erano tre righe che riapplicavano la rinomina alla copia della
+         riga tenuta dal pannello. Non servono più: il pannello legge da
+         `costi`, e `costi` dipende da `commesse`. */
       notifica(`Commessa rinominata in ${aggiornata.codice}.`);
       return { ok: true };
     } catch (e) {
@@ -2027,7 +2130,7 @@ export default function App() {
     titolo: "Svuotare tutti i dati?",
     testo: "Dipendenti, commesse, registrazioni, materiali e documenti allegati verranno cancellati. Prima di procedere puoi scaricare un backup dalla sezione Dati.",
     onOk: () => {
-      setDipendenti([]); setCommesse([]); setRegistrazioni([]); setMateriali([]); setAllegati([]); setDettaglio(null);
+      setDipendenti([]); setCommesse([]); setRegistrazioni([]); setMateriali([]); setAllegati([]); setIdDettaglio(null);
       salvaSubitoConBackup({ dipendenti: [], commesse: [], registrazioni: [], materiali: [] })
         .then((r) => r?.ok && notifica("Tutti i dati sono stati cancellati."));
     },
@@ -2428,8 +2531,8 @@ export default function App() {
             </div>
           )}
 
-          {vista === "dashboard" && <Dashboard riep={riep} costi={costi} dal={dal} al={al} dipendenti={dipendenti} serieMensile={serieMensile} vaiCommesse={() => setVista("commesse")} vaiDati={() => setVista("dati")} vaiDipendenti={() => setVista("dipendenti")} haDati={registrazioni.length > 0} apri={setDettaglio} />}
-          {vista === "commesse" && <VistaCommesse riep={riep} costi={costi} dal={dal} al={al} apri={setDettaglio} esportaCsv={() => riep && esportaCSV(costi.righe, costi, dal, al)} esportaXlsx={() => riep && esportaXLSX(costi.righe, costi, dal, al)} esportaTutto={() => esportaCompletoXLSX({ dipendenti, commesse, registrazioni, materiali }, dal, al)} stampa={stampaPDF} vaiDati={() => setVista("dati")} />}
+          {vista === "dashboard" && <Dashboard riep={riep} costi={costi} dal={dal} al={al} dipendenti={dipendenti} serieMensile={serieMensile} vaiCommesse={() => setVista("commesse")} vaiDati={() => setVista("dati")} vaiDipendenti={() => setVista("dipendenti")} haDati={registrazioni.length > 0} apri={(riga) => setIdDettaglio(riga.commessa.id)} />}
+          {vista === "commesse" && <VistaCommesse riep={riep} costi={costi} dal={dal} al={al} apri={(riga) => setIdDettaglio(riga.commessa.id)} esportaCsv={() => riep && esportaCSV(costi.righe, costi, dal, al)} esportaXlsx={() => riep && esportaXLSX(costi.righe, costi, dal, al)} esportaTutto={() => esportaCompletoXLSX({ dipendenti, commesse, registrazioni, materiali }, dal, al)} stampa={stampaPDF} vaiDati={() => setVista("dati")} />}
           {vista === "dipendenti" && <VistaDipendenti dipendenti={dipendenti} setDipendenti={setDipendenti} riep={riep} elimina={eliminaDipendente} notifica={notifica} />}
           {vista === "dati" && (
             <VistaDati
@@ -2475,13 +2578,13 @@ export default function App() {
           pannello si aggiornano subito. */}
       {dettaglio && (
         <PannelloDettaglio
-          riga={costi.righe.find((r) => r.commessa.id === dettaglio.commessa.id) || { ...dettaglio, costoManodopera: dettaglio.costo ?? 0, costoMateriali: 0, costoTotale: dettaglio.costo ?? 0, voci: [] }}
+          riga={dettaglio}
           riep={riep} costi={costi} dal={dal} al={al} serieMensile={serieMensile}
           allegati={allegati} spazioAllegati={spazioAllegati} fornitoriNoti={fornitoriNoti}
           onAggiungiMateriale={aggiungiMateriale} onAggiornaMateriale={aggiornaMateriale} onEliminaMateriale={eliminaMateriale}
           onCaricaAllegato={caricaAllegato} onApriAllegato={apriAllegato} onEliminaAllegato={eliminaAllegato}
           onAggiornaDatiAllegato={aggiornaDatiAllegato}
-          onChiudi={() => setDettaglio(null)} />
+          onChiudi={() => setIdDettaglio(null)} />
       )}
 
       {/* conflitto d'import: sostituisci / salta / annulla tutto */}
