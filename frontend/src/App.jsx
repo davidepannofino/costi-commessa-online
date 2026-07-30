@@ -674,17 +674,16 @@ const Valore = ({ etichetta, valore, nota, tono, grande }) => (
 );
 
 /** Il marchio: monogramma e nome. Compariva scritto a mano in quattro pagine,
- *  con tre gradienti diversi. Ora è uno. */
-const Marchio = ({ chiaro, centrato }) => (
-  <div className={"flex items-center gap-3" + (centrato ? " justify-center" : "")}>
+ *  con tre gradienti diversi. Ora è uno — e il quadratino è l'UNICO posto in
+ *  cui il bronzo compare pieno senza essere uno stato: è il marchio. */
+const Marchio = ({ centrato }) => (
+  <div className={"flex items-center gap-2.5" + (centrato ? " justify-center" : "")}>
     <div className="flex items-center justify-center shrink-0 f-display"
       style={{
-        width: 30, height: 30, borderRadius: "var(--r-sm)", fontSize: 13,
-        background: chiaro ? "var(--scuro-velo)" : "var(--ink)",
-        color: chiaro ? "var(--accent-chiaro)" : "var(--txt)",
-        boxShadow: chiaro ? "inset 0 0 0 .5px var(--scuro-linea)" : "none",
+        width: 28, height: 28, borderRadius: "var(--r-sm)", fontSize: 13,
+        background: "var(--accento)", color: "var(--accento-testo)",
       }}>C</div>
-    <div className="t-piccolo" style={{ fontWeight: 500, color: chiaro ? "var(--scuro-txt)" : "var(--txt)" }}>Costi Commessa</div>
+    <div className="t-piccolo" style={{ fontWeight: 500, color: "var(--txt-chiaro)" }}>Costi Commessa</div>
   </div>
 );
 
@@ -944,11 +943,7 @@ function SchermataAccesso({ alSuccesso, messaggio }) {
           lo era. Restano il nome, una frase, e molto spazio — che è ciò che fa
           sembrare curata una schermata, non il numero di elementi che contiene. */}
       <div className="hidden lg:flex lg:w-[46%] xl:w-[42%] relative flex-col justify-between overflow-hidden noprint superficie-scura px-14 py-16 xl:px-20">
-        <div className="relative flex items-center gap-3">
-          <div className="flex items-center justify-center shrink-0 f-display"
-            style={{ width: 32, height: 32, borderRadius: "var(--r-sm)", background: "var(--scuro-velo)", boxShadow: "inset 0 0 0 .5px var(--scuro-linea)", color: "var(--accent-chiaro)", fontSize: 14 }}>C</div>
-          <div className="t-piccolo" style={{ color: "var(--scuro-txt)", fontWeight: 500 }}>Costi Commessa</div>
-        </div>
+        <div className="relative"><Marchio /></div>
 
         <div className="relative">
           <h1 className="f-display mb-6" style={{ fontSize: 40, lineHeight: 1.14, letterSpacing: "-.028em", color: "var(--txt)" }}>
@@ -968,11 +963,7 @@ function SchermataAccesso({ alSuccesso, messaggio }) {
       {/* ================= FORM ================= */}
       <div className="flex-1 flex items-center justify-center px-5 py-12">
         <div className="w-full" style={{ maxWidth: 384 }}>
-          <div className="flex items-center gap-3 mb-9 lg:hidden">
-            <div className="flex items-center justify-center shrink-0 f-display"
-              style={{ width: 30, height: 30, borderRadius: "var(--r-sm)", background: "var(--ink)", color: "var(--txt)", fontSize: 13 }}>C</div>
-            <div className="t-piccolo" style={{ fontWeight: 500 }}>Costi Commessa</div>
-          </div>
+          <div className="mb-9 lg:hidden"><Marchio /></div>
 
           {/* Il modulo non è una card che galleggia: è il contenuto della
               pagina. Nessuna ombra, nessun riquadro — solo spazio intorno. */}
@@ -1999,6 +1990,10 @@ export default function App() {
 
   const stampaPDF = () => window.print();
 
+  /* Le stesse voci di prima, nello stesso ordine, con gli stessi id: cambia
+     solo che ora sono raggruppate sotto un'etichetta. Il contatore a destra
+     non è un dato nuovo — è il numero di righe che la voce apre. Dove un
+     numero solo non direbbe la verità (Fatture, Dati) non c'è contatore. */
   const NAV = [
     { id: "dashboard", nome: "Dashboard", icona: LayoutDashboard },
     { id: "commesse", nome: "Commesse", icona: FolderKanban },
@@ -2007,6 +2002,19 @@ export default function App() {
     { id: "dati", nome: "Dati", icona: Database },
     { id: "abbonamento", nome: "Abbonamento", icona: CreditCard },
     ...(isAdmin ? [{ id: "admin", nome: "Amministrazione", icona: ShieldCheck }] : []),
+  ];
+  const CONTEGGI = { commesse: commesse.length, dipendenti: dipendenti.length };
+  /* Iniziali e piano per il piede della barra laterale: due parole al massimo,
+     ricavate da quello che già c'è. Nessuna chiamata nuova. */
+  const inizialiAzienda = (azienda || "")
+    .split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0].toUpperCase()).join("") || "—";
+  const etichettaPiano = abbonamentoInfo?.stato === "attivo" ? "Abbonamento attivo"
+    : abbonamentoInfo?.stato === "prova" ? "Periodo di prova"
+    : abbonamentoInfo?.stato ? "Abbonamento scaduto" : "";
+  const GRUPPI_NAV = [
+    { etichetta: "Generale", voci: ["dashboard", "commesse", "dipendenti"] },
+    { etichetta: "Documenti", voci: ["fatture", "dati"] },
+    { etichetta: "Account", voci: ["abbonamento", "admin"] },
   ];
 
   const costoLive = useContatore(riep ? riep.totCosto : 0);
@@ -2064,26 +2072,51 @@ export default function App() {
           dati, e tenerla distinta aiuta a capire dove finisce lo strumento e
           dove comincia il lavoro. La voce attiva si riconosce dal filo bronzo
           a sinistra, non da un riquadro pieno. */}
-      <aside className="w-[248px] shrink-0 flex-col hidden lg:flex noprint superficie-scura">
-        <div className="px-6 pt-8 pb-9"><Marchio chiaro /></div>
-        <nav className="px-3 space-y-0.5" aria-label="Navigazione principale">
-          {NAV.map(({ id, nome, icona: Icona }) => {
-            const attiva = vista === id;
+      <aside className="w-[230px] shrink-0 flex-col hidden lg:flex noprint superficie-scura"
+        style={{ borderRight: ".5px solid var(--bordo-tenue)" }}>
+        <div className="px-5 pt-6 pb-7"><Marchio /></div>
+        <nav className="px-2.5 space-y-5" aria-label="Navigazione principale">
+          {GRUPPI_NAV.map((gruppo) => {
+            // Un gruppo può restare senza voci (Amministrazione c'è solo per
+            // l'admin): in quel caso non si stampa nemmeno l'etichetta.
+            const voci = gruppo.voci
+              .map((id) => NAV.find((v) => v.id === id))
+              .filter(Boolean);
+            if (voci.length === 0) return null;
             return (
-              <button key={id} onClick={() => setVista(id)}
-                className="relative w-full flex items-center gap-3 pl-4 pr-3.5 py-2.5 text-sm btn"
-                style={{
-                  borderRadius: "var(--r-sm)",
-                  background: attiva ? "var(--scuro-velo)" : "transparent",
-                  color: attiva ? "var(--scuro-txt)" : "var(--scuro-muted)",
-                  fontWeight: 500,
-                }}>
-                {attiva && (
-                  <span aria-hidden="true" className="absolute left-0 top-1/2 -translate-y-1/2"
-                    style={{ width: 2, height: 16, borderRadius: 99, background: "var(--accent-chiaro)" }} />
-                )}
-                <Icona size={16} strokeWidth={1.75} style={{ color: attiva ? "var(--accent-chiaro)" : "inherit" }} /> {nome}
-              </button>
+              <div key={gruppo.etichetta}>
+                <p className="t-micro px-3.5 mb-1.5">{gruppo.etichetta}</p>
+                <div className="space-y-0.5">
+                  {voci.map(({ id, nome, icona: Icona }) => {
+                    const attiva = vista === id;
+                    const conteggio = CONTEGGI[id];
+                    return (
+                      <button key={id} onClick={() => setVista(id)}
+                        className="relative w-full flex items-center gap-2.5 pl-3.5 pr-3 py-2 t-corpo btn voce-nav"
+                        style={{
+                          borderRadius: "var(--r-sm)",
+                          background: attiva ? "var(--bg-hover)" : "transparent",
+                          color: attiva ? "var(--txt-chiaro)" : "var(--txt-attenuato)",
+                          fontWeight: 500,
+                        }}>
+                        {attiva && (
+                          <span aria-hidden="true" className="absolute left-0 top-1/2 -translate-y-1/2"
+                            style={{ width: 2.5, height: 15, borderRadius: 99, background: "var(--accento)" }} />
+                        )}
+                        <Icona size={15} strokeWidth={1.75} className="shrink-0"
+                          style={{ color: attiva ? "var(--accento-chiaro)" : "inherit" }} />
+                        <span className="truncate">{nome}</span>
+                        {conteggio > 0 && (
+                          <span className="ml-auto f-mono t-piccolo shrink-0"
+                            style={{ background: "var(--bg-pill)", color: "var(--txt-tenue)", borderRadius: "var(--r-xs)", padding: "1px 6px" }}>
+                            {conteggio}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             );
           })}
         </nav>
@@ -2110,13 +2143,26 @@ export default function App() {
               </button>
             );
           })()}
-          <button onClick={uscire} className="w-full flex items-center gap-3 pl-4 pr-3.5 py-2.5 text-sm btn"
-            style={{ borderRadius: "var(--r-sm)", color: "var(--scuro-muted)", fontWeight: 500 }}>
-            <LogOut size={16} strokeWidth={1.75} /> Esci
+          <button onClick={uscire} className="w-full flex items-center gap-2.5 pl-3.5 pr-3 py-2 t-corpo btn voce-nav"
+            style={{ borderRadius: "var(--r-sm)", color: "var(--txt-attenuato)", fontWeight: 500 }}>
+            <LogOut size={15} strokeWidth={1.75} /> Esci
           </button>
         </div>
-        <div className="px-6 pb-6 t-piccolo" style={{ color: "var(--txt-fioco)" }}>
-          Costo del lavoro per commessa.<br />Calcoli in piena precisione.
+        {/* Il piede della barra: chi sei e con che piano. Prende il posto
+            della frase di presentazione, che diceva all'utente una cosa che
+            sapeva già. */}
+        <div className="px-4 py-3.5 flex items-center gap-2.5"
+          style={{ borderTop: ".5px solid var(--bordo-tenue)" }}>
+          <div className="flex items-center justify-center shrink-0 t-piccolo box"
+            style={{ width: 28, height: 28, fontWeight: 500, color: "var(--txt-attenuato)" }}>
+            {inizialiAzienda}
+          </div>
+          <div className="min-w-0">
+            <p className="t-piccolo truncate" style={{ fontWeight: 500, color: "var(--txt-chiaro)" }}>
+              {azienda || "La tua azienda"}
+            </p>
+            <p className="t-micro" style={{ letterSpacing: ".04em" }}>{etichettaPiano}</p>
+          </div>
         </div>
       </aside>
 
@@ -4383,6 +4429,10 @@ function StileGlobale() {
 
       /* --- BOX: il contenitore rialzato di icone, campi, contatori --- */
       .box{ background:var(--bg-elevato); border:.5px solid var(--bordo-input); border-radius:var(--r-sm); }
+
+      /* --- VOCI DELLA BARRA LATERALE: la voce attiva ha già il suo fondo,
+             quindi l'effetto del mouse serve solo alle inattive. --- */
+      .voce-nav:hover{ background:var(--bg-hover); color:var(--txt-chiaro); }
 
       /* --- TABELLE: dense, divisori tenui, nessuna zebra --- */
       .tabella{ width:100%; border-collapse:collapse; }
