@@ -1568,11 +1568,15 @@ export default function App() {
   const [conferma, setConferma] = useState(null);
   const [flussoImport, setFlussoImport] = useState(null); // {piani, avvisi, conflitti[], idx, decisioni{}}
 
-  const notifica = useCallback((testo, tipo = "ok") => {
+  /** Una notifica può portare con sé un'azione (oggi: annullare). Quando c'è,
+   *  resta in pagina quasi il doppio: una via d'uscita che sparisce mentre la
+   *  stai leggendo non è una via d'uscita. */
+  const notifica = useCallback((testo, tipo = "ok", azione = null) => {
     const id = uid("t");
-    setToasts((t) => [...t, { id, testo, tipo }]);
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 4600);
+    setToasts((t) => [...t, { id, testo, tipo, azione }]);
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), azione ? 9000 : 4600);
   }, []);
+  const chiudiToast = useCallback((id) => setToasts((t) => t.filter((x) => x.id !== id)), []);
 
   /* ---------------------------------------------------------------------
      PERSISTENZA VIA BACKEND (src/datiAPI.js → GET/PUT /api/stato)
@@ -1797,6 +1801,25 @@ export default function App() {
   /* --- azioni sui dati --- */
   const aggiungiRegistrazione = (reg) => setRegistrazioni((r) => [...r, reg]);
   const eliminaRegistrazione = (id) => setRegistrazioni((r) => r.filter((x) => x.id !== id));
+
+  /**
+   * Eliminare una riga di ore resta immediato — chi ne cancella dieci di
+   * seguito non deve confermare dieci volte — ma per nove secondi si può
+   * tornare indietro. Prima non si poteva: clic, sparita, e l'unico recupero
+   * era il backup JSON due sezioni più in basso nella stessa pagina. È la
+   * tabella che si usa cento volte in un'ora, con un bersaglio piccolo,
+   * durante un lavoro ripetitivo: il posto dove sbagliare è normale.
+   */
+  const eliminaRegistrazioneConAnnulla = useCallback((reg) => {
+    setRegistrazioni((r) => r.filter((x) => x.id !== reg.id));
+    notifica(`Eliminata la registrazione del ${fmtData(reg.data)}.`, "ok", {
+      etichetta: "Annulla",
+      onAzione: () => {
+        setRegistrazioni((r) => (r.some((x) => x.id === reg.id) ? r : [...r, reg]));
+        notifica("Registrazione ripristinata.");
+      },
+    });
+  }, [notifica]);
   const aggiornaRegistrazione = (id, patch) => setRegistrazioni((r) => r.map((x) => (x.id === id ? { ...x, ...patch } : x)));
 
   const eliminaDipendente = (dip) => setConferma({
@@ -2399,7 +2422,7 @@ export default function App() {
             <VistaDati
               dipendenti={dipendenti} commesse={commesse} registrazioni={registrazioni}
               setDipendenti={setDipendenti} setCommesse={setCommesse}
-              aggiungi={aggiungiRegistrazione} eliminaReg={eliminaRegistrazione} aggiornaReg={aggiornaRegistrazione}
+              aggiungi={aggiungiRegistrazione} eliminaReg={eliminaRegistrazioneConAnnulla} aggiornaReg={aggiornaRegistrazione}
               eliminaCommessa={eliminaCommessa} rinominaCommessa={rinominaCommessa} caricaExcel={caricaExcel} backup={backupJSON} ripristina={ripristinaJSON}
               svuota={svuotaTutto} esempio={ricaricaEsempio} azienda={azienda} setAzienda={setAzienda} notifica={notifica}
               esportaTutto={() => esportaCompletoXLSX({ dipendenti, commesse, registrazioni }, dal, al)}
@@ -2498,7 +2521,15 @@ export default function App() {
             {t.tipo === "errore" ? <AlertTriangle size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: "var(--rosso)" }} />
               : t.tipo === "avviso" ? <AlertTriangle size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: "var(--accent-chiaro)" }} />
               : <CheckCircle2 size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: "var(--verde)" }} />}
-            {t.testo}
+            <span className="flex-1">{t.testo}</span>
+            {t.azione && (
+              <button
+                onClick={() => { t.azione.onAzione(); chiudiToast(t.id); }}
+                className="shrink-0 -my-1 px-2.5 py-1 btn"
+                style={{ borderRadius: "var(--r-xs)", color: "var(--accento-chiaro)", fontWeight: 500 }}>
+                {t.azione.etichetta}
+              </button>
+            )}
           </div>
         ))}
       </div>
@@ -4080,9 +4111,11 @@ function VistaDipendenti({ dipendenti, setDipendenti, riep, elimina, notifica })
                     </div>
                     <div className="ml-auto flex gap-2 shrink-0">
                       <button onClick={() => setEditor({ dip })} aria-label={`Modifica ${dip.nome} ${dip.cognome}`}
-                        className="p-2 btn btn-fantasma" style={{ borderRadius: "var(--r-sm)" }}><Pencil size={13} strokeWidth={1.75} /></button>
+                        className="inline-flex items-center justify-center btn btn-fantasma"
+                        style={{ width: 32, height: 32, borderRadius: "var(--r-sm)" }}><Pencil size={13} strokeWidth={1.75} /></button>
                       <button onClick={() => elimina(dip)} aria-label={`Elimina ${dip.nome} ${dip.cognome}`}
-                        className="p-2 btn btn-pericolo" style={{ borderRadius: "var(--r-sm)" }}><Trash2 size={13} strokeWidth={1.75} /></button>
+                        className="inline-flex items-center justify-center btn btn-riga-elimina"
+                        style={{ width: 32, height: 32, borderRadius: "var(--r-sm)" }}><Trash2 size={13} strokeWidth={1.75} /></button>
                     </div>
                   </div>
 
@@ -4311,9 +4344,20 @@ function VistaDati({ dipendenti, commesse, registrazioni, setCommesse, aggiungi,
       <section className="card overflow-hidden">
         <div className="px-6 py-4 flex flex-wrap items-center justify-between gap-3"
           style={{ borderBottom: ".5px solid var(--bordo)" }}>
-          <h2 className="t-sotto">
-            Registrazioni <span className="f-mono t-piccolo" style={{ color: "var(--txt-fioco)" }}>{registrazioni.length}</span>
-          </h2>
+          {/* La testata in alto grida un totale di periodo, e questa tabella
+              il periodo non lo guarda: filtra solo per testo e mostra tutto lo
+              storico. Chi passa di qui leggeva la tabella come il contenuto di
+              quel totale. Non lo è, e adesso c'è scritto. Con la ricerca
+              attiva il conteggio dice quante righe stai davvero vedendo:
+              prima restava fermo sul totale. */}
+          <div>
+            <h2 className="t-sotto">Registrazioni</h2>
+            <p className="t-piccolo mt-1" style={{ color: "var(--txt-tenue)" }}>
+              {filtro.trim()
+                ? <><span className="f-mono">{elenco.length}</span> di <span className="f-mono">{registrazioni.length}</span> · filtrate per «{filtro.trim()}»</>
+                : <>Tutte le <span className="f-mono">{registrazioni.length}</span> · non filtrate dal periodo in alto</>}
+            </p>
+          </div>
           <div className="relative">
             <Search size={13} strokeWidth={1.75} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--txt-tenue)" }} />
             <input value={filtro} onChange={(e) => setFiltro(e.target.value)} placeholder="Cerca…"
@@ -4324,6 +4368,18 @@ function VistaDati({ dipendenti, commesse, registrazioni, setCommesse, aggiungi,
           <p className="px-6 py-6 t-corpo" style={{ color: "var(--txt-attenuato)" }}>
             Le ore che registri compariranno qui, dalla più recente.
           </p>
+        ) : elenco.length === 0 ? (
+          /* Prima qui restavano le intestazioni sopra un corpo vuoto: la
+             tabella sembrava rotta invece che filtrata. */
+          <div className="px-6 py-8">
+            <p className="t-corpo" style={{ color: "var(--txt-attenuato)" }}>
+              Nessuna registrazione per «{filtro.trim()}».
+            </p>
+            <button onClick={() => setFiltro("")} className="t-piccolo mt-2.5 btn"
+              style={{ color: "var(--accento-chiaro)", fontWeight: 500 }}>
+              Azzera la ricerca
+            </button>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="tabella t-corpo">
@@ -4343,11 +4399,15 @@ function VistaDati({ dipendenti, commesse, registrazioni, setCommesse, aggiungi,
                       <td>{d ? d.nome + " " + d.cognome : "—"}</td>
                       <td><span className="badge-codice">{c ? c.codice : "—"}</span></td>
                       <td className="f-mono text-right" style={{ color: "var(--txt)" }}>{fmtOre.format(r.ore)}</td>
+                      {/* Bersagli da 32px: erano 24, cioè sotto qualunque
+                          minimo, su una riga che si preme di fretta. */}
                       <td className="text-right whitespace-nowrap">
                         <button onClick={() => setModifica(r)} aria-label={`Modifica la registrazione del ${fmtData(r.data)}`}
-                          className="p-1.5 mr-1.5 btn btn-fantasma" style={{ borderRadius: "var(--r-sm)" }}><Pencil size={12} strokeWidth={1.75} /></button>
-                        <button onClick={() => { eliminaReg(r.id); notifica("Registrazione eliminata."); }} aria-label={`Elimina la registrazione del ${fmtData(r.data)}`}
-                          className="p-1.5 btn btn-pericolo" style={{ borderRadius: "var(--r-sm)" }}><Trash2 size={12} strokeWidth={1.75} /></button>
+                          className="inline-flex items-center justify-center mr-1.5 btn btn-fantasma"
+                          style={{ width: 32, height: 32, borderRadius: "var(--r-sm)" }}><Pencil size={13} strokeWidth={1.75} /></button>
+                        <button onClick={() => eliminaReg(r)} aria-label={`Elimina la registrazione del ${fmtData(r.data)}`}
+                          className="inline-flex items-center justify-center btn btn-riga-elimina"
+                          style={{ width: 32, height: 32, borderRadius: "var(--r-sm)" }}><Trash2 size={13} strokeWidth={1.75} /></button>
                       </td>
                     </tr>
                   );
@@ -4786,6 +4846,15 @@ function StileGlobale() {
       .btn-fantasma:hover:not(:disabled){ background:var(--bg-hover); border-color:#2E2E36; }
       .btn-pericolo{ background:transparent; color:var(--rosso); border:.5px solid var(--rosso-bordo); }
       .btn-pericolo:hover:not(:disabled){ background:var(--rosso-bg); }
+      /* Il cestino DENTRO una riga di elenco è un'altra cosa dal bottone di
+         pericolo di una schermata: di righe ce ne sono trecento, e trecento
+         contorni rossi a riposo non avvertono di niente — bruciano il rosso,
+         che poi non si nota più dove conta. Qui il rosso arriva quando la
+         mano o la tastiera ci si posano sopra, non prima. */
+      .btn-riga-elimina{ background:var(--bg-elevato); border:.5px solid var(--bordo-input); color:var(--txt-tenue); }
+      .btn-riga-elimina:hover:not(:disabled), .btn-riga-elimina:focus-visible{
+        background:var(--rosso-bg); border-color:var(--rosso-bordo); color:var(--rosso);
+      }
 
       /* --- CARD: in un tema scuro la profondità è il fondo più chiaro
              più un filo di bordo. Le ombre non hanno niente da scurire. --- */
