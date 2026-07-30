@@ -1268,7 +1268,7 @@ function VistaAbbonamento({ info }) {
                 <Icona size={20} strokeWidth={1.75} style={{ color: s.colore }} />
               </div>
               <div>
-                <p className="f-display text-base" style={{ color: "var(--txt)" }}>{s.etichetta}</p>
+                <p className="t-sotto" style={{ color: "var(--txt)" }}>{s.etichetta}</p>
                 {info.stato === "prova" && (
                   <p className="text-sm" style={{ color: "var(--muted)" }}>
                     {info.giorniProvaRestanti === 1 ? "Ultimo giorno" : `${info.giorniProvaRestanti} giorni rimanenti`}
@@ -1370,7 +1370,7 @@ function VistaAdmin() {
     <div className="space-y-8">
       <div>
         <Micro>Amministrazione</Micro>
-        <h1 className="f-display text-[26px] mt-1" style={{ letterSpacing: "-0.01em" }}>Aziende registrate</h1>
+        <h1 className="t-titolo mt-2">Aziende registrate</h1>
       </div>
 
       {errore && (
@@ -1397,7 +1397,7 @@ function VistaAdmin() {
           {aziende.length === 0 ? (
             <StatoVuoto icona={Building2} titolo="Nessuna azienda registrata" testo="Non appena qualcuno si registrerà, comparirà qui." />
           ) : (
-            <div className="rounded-2xl overflow-hidden" style={{ background: "var(--card)", boxShadow: "var(--ombra-sm)" }}>
+            <div className="overflow-hidden" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
               <div className="px-6 py-4 flex items-center justify-between gap-3" style={{ borderBottom: "1px solid var(--hairline)" }}>
                 <p className="text-[13px] f-mono" style={{ color: "var(--muted)" }}>{righe.length} aziende</p>
               </div>
@@ -2752,48 +2752,54 @@ function PannelloDettaglio({ riga, riep, costi, dal, al, serieMensile, allegati,
   }));
   return (
     <div className="fixed inset-0 z-40 noprint" role="dialog" aria-modal="true" aria-label={"Dettaglio commessa " + riga.commessa.codice}>
-      <div className="absolute inset-0 anim-velo" style={{ background: "rgba(18,21,26,.4)", backdropFilter: "blur(2px)" }} onClick={onChiudi} />
-      <div className="absolute right-0 top-0 bottom-0 w-full max-w-md flex flex-col anim-slide" style={{ background: "var(--card)", boxShadow: "var(--ombra-lg)" }}>
-        <div className="px-7 py-6 superficie-scura flex items-start justify-between">
-          <div>
-            <Micro tono="#828A95">Dettaglio commessa</Micro>
-            <h3 className="f-display text-[28px] leading-none mt-1.5" style={{ color: "#F0EDE5" }}>{riga.commessa.codice}</h3>
-            <p className="text-sm mt-2" style={{ color: "#8B929C" }}>{riga.commessa.descrizione}</p>
+      <div className="absolute inset-0 anim-velo" style={{ background: "rgba(26,26,24,.32)", backdropFilter: "blur(3px)" }} onClick={onChiudi} />
+      <div className="absolute right-0 top-0 bottom-0 w-full flex flex-col anim-slide"
+        style={{ maxWidth: 460, background: "var(--card)", boxShadow: "var(--ombra-lg)" }}>
+        {/* La testata del pannello era scura come la barra laterale. Qui però
+            siamo dentro il lavoro, non nella cornice: fondo avorio, il codice
+            della commessa alla scala grande, un filo sotto. */}
+        <div className="px-7 py-6 flex items-start justify-between gap-4"
+          style={{ background: "var(--tela-alt)", borderBottom: "1px solid var(--hairline)" }}>
+          <div className="min-w-0">
+            <Micro>Dettaglio commessa</Micro>
+            <h3 className="cifra-grande mt-2" style={{ fontSize: 30, lineHeight: 1 }}>{riga.commessa.codice}</h3>
+            <p className="t-piccolo mt-2.5" style={{ color: "var(--muted)" }}>{riga.commessa.descrizione}</p>
           </div>
-          <button onClick={onChiudi} aria-label="Chiudi dettaglio" className="p-1.5 rounded-lg btn" style={{ color: "#8B929C" }}><X size={17} strokeWidth={1.75} /></button>
+          <button onClick={onChiudi} aria-label="Chiudi dettaglio" className="p-1.5 btn shrink-0 -mr-1.5"
+            style={{ borderRadius: "var(--r-xs)", color: "var(--tenue)" }}><X size={17} strokeWidth={1.75} /></button>
         </div>
-        <div className="p-7 space-y-7 overflow-y-auto">
+        <div className="p-7 space-y-8 overflow-y-auto">
           {/* I tre numeri, sempre distinti: ore e manodopera, materiali, e la
               loro somma. Non si mescolano mai in un unico "costo". */}
-          <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--hairline)" }}>
+          <div className="overflow-hidden" style={{ borderRadius: "var(--r-sm)", boxShadow: "var(--ombra-sm)" }}>
             <div className="grid grid-cols-3">
-              {[["Ore", fmtOre.format(riga.ore), null], ["Manodopera", euro(riga.costoManodopera), "var(--euro)"], ["Materiali", euro(riga.costoMateriali), riga.costoMateriali > 0 ? "var(--euro)" : "var(--muted)"]].map(([e, v, col], i) => (
-                <div key={e} className="px-4 py-3.5" style={{ borderLeft: i > 0 ? "1px solid var(--hairline)" : "none" }}>
+              {[["Ore", fmtOre.format(riga.ore), null], ["Manodopera", euro(riga.costoManodopera), "var(--euro)"], ["Materiali", euro(riga.costoMateriali), riga.costoMateriali > 0 ? "var(--euro)" : "var(--tenue)"]].map(([e, v, col], i) => (
+                <div key={e} className="px-4 py-4" style={{ borderLeft: i > 0 ? "1px solid var(--hairline)" : "none" }}>
                   <Micro>{e}</Micro>
-                  <p className="f-mono text-[15px] mt-1.5" style={{ color: col || "var(--txt)" }}>{v}</p>
+                  <p className="f-mono mt-2" style={{ fontSize: 15, fontWeight: 500, color: col || "var(--txt)" }}>{v}</p>
                 </div>
               ))}
             </div>
-            <div className="px-4 py-3.5 flex items-end justify-between gap-3" style={{ borderTop: "1px solid var(--hairline)", background: "var(--tela)" }}>
+            <div className="px-4 py-4 flex items-end justify-between gap-3" style={{ borderTop: "1px solid var(--hairline)", background: "var(--tela-alt)" }}>
               <div>
                 <Micro>Costo totale</Micro>
-                <p className="text-[11px] mt-1" style={{ color: "var(--muted)" }}>manodopera + materiali · {fmtPerc.format(quota * 100)}% del periodo</p>
+                <p className="t-piccolo mt-1.5" style={{ color: "var(--tenue)" }}>manodopera + materiali · {fmtPerc.format(quota * 100)}% del periodo</p>
               </div>
-              <p className="f-mono text-[20px] leading-none" style={{ color: "var(--accent)" }}>{euro(riga.costoTotale)}</p>
+              <p className="cifra-grande shrink-0" style={{ fontSize: 22, lineHeight: 1 }}>{euro(riga.costoTotale)}</p>
             </div>
           </div>
-          <p className="text-xs f-mono" style={{ color: "var(--muted)" }}>Intervallo {fmtData(dal)} – {fmtData(al)}</p>
+          <p className="t-piccolo f-mono" style={{ color: "var(--tenue)" }}>Intervallo {fmtData(dal)} – {fmtData(al)}</p>
           <div>
-            <h4 className="f-display text-base mb-4">Dipendenti sulla commessa</h4>
-            <div className="space-y-5">
+            <h4 className="t-sotto mb-5">Dipendenti sulla commessa</h4>
+            <div className="space-y-6">
               {riga.dipendenti.map((d, i) => (
                 <div key={i}>
-                  <div className="flex items-baseline justify-between gap-3 mb-1.5">
+                  <div className="flex items-baseline justify-between gap-3 mb-2">
                     <p className="text-sm font-medium">{d.dip.nome} {d.dip.cognome}</p>
-                    <p className="f-mono text-sm" style={{ color: "var(--euro)" }}>{euro(d.costo)}</p>
+                    <p className="f-mono text-sm" style={{ color: "var(--euro)", fontWeight: 500 }}>{euro(d.costo)}</p>
                   </div>
-                  <BarraQuota quota={maxDip > 0 ? d.costo / maxDip : 0} />
-                  <p className="text-xs f-mono mt-1.5" style={{ color: "var(--muted)" }}>{fmtOre.format(d.ore)} h · tariffa media {fmtNum4.format(d.tariffaMedia)} €/h</p>
+                  <BarraQuota quota={maxDip > 0 ? d.costo / maxDip : 0} colore="#B4B0A6" />
+                  <p className="t-piccolo f-mono mt-2" style={{ color: "var(--tenue)" }}>{fmtOre.format(d.ore)} h · tariffa media {fmtNum4.format(d.tariffaMedia)} €/h</p>
                 </div>
               ))}
             </div>
@@ -2812,7 +2818,7 @@ function PannelloDettaglio({ riga, riep, costi, dal, al, serieMensile, allegati,
 
           {/* storico della commessa: tutti i mesi in cui ha avuto ore, non solo l'intervallo */}
           <div>
-            <h4 className="f-display text-base mb-1">Andamento di questa commessa</h4>
+            <h4 className="t-sotto mb-2">Andamento di questa commessa</h4>
             <p className="text-xs mb-4" style={{ color: "var(--muted)" }}>
               Costo mese per mese da quando ha ore registrate, indipendente dall'intervallo scelto.
             </p>
@@ -2899,7 +2905,7 @@ function SezioneMateriali({ commessa, voci, totale, dal, al, onAggiungi, onAggio
   return (
     <div>
       <div className="flex items-baseline justify-between gap-3 mb-1">
-        <h4 className="f-display text-base">Materiali</h4>
+        <h4 className="t-sotto">Materiali</h4>
         <p className="f-mono text-sm" style={{ color: totale > 0 ? "var(--euro)" : "var(--muted)" }}>{euro(totale)}</p>
       </div>
       <p className="text-xs mb-4" style={{ color: "var(--muted)" }}>
@@ -3069,7 +3075,7 @@ function SezioneDocumenti({ commessa, allegati, spazio, fornitoriNoti = [], onCa
   return (
     <div>
       <div className="flex items-baseline justify-between gap-3 mb-1">
-        <h4 className="f-display text-base">Documenti · DDT</h4>
+        <h4 className="t-sotto">Documenti · DDT</h4>
         <p className="f-mono text-xs" style={{ color: "var(--muted)" }}>{allegati.length} {allegati.length === 1 ? "documento" : "documenti"}</p>
       </div>
       <p className="text-xs mb-4" style={{ color: "var(--muted)" }}>
@@ -3429,7 +3435,7 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
       <div className="space-y-8">
         <div>
           <Micro>Documenti</Micro>
-          <h1 className="f-display text-[26px] mt-1" style={{ letterSpacing: "-0.01em" }}>Fatture</h1>
+          <h1 className="t-titolo mt-2">Fatture</h1>
         </div>
         <input ref={refFile} type="file" accept=".xml,.p7m,.pdf,application/xml,text/xml,application/pdf" className="hidden"
           onChange={(e) => { const f = e.target.files[0]; e.target.value = ""; scegliFile(f); }} />
@@ -3448,7 +3454,7 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
       <div className="space-y-6">
         <div>
           <Micro>Importazione fattura</Micro>
-          <h1 className="f-display text-[26px] mt-1" style={{ letterSpacing: "-0.01em" }}>{lettura.fattura.nomeFile}</h1>
+          <h1 className="t-titolo mt-2">{lettura.fattura.nomeFile}</h1>
         </div>
         <section className="p-7" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
           <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-4" style={{ background: "var(--velo-accento)" }}>
@@ -3488,7 +3494,7 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
               {etichettaOrigine[lettura.origine] || etichettaOrigine.pdf}
             </span>
           </div>
-          <h1 className="f-display text-[26px] mt-1" style={{ letterSpacing: "-0.01em" }}>{lettura.fornitore.denominazione || "Fornitore non letto"}</h1>
+          <h1 className="t-titolo mt-2">{lettura.fornitore.denominazione || "Fornitore non letto"}</h1>
           <p className="f-mono text-[13px] mt-1.5" style={{ color: "var(--muted)" }}>
             {lettura.fornitore.partitaIVA && `P.IVA ${lettura.fornitore.partitaIVA} · `}
             Fattura {doc.numero || "—"} del {doc.data ? fmtData(doc.data) : "—"}
@@ -3525,7 +3531,7 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
         const stile = STILI_STATO[stato.tipo];
 
         return (
-          <section key={g.chiave} className="rounded-2xl overflow-hidden" style={{ background: "var(--card)", boxShadow: "var(--ombra-sm)",
+          <section key={g.chiave} className="overflow-hidden" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)",
             /* Il filetto sul bordo: rende leggibile a colpo d'occhio, scorrendo
                la pagina, quali gruppi sono a posto e quali chiedono qualcosa. */
             borderLeft: `3px solid ${stato.tipo === "vuoto" ? "var(--hairline)" : stile.colore}` }}>
@@ -3752,7 +3758,7 @@ function VistaDipendenti({ dipendenti, setDipendenti, riep, elimina, notifica })
       <div className="flex items-end justify-between gap-4">
         <div>
           <Micro>Squadra</Micro>
-          <h1 className="f-display text-[26px] mt-1" style={{ letterSpacing: "-0.01em" }}>Dipendenti</h1>
+          <h1 className="t-titolo mt-2">Dipendenti</h1>
         </div>
         <Bottone onClick={() => setEditor({ nuovo: true })}><Plus size={14} strokeWidth={1.75} /> Nuovo dipendente</Bottone>
       </div>
@@ -3931,7 +3937,7 @@ function VistaDati({ dipendenti, commesse, registrazioni, setCommesse, aggiungi,
     <div className="space-y-6">
       <div>
         <Micro>Gestione</Micro>
-        <h1 className="f-display text-[26px] mt-1" style={{ letterSpacing: "-0.01em" }}>Dati</h1>
+        <h1 className="t-titolo mt-2">Dati</h1>
       </div>
 
       <Sezione titolo="Registra ore">
