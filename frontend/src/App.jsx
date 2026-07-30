@@ -8,7 +8,7 @@ import {
   FileSpreadsheet, FileText, AlertTriangle, CheckCircle2, X, ChevronRight, ChevronLeft,
   Search, RotateCcw, Save, Eraser, Info, FileDown, LogOut, Mail, Lock, Building2, ArrowRight, Loader2,
   Clock, Sparkles, Eye, EyeOff, CreditCard, Gift, PartyPopper, ShieldCheck, FileImage,
-  ReceiptText, Link2, CheckCircle, Check, HelpCircle, CircleDot, CalendarDays, TrendingUp,
+  ReceiptText, Link2, CheckCircle, Check, HelpCircle, CircleDot, CalendarDays,
 } from "lucide-react";
 import { datiAPI, suSessioneScaduta, suAbbonamentoRichiesto, API_BASE } from "./datiAPI.js";
 import { statoGruppo, assegnazioneIniziale, NON_IMPORTARE } from "./statoGruppoDDT.js";
@@ -719,7 +719,6 @@ function Avviso({ tono = "accento", icona: Icona, children, className = "" }) {
        diversi — e puntavano a un carattere monospaziato che non carichiamo
        più. Qui c'è una definizione sola. --------------------------------- */
 const STILE_ASSE = { fontSize: 11, fontFamily: "Inter, system-ui, sans-serif", fill: "#71717A", fontVariantNumeric: "tabular-nums" };
-const STILE_ASSE_FORTE = { ...STILE_ASSE, fontSize: 11.5, fill: "#E4E4E7" };
 const STILE_TOOLTIP = {
   borderRadius: 10, background: "var(--bg-elevato)",
   border: ".5px solid var(--bordo-input)", color: "var(--txt-chiaro)",
@@ -727,8 +726,7 @@ const STILE_TOOLTIP = {
   boxShadow: "0 16px 40px -12px rgba(0,0,0,.8)",
   fontFamily: "Inter, system-ui, sans-serif", fontSize: 12.5, padding: "9px 13px",
 };
-/** Le due tinte delle barre: bronzo per la prima, grafite per le altre. */
-const BARRA_PRIMA = "#8A6D4B";
+/** La grafite delle barre non in evidenza. */
 const BARRA_ALTRE = "#2E2E36";
 
 /** Pillola: stato, conteggio, etichetta breve. Tre toni, non uno di più. */
@@ -2233,18 +2231,26 @@ export default function App() {
                   </Pillola>
                 </span>
               )}
-              <div className="text-right">
-                <Micro>Costo del periodo</Micro>
-                <p className="cifra-grande mt-1.5" style={{ fontSize: 27, lineHeight: 1, color: "var(--euro)" }}>
-                  {riep ? euro(costoLive) : "—"}
-                </p>
-              </div>
-              <div className="text-right hidden sm:block pl-7" style={{ borderLeft: ".5px solid var(--hairline)" }}>
-                <Micro>Ore</Micro>
-                <p className="cifra-grande mt-1.5" style={{ fontSize: 27, lineHeight: 1, fontWeight: 500, color: "var(--txt)" }}>
-                  {riep ? fmtOre.format(riep.totOre) : "—"}
-                </p>
-              </div>
+              {/* Sulla Dashboard questi due numeri non si ripetono: la pagina
+                  li dice da sola, e molto più grandi. Un totale scritto due
+                  volte a due taglie diverse nella stessa schermata insegna
+                  all'occhio a non fidarsi di nessuna delle due. */}
+              {vista !== "dashboard" && (
+                <>
+                  <div className="text-right">
+                    <Micro>Costo del periodo</Micro>
+                    <p className="cifra-grande mt-1.5" style={{ fontSize: 27, lineHeight: 1, color: "var(--euro)" }}>
+                      {riep ? euro(costoLive) : "—"}
+                    </p>
+                  </div>
+                  <div className="text-right hidden sm:block pl-7" style={{ borderLeft: ".5px solid var(--hairline)" }}>
+                    <Micro>Ore</Micro>
+                    <p className="cifra-grande mt-1.5" style={{ fontSize: 27, lineHeight: 1, fontWeight: 500, color: "var(--txt)" }}>
+                      {riep ? fmtOre.format(riep.totOre) : "—"}
+                    </p>
+                  </div>
+                </>
+              )}
               <button onClick={uscire} aria-label="Esci" title="Esci" className="lg:hidden p-2 btn"
                 style={{ borderRadius: "var(--r-sm)", color: "var(--muted)", boxShadow: "var(--ombra-md)", background: "var(--card)" }}>
                 <LogOut size={16} strokeWidth={1.75} />
@@ -2507,34 +2513,81 @@ function AndamentoMensile({ serieMensile }) {
  * domande diverse ("quanto mi è costato il lavoro" / "quanto ho speso in
  * materiale"); il totale è solo la loro somma.
  */
-function FasciaCosti({ costi, titolo = "Costo del periodo" }) {
-  /* Prima erano tre numeri delle stesse dimensioni in tre colonne uguali: la
-     griglia diceva che contano allo stesso modo, e non è vero. Il totale è la
-     risposta alla domanda, manodopera e materiali sono come ci si arriva —
-     quindi il totale diventa il numero-eroe e gli altri due gli stanno
-     accanto, più piccoli, in una griglia asimmetrica. Gli importi non
-     cambiano: sono gli stessi tre di prima. */
+/* I due toni della barra di ripartizione. Non sono colori "di marca": servono
+   solo a far vedere in che proporzione il totale si divide, e stanno lontani
+   dal bronzo perché l'accento della schermata è UNO, e sulla Dashboard è il
+   badge della commessa che costa più di tutte. */
+const TONO_MANODOPERA = "#52525B";
+const TONO_MATERIALI = "#2A2A31";
+
+/**
+ * La banda d'apertura: l'unico numero che il titolare cerca, alla scala di una
+ * risposta.
+ *
+ * Sta deliberatamente FUORI da una card. In un tema scuro una card è un
+ * rettangolo più chiaro: mettere dentro un contenitore il numero più
+ * importante lo rende una cella fra le celle, e la pagina torna a leggersi
+ * come un cruscotto di riquadri uguali. Sul fondo nudo, invece, quel numero
+ * non ha vicini della sua taglia ed è la prima cosa che si legge.
+ *
+ * A destra, più piccole, le metriche di contorno come un libro mastro:
+ * etichetta a sinistra, valore a destra, un filo a dividerle. Non sono card,
+ * non hanno icone in un box, e la griglia è asimmetrica di proposito — sono
+ * il contorno, non quattro pari del totale.
+ */
+function BandaEroe({ costi, dal, al, titolo = "Costo del periodo", metriche = [] }) {
+  const tot = costi.totTotale;
+  const quotaMano = tot > 0 ? costi.totManodopera / tot : 1;
+  const voci = [
+    { e: "manodopera", v: costi.totManodopera, tono: TONO_MANODOPERA },
+    { e: "materiali", v: costi.totMateriali, tono: TONO_MATERIALI },
+  ];
+
   return (
-    <section className="card overflow-hidden">
-      <div className="grid grid-cols-1 sm:grid-cols-[1.35fr_1fr]">
-        <div className="px-6 py-7 sm:px-7">
-          <p className="t-micro">{titolo}</p>
-          <p className="t-eroe mt-3" style={{ color: "var(--verde)" }}>{euro(costi.totTotale)}</p>
-          <p className="t-piccolo mt-3" style={{ color: "var(--txt-tenue)" }}>manodopera + materiali</p>
+    <section className="grid gap-x-14 gap-y-9 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] items-end">
+      <div>
+        <h1 className="t-micro">{titolo}</h1>
+        <p className="t-eroe-xl mt-3.5" style={{ color: "var(--verde)" }}>{euro(tot)}</p>
+
+        {/* Come il totale si divide, in una riga sola: prima la proporzione,
+            poi i due importi che la spiegano. */}
+        <div className="mt-7 flex overflow-hidden" style={{ height: 3, borderRadius: 99, background: "var(--bg-pill)" }}>
+          <div style={{ width: `${quotaMano * 100}%`, background: TONO_MANODOPERA }} />
+          <div style={{ width: `${(1 - quotaMano) * 100}%`, background: TONO_MATERIALI }} />
         </div>
-        <div className="grid grid-rows-2" style={{ borderLeft: ".5px solid var(--bordo-tenue)" }}>
-          {[
-            { e: "Manodopera", v: euro(costi.totManodopera) },
-            { e: "Materiali", v: euro(costi.totMateriali) },
-          ].map((k, i) => (
-            <div key={k.e} className="px-6 py-5 sm:px-7 flex items-center justify-between gap-4"
-              style={{ borderTop: i > 0 ? ".5px solid var(--bordo-tenue)" : "none" }}>
-              <p className="t-micro">{k.e}</p>
-              <p className="cifra-grande" style={{ fontSize: 20, lineHeight: 1, color: "var(--verde)" }}>{k.v}</p>
-            </div>
+        <div className="mt-3.5 flex flex-wrap items-baseline gap-x-7 gap-y-2 t-piccolo">
+          {voci.map((v) => (
+            <span key={v.e} className="flex items-baseline gap-2">
+              <span aria-hidden="true" className="shrink-0" style={{ width: 6, height: 6, borderRadius: 2, background: v.tono, transform: "translateY(-1px)" }} />
+              <span style={{ color: "var(--txt-tenue)" }}>{v.e}</span>
+              <span className="f-mono" style={{ color: v.v > 0 ? "var(--verde)" : "var(--txt-debole)" }}>{euro(v.v)}</span>
+            </span>
           ))}
+          {dal && (
+            <span className="f-mono ml-auto" style={{ color: "var(--txt-fioco)" }}>
+              {fmtData(dal)} – {fmtData(al)}
+            </span>
+          )}
         </div>
       </div>
+
+      {metriche.length > 0 && (
+        <dl className="w-full">
+          {metriche.map((m, i) => (
+            <div key={m.e} className="flex items-baseline justify-between gap-5 py-3"
+              style={{ borderTop: i > 0 ? ".5px solid var(--bordo-tenue)" : "none" }}>
+              <dt className="t-micro">{m.e}</dt>
+              <dd className="text-right shrink-0">
+                <span className="f-mono" style={{ fontSize: 15, fontWeight: 500, color: m.muto ? "var(--txt-attenuato)" : "var(--txt)" }}>
+                  {m.v}
+                </span>
+                {m.u && <span className="t-piccolo ml-1" style={{ color: "var(--txt-tenue)" }}>{m.u}</span>}
+                {m.sub && <span className="block t-piccolo mt-0.5" style={{ color: "var(--txt-fioco)" }}>{m.sub}</span>}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
     </section>
   );
 }
@@ -2561,7 +2614,7 @@ function Dashboard({ riep, costi, dal, al, dipendenti, serieMensile, vaiCommesse
       <div className="space-y-10">
         {/* Zero ore non vuol dire zero costi: se ci sono materiali nel periodo,
             i tre numeri restano visibili invece di sparire con le ore. */}
-        {costi.totMateriali > 0 && <FasciaCosti costi={costi} />}
+        {costi.totMateriali > 0 && <BandaEroe costi={costi} dal={dal} al={al} />}
         <StatoVuoto icona={LayoutDashboard} titolo="Nessuna ora nell'intervallo"
           testo={costi.totMateriali > 0
             ? "In queste date ci sono materiali ma nessuna ora registrata: il riepilogo Commesse mostra le commesse interessate."
@@ -2574,14 +2627,6 @@ function Dashboard({ riep, costi, dal, al, dipendenti, serieMensile, vaiCommesse
     );
   }
 
-  // Le barre mostrano il costo TOTALE della commessa (manodopera + materiali):
-  // è il numero che risponde a "quanto mi è costata davvero". La ripartizione
-  // fra le due voci si legge nel riepilogo e nel dettaglio.
-  const datiBarre = costi.righe.map((r) => ({
-    nome: r.commessa.codice,
-    costo: Math.round(r.costoTotale * 100) / 100,
-    riga: r,
-  }));
   const datiGiorni = [...riep.perGiorno.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1))
     .map(([d, c]) => ({ giorno: d.slice(8) + "/" + d.slice(5, 7), costo: Math.round(c * 100) / 100 }));
   const costoMedioOra = totOre > 0 ? totCosto / totOre : 0;
@@ -2590,104 +2635,112 @@ function Dashboard({ riep, costi, dal, al, dipendenti, serieMensile, vaiCommesse
   // una commessa può essere in testa per la spesa di materiale. Il costo medio
   // orario invece resta di sola manodopera, perché è una tariffa del lavoro.
   const piuCostosa = costi.righe[0] || top;
-  const kpi = [
-    { e: "Commesse attive", v: String(Math.max(righe.length, costi.righe.length)), ic: FolderKanban },
-    { e: "Costo medio orario", v: fmtNum.format(costoMedioOra), u: "€/h", sub: "solo manodopera", subMuto: true, ic: Clock },
-    { e: "Commessa più costosa", v: piuCostosa.commessa.codice, sub: euro(piuCostosa.costoTotale ?? piuCostosa.costo), ic: TrendingUp },
-    { e: "Dipendenti attivi", v: String(perDip.length), sub: `su ${dipendenti.length} totali`, muto: true, ic: Users },
+  const metriche = [
+    { e: "Ore del periodo", v: fmtOre.format(totOre), u: "h" },
+    { e: "Costo medio orario", v: fmtNum.format(costoMedioOra), u: "€/h", sub: "solo manodopera" },
+    { e: "Commesse attive", v: String(Math.max(righe.length, costi.righe.length)), sub: `più costosa ${piuCostosa.commessa.codice}` },
+    { e: "Dipendenti attivi", v: String(perDip.length), sub: `su ${dipendenti.length} in anagrafica`, muto: true },
   ];
 
+  /* La classifica si ferma a otto righe: la Dashboard risponde a "dove vanno i
+     soldi", non sostituisce il riepilogo. Chi ne vuole tutte ha il link. */
+  const MAX_CLASSIFICA = 8;
+  const classifica = costi.righe.slice(0, MAX_CLASSIFICA);
+  const restanti = costi.righe.length - classifica.length;
+  const maxRiga = classifica.length ? classifica[0].costoTotale : 0;
+
   return (
-    <div className="space-y-10">
-      <div>
-        <Micro>Cruscotto</Micro>
-        <h1 className="t-titolo mt-2">{fmtData(dal)} – {fmtData(al)}</h1>
-      </div>
+    <div className="space-y-12">
+      <BandaEroe costi={costi} dal={dal} al={al} metriche={metriche} />
 
-      <FasciaCosti costi={costi} />
-
-      {/* KPI: una fascia unica, separatori a filo. L'icona in un box rialzato
-          serve a far riconoscere la metrica prima di leggerla. */}
-      <div className="card grid grid-cols-2 xl:grid-cols-4 overflow-hidden">
-        {kpi.map((k, i) => (
-          <div key={k.e} className="px-6 py-6 xl:px-7" style={{ borderLeft: i > 0 ? ".5px solid var(--bordo-tenue)" : "none" }}>
-            <div className="flex items-center gap-2.5">
-              <span className="flex items-center justify-center shrink-0 box" style={{ width: 26, height: 26 }}>
-                <k.ic size={13} strokeWidth={1.75} style={{ color: "var(--txt-tenue)" }} />
-              </span>
-              <p className="t-micro">{k.e}</p>
-            </div>
-            <p className="cifra-grande mt-3" style={{ fontSize: 23, lineHeight: 1, color: k.muto ? "var(--txt-attenuato)" : "var(--txt)" }}>
-              {k.v}{k.u && <span className="t-piccolo ml-1" style={{ fontWeight: 400, color: "var(--txt-tenue)" }}>{k.u}</span>}
-            </p>
-            {k.sub && <p className="f-mono t-piccolo mt-2" style={{ color: k.muto || k.subMuto ? "var(--txt-tenue)" : "var(--verde)" }}>{k.sub}</p>}
-          </div>
-        ))}
-      </div>
-
-      <div className="grid xl:grid-cols-5 gap-7 items-start">
-        {/* costo per commessa */}
-        <section className="card xl:col-span-3 p-7">
-          <div className="flex items-baseline justify-between gap-4 mb-6">
-            <h2 className="t-sotto">Costo per commessa</h2>
-            <button onClick={vaiCommesse} className="t-piccolo font-medium flex items-center gap-1 btn shrink-0" style={{ color: "var(--accento-chiaro)" }}>
-              Riepilogo <ChevronRight size={13} strokeWidth={1.75} />
+      <div className="grid gap-7 items-start xl:grid-cols-[minmax(0,1.75fr)_minmax(0,1fr)]">
+        {/* DOVE VA LA SPESA — era un grafico a barre orizzontali di recharts.
+            Una classifica non ha bisogno di un grafico: ha bisogno di essere
+            ordinata, densa e cliccabile. Così ogni riga porta il codice, la
+            proporzione e l'importo incolonnato, e si apre col dito o col tasto
+            Invio — e per chi scorre cento righe non c'è niente da inseguire
+            col puntatore dentro un'area di disegno. */}
+        <section className="card overflow-hidden">
+          <div className="px-6 py-4 flex items-baseline justify-between gap-4"
+            style={{ borderBottom: ".5px solid var(--bordo)" }}>
+            <h2 className="t-sotto">Dove va la spesa</h2>
+            <button onClick={vaiCommesse} className="t-piccolo flex items-center gap-1 btn shrink-0"
+              style={{ color: "var(--accento-chiaro)", fontWeight: 500 }}>
+              Tutte le commesse <ChevronRight size={13} strokeWidth={1.75} />
             </button>
           </div>
-          <div style={{ height: Math.max(200, datiBarre.length * 26 + 24) }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={datiBarre} layout="vertical" margin={{ top: 0, right: 12, left: 0, bottom: 0 }} onClick={(e) => e && e.activePayload && apri(e.activePayload[0].payload.riga)}>
-                <CartesianGrid stroke="var(--bordo)" horizontal={false} />
-                <XAxis type="number" tick={STILE_ASSE} tickFormatter={(v) => fmtOre.format(v)} axisLine={false} tickLine={false} />
-                <YAxis type="category" dataKey="nome" width={46} tick={STILE_ASSE_FORTE} interval={0} axisLine={false} tickLine={false} />
-                <Tooltip formatter={(v) => [euro(v), "Costo totale"]} labelFormatter={(l) => "Commessa " + l}
-                  contentStyle={STILE_TOOLTIP}
-                  cursor={{ fill: "rgba(255,255,255,.03)" }} />
-                <Bar dataKey="costo" radius={[0, 3, 3, 0]} maxBarSize={10} className="cursor-pointer">
-                  {datiBarre.map((_, i) => <Cell key={i} fill={i === 0 ? BARRA_PRIMA : BARRA_ALTRE} />)}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          <p className="t-piccolo mt-4" style={{ color: "var(--tenue)" }}>Seleziona una barra per aprire il dettaglio della commessa.</p>
+          <ul>
+            {classifica.map((r, i) => (
+              <li key={r.commessa.id} style={{ borderTop: i > 0 ? ".5px solid var(--bordo-tenue)" : "none" }}>
+                <button onClick={() => apri(r)}
+                  className="w-full text-left px-6 py-3 flex items-center gap-4 btn riga"
+                  title={`Apri il dettaglio di ${r.commessa.codice}`}>
+                  <span className="f-mono shrink-0 text-right" style={{ width: 14, fontSize: 11, color: "var(--txt-fioco)" }}>{i + 1}</span>
+                  <span className={"shrink-0 badge-codice" + (i === 0 ? " badge-codice-primo" : "")}>{r.commessa.codice}</span>
+                  <span className="truncate t-piccolo" style={{ color: "var(--txt-attenuato)" }}>{r.commessa.descrizione}</span>
+                  <span className="ml-auto shrink-0 flex items-center gap-5">
+                    <span className="hidden sm:block" style={{ width: 92 }}>
+                      <BarraQuota quota={maxRiga > 0 ? r.costoTotale / maxRiga : 0} colore={i === 0 ? "var(--accento)" : TONO_MANODOPERA} />
+                    </span>
+                    <span className="f-mono text-right" style={{ width: 104, fontWeight: 500, color: "var(--txt)" }}>{euro(r.costoTotale)}</span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          {restanti > 0 && (
+            <button onClick={vaiCommesse} className="w-full px-6 py-3 text-left t-piccolo btn riga"
+              style={{ borderTop: ".5px solid var(--bordo-tenue)", color: "var(--txt-tenue)" }}>
+              e altre {restanti} commesse nel periodo →
+            </button>
+          )}
         </section>
 
-        <div className="xl:col-span-2 space-y-7">
-          {/* per dipendente */}
-          <section className="card p-7">
-            <h2 className="t-sotto mb-6">Costo per dipendente</h2>
-            <div className="space-y-6">
+        <div className="space-y-7">
+          {/* CHI HA LAVORATO — righe compatte: nome, importo incolonnato,
+              proporzione, ore. Nessuna card dentro la card. */}
+          <section className="card overflow-hidden">
+            <div className="px-6 py-4" style={{ borderBottom: ".5px solid var(--bordo)" }}>
+              <h2 className="t-sotto">Chi ha lavorato</h2>
+            </div>
+            <div className="px-6 py-5 space-y-5">
               {perDip.map((d) => (
                 <div key={d.dip.id}>
                   <div className="flex items-baseline justify-between gap-3 mb-2">
-                    <p className="text-sm font-medium truncate">{d.dip.nome} {d.dip.cognome}</p>
-                    <p className="f-mono text-sm shrink-0" style={{ color: "var(--euro)", fontWeight: 500 }}>{euro(d.costo)}</p>
+                    <p className="t-corpo truncate" style={{ fontWeight: 500, color: "var(--txt-chiaro)" }}>{d.dip.nome} {d.dip.cognome}</p>
+                    <p className="f-mono t-corpo shrink-0" style={{ color: "var(--euro)", fontWeight: 500 }}>{euro(d.costo)}</p>
                   </div>
-                  <BarraQuota quota={totCosto > 0 ? d.costo / totCosto : 0} colore="#2E2E36" />
-                  <p className="f-mono t-piccolo mt-2" style={{ color: "var(--tenue)" }}>{fmtOre.format(d.ore)} h · {fmtPerc.format(totCosto > 0 ? (d.costo / totCosto) * 100 : 0)}%</p>
+                  <BarraQuota quota={totCosto > 0 ? d.costo / totCosto : 0} colore={TONO_MANODOPERA} />
+                  <p className="f-mono t-piccolo mt-2" style={{ color: "var(--txt-fioco)" }}>
+                    {fmtOre.format(d.ore)} h · {fmtPerc.format(totCosto > 0 ? (d.costo / totCosto) * 100 : 0)}% del costo
+                  </p>
                 </div>
               ))}
             </div>
           </section>
 
-          {/* andamento */}
+          {/* IL PERIODO GIORNO PER GIORNO — qui il grafico ci vuole davvero:
+              è una serie nel tempo, e una serie nel tempo si guarda, non si
+              legge riga per riga. */}
           {datiGiorni.length > 1 && (
-            <section className="card p-7">
-              <h2 className="t-sotto mb-5">Andamento giornaliero</h2>
-              <div style={{ height: 170 }}>
+            <section className="card overflow-hidden">
+              <div className="px-6 py-4" style={{ borderBottom: ".5px solid var(--bordo)" }}>
+                <h2 className="t-sotto">Giorno per giorno</h2>
+              </div>
+              <div className="px-4 pt-5 pb-4" style={{ height: 186 }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={datiGiorni} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
                     <defs>
                       <linearGradient id="gradCosto" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.22} />
-                        <stop offset="100%" stopColor="var(--accent)" stopOpacity={0.02} />
+                        <stop offset="0%" stopColor="var(--accento)" stopOpacity={0.2} />
+                        <stop offset="100%" stopColor="var(--accento)" stopOpacity={0.02} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid stroke="var(--bordo)" vertical={false} />
                     <XAxis dataKey="giorno" tick={STILE_ASSE} minTickGap={28} axisLine={false} tickLine={false} />
                     <YAxis tick={STILE_ASSE} tickFormatter={(v) => fmtOre.format(v)} width={46} axisLine={false} tickLine={false} />
                     <Tooltip formatter={(v) => [euro(v), "Costo del giorno"]} contentStyle={STILE_TOOLTIP} />
-                    <Area type="monotone" dataKey="costo" stroke="var(--accent)" strokeWidth={1.75} fill="url(#gradCosto)" />
+                    <Area type="monotone" dataKey="costo" stroke="var(--accento)" strokeWidth={1.75} fill="url(#gradCosto)" />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -2735,8 +2788,10 @@ function VistaCommesse({ riep, costi, dal, al, apri, esportaCsv, esportaXlsx, es
     <div className="space-y-9">
       <div className="flex flex-wrap items-end justify-between gap-5">
         <div>
-          <Micro>Riepilogo</Micro>
-          <h1 className="t-titolo mt-2">Commesse</h1>
+          <h1 className="t-titolo">Commesse</h1>
+          <p className="t-piccolo mt-1.5" style={{ color: "var(--txt-tenue)" }}>
+            Ore e materiali per commessa, nell'intervallo scelto.
+          </p>
         </div>
         {/* Una sola azione piena — il PDF, che è quella che si usa davvero — e
             le altre in tono minore: così si capisce cosa premere. */}
@@ -4437,6 +4492,10 @@ function StileGlobale() {
       ::selection{ background:rgba(138,109,75,.32); color:var(--txt); }
 
       /* --- SCALA TIPOGRAFICA: densa, come si aspetta un tema scuro -------- */
+      /* Il numero-eroe della Dashboard non vive dentro una card: sta sul fondo
+         della pagina, dove non ha vicini della sua taglia. Perché regga quel
+         vuoto è più grande di ogni altro numero dell'applicazione. */
+      .t-eroe-xl{ font-size:56px; line-height:.98; font-weight:600; letter-spacing:-.05em; font-variant-numeric:tabular-nums; color:var(--txt); }
       .t-eroe{ font-size:45px; line-height:1.02; font-weight:600; letter-spacing:-.045em; color:var(--txt); }
       .t-titolo{ font-size:21px; line-height:1.25; font-weight:600; letter-spacing:-.02em; color:var(--txt); }
       .t-sezione{ font-size:17px; line-height:1.3; font-weight:600; letter-spacing:-.015em; color:var(--txt-chiaro); }
@@ -4445,7 +4504,7 @@ function StileGlobale() {
       .t-piccolo{ font-size:12px; line-height:1.5; }
       .t-micro{ font-size:11px; font-weight:500; letter-spacing:.06em; text-transform:uppercase; color:var(--txt-fioco); }
       .t-leggibile{ max-width:66ch; }
-      @media (max-width:640px){ .t-eroe{ font-size:34px; } .t-titolo{ font-size:19px; } }
+      @media (max-width:640px){ .t-eroe-xl{ font-size:37px; letter-spacing:-.04em; } .t-eroe{ font-size:34px; } .t-titolo{ font-size:19px; } }
 
       .f-display{ font-weight:600; letter-spacing:-.018em; }
       /* Cifre a larghezza fissa: si incolonnano come in una tabella. */
