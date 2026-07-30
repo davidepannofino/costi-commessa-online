@@ -2045,22 +2045,33 @@ export default function App() {
     <div className="min-h-screen flex" style={{ background: "var(--tela)", color: "var(--txt)" }}>
       <StileGlobale />
 
-      {/* ================= BARRA LATERALE ================= */}
-      <aside className="w-60 shrink-0 flex-col hidden lg:flex noprint superficie-scura">
-        <div className="px-6 pt-7 pb-8 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center f-display text-sm shrink-0" style={{ background: "linear-gradient(160deg,#2A313C,#1A1F27)", color: "var(--accent-chiaro)", border: "1px solid rgba(255,255,255,.07)" }}>C</div>
-          <div className="f-display text-[15px] leading-tight" style={{ color: "#EDEAE2" }}>Costi Commessa</div>
-        </div>
+      {/* ================= BARRA LATERALE =================
+          La cornice scura resta scura: è l'unica superficie che non contiene
+          dati, e tenerla distinta aiuta a capire dove finisce lo strumento e
+          dove comincia il lavoro. La voce attiva si riconosce dal filo bronzo
+          a sinistra, non da un riquadro pieno. */}
+      <aside className="w-[248px] shrink-0 flex-col hidden lg:flex noprint superficie-scura">
+        <div className="px-6 pt-8 pb-9"><Marchio chiaro /></div>
         <nav className="px-3 space-y-0.5" aria-label="Navigazione principale">
-          {NAV.map(({ id, nome, icona: Icona }) => (
-            <button key={id} onClick={() => setVista(id)}
-              className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm transition-colors btn"
-              style={vista === id
-                ? { background: "rgba(255,255,255,.06)", color: "#F0EDE5", fontWeight: 600 }
-                : { color: "#8B929C", fontWeight: 500 }}>
-              <Icona size={17} strokeWidth={1.75} style={vista === id ? { color: "var(--accent-chiaro)" } : undefined} /> {nome}
-            </button>
-          ))}
+          {NAV.map(({ id, nome, icona: Icona }) => {
+            const attiva = vista === id;
+            return (
+              <button key={id} onClick={() => setVista(id)}
+                className="relative w-full flex items-center gap-3 pl-4 pr-3.5 py-2.5 text-sm btn"
+                style={{
+                  borderRadius: "var(--r-sm)",
+                  background: attiva ? "var(--scuro-velo)" : "transparent",
+                  color: attiva ? "var(--scuro-txt)" : "var(--scuro-muted)",
+                  fontWeight: 500,
+                }}>
+                {attiva && (
+                  <span aria-hidden="true" className="absolute left-0 top-1/2 -translate-y-1/2"
+                    style={{ width: 2, height: 16, borderRadius: 99, background: "var(--accent-chiaro)" }} />
+                )}
+                <Icona size={16} strokeWidth={1.75} style={{ color: attiva ? "var(--accent-chiaro)" : "inherit" }} /> {nome}
+              </button>
+            );
+          })}
         </nav>
         <div className="mt-auto px-3 pb-3">
           {abbonamentoInfo?.stato === "prova" && (() => {
@@ -2068,28 +2079,29 @@ export default function App() {
             return (
               <button
                 onClick={() => setVista("abbonamento")}
-                className="w-full mb-2 px-3.5 py-2.5 rounded-lg text-left btn"
-                style={urgente
-                  ? { background: "var(--velo-accento)", border: "1px solid rgba(196,162,101,.3)" }
-                  : { background: "rgba(255,255,255,.05)" }}
+                className="w-full mb-1.5 px-4 py-3 text-left btn"
+                style={{
+                  borderRadius: "var(--r-sm)",
+                  background: urgente ? "rgba(196,162,101,.1)" : "var(--scuro-velo)",
+                  boxShadow: urgente ? "inset 0 0 0 1px rgba(196,162,101,.28)" : "none",
+                }}
               >
-                <div className="flex items-center gap-2 text-xs font-medium" style={{ color: urgente ? "var(--accent-chiaro)" : "#B8A47C" }}>
+                <div className="flex items-center gap-2 t-piccolo" style={{ fontWeight: 500, color: urgente ? "var(--accent-chiaro)" : "var(--scuro-muted)" }}>
                   <Clock size={14} strokeWidth={1.75} className="shrink-0" />
                   {abbonamentoInfo.giorniProvaRestanti === 1
                     ? "Ultimo giorno di prova"
-                    : `${abbonamentoInfo.giorniProvaRestanti} giorni di prova rimanenti`}
+                    : `${abbonamentoInfo.giorniProvaRestanti} giorni di prova`}
                 </div>
-                {urgente && (
-                  <div className="text-[11px] mt-0.5 ml-5" style={{ color: "#9BA1AB" }}>Abbonati ora →</div>
-                )}
+                {urgente && <div className="t-piccolo mt-1 ml-6" style={{ color: "var(--scuro-muted)" }}>Abbonati ora →</div>}
               </button>
             );
           })()}
-          <button onClick={uscire} className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm transition-colors btn" style={{ color: "#8B929C", fontWeight: 500 }}>
-            <LogOut size={17} strokeWidth={1.75} /> Esci
+          <button onClick={uscire} className="w-full flex items-center gap-3 pl-4 pr-3.5 py-2.5 text-sm btn"
+            style={{ borderRadius: "var(--r-sm)", color: "var(--scuro-muted)", fontWeight: 500 }}>
+            <LogOut size={16} strokeWidth={1.75} /> Esci
           </button>
         </div>
-        <div className="px-6 pb-5 text-xs leading-relaxed" style={{ color: "#5A616C" }}>
+        <div className="px-6 pb-6 t-piccolo" style={{ color: "#6E6A62" }}>
           Costo del lavoro per commessa.<br />Calcoli in piena precisione.
         </div>
       </aside>
@@ -2097,73 +2109,97 @@ export default function App() {
       {/* ================= COLONNA PRINCIPALE ================= */}
       <div className="flex-1 min-w-0 flex flex-col pb-16 lg:pb-0">
 
-        {/* ---- testata: periodo + momento eroe ---- */}
-        <header className="sticky top-0 z-30 noprint superficie-scura" style={{ borderBottom: "1px solid rgba(255,255,255,.06)" }}>
+        {/* ---- testata: periodo + i due numeri che contano ----
+             Era scura come la barra laterale. Ora è chiara, perché contiene
+             DATI, e i dati appartengono all'area di lavoro: il verde degli euro
+             su avorio si legge per quello che è, mentre sul fondo scuro doveva
+             schiarirsi fino a diventare un altro colore. Comandi e numeri sono
+             rimasti dove erano. */}
+        <header className="sticky top-0 z-30 noprint"
+          style={{ background: "rgba(251,250,247,.86)", backdropFilter: "blur(12px)", borderBottom: "1px solid var(--hairline)" }}>
           <div className="px-5 md:px-10 py-4 flex flex-wrap items-center gap-x-8 gap-y-4">
             <div className="flex items-center gap-1.5">
-              <button onClick={() => scorriMese(-1)} aria-label="Mese precedente" className="p-2 rounded-lg btn tasto-scuro"><ChevronLeft size={15} strokeWidth={1.75} /></button>
-              <input type="date" value={dal} onChange={(e) => setDal(e.target.value)} aria-label="Inizio intervallo" className="f-mono text-[13px] rounded-lg px-2.5 py-1.5 outline-none campo-scuro" />
-              <span style={{ color: "#4E555F" }}>–</span>
-              <input type="date" value={al} onChange={(e) => setAl(e.target.value)} aria-label="Fine intervallo" className="f-mono text-[13px] rounded-lg px-2.5 py-1.5 outline-none campo-scuro" style={erroreIntervallo ? { boxShadow: "0 0 0 1px #C4655D" } : undefined} />
-              <button onClick={() => scorriMese(1)} aria-label="Mese successivo" className="p-2 rounded-lg btn tasto-scuro"><ChevronRight size={15} strokeWidth={1.75} /></button>
+              <button onClick={() => scorriMese(-1)} aria-label="Mese precedente" className="p-2 btn"
+                style={{ borderRadius: "var(--r-sm)", color: "var(--muted)", boxShadow: "var(--ombra-md)", background: "var(--card)" }}>
+                <ChevronLeft size={15} strokeWidth={1.75} />
+              </button>
+              <input type="date" value={dal} onChange={(e) => setDal(e.target.value)} aria-label="Inizio intervallo"
+                className="f-mono text-[13px] px-2.5 py-1.5 outline-none campo" />
+              <span style={{ color: "var(--tenue)" }}>–</span>
+              <input type="date" value={al} onChange={(e) => setAl(e.target.value)} aria-label="Fine intervallo"
+                className="f-mono text-[13px] px-2.5 py-1.5 outline-none campo"
+                style={erroreIntervallo ? { boxShadow: "0 0 0 1px var(--errore)" } : undefined} />
+              <button onClick={() => scorriMese(1)} aria-label="Mese successivo" className="p-2 btn"
+                style={{ borderRadius: "var(--r-sm)", color: "var(--muted)", boxShadow: "var(--ombra-md)", background: "var(--card)" }}>
+                <ChevronRight size={15} strokeWidth={1.75} />
+              </button>
               {estremiDati && !erroreIntervallo && (
-                <button onClick={() => { setDal(estremiDati.min); setAl(estremiDati.max); }} className="ml-1 hidden sm:inline-block text-xs px-2.5 py-1.5 rounded-lg btn tasto-scuro">Tutto</button>
+                <button onClick={() => { setDal(estremiDati.min); setAl(estremiDati.max); }}
+                  className="ml-1.5 hidden sm:inline-block t-piccolo px-3 py-1.5 btn"
+                  style={{ borderRadius: "var(--r-sm)", color: "var(--muted)", boxShadow: "var(--ombra-md)", background: "var(--card)" }}>
+                  Tutto
+                </button>
               )}
             </div>
 
-            <div className="ml-auto flex items-center gap-7">
+            <div className="ml-auto flex items-center gap-6 md:gap-8">
               {riep && riep.invariante && (
-                <span className="hidden md:inline-flex items-center gap-1.5 text-xs font-medium"
-                  style={{ color: riep.invariante.ok ? "#79C89C" : "#D9B36A" }}
-                  title={riep.invariante.ok ? "Il costo del periodo coincide con la somma dei lordi mensili" : "Quadratura non verificata: controlla lordi e dati"}>
-                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: "currentColor" }} />
-                  {riep.invariante.ok ? "Quadra" : "Non quadra"}
+                <span className="hidden md:inline-flex" title={riep.invariante.ok
+                  ? "Il costo del periodo coincide con la somma dei lordi mensili"
+                  : "Quadratura non verificata: controlla lordi e dati"}>
+                  <Pillola tono={riep.invariante.ok ? "euro" : "accento"}>
+                    <span className="rounded-full" style={{ width: 5, height: 5, background: "currentColor" }} />
+                    {riep.invariante.ok ? "Quadra" : "Non quadra"}
+                  </Pillola>
                 </span>
               )}
               <div className="text-right">
-                <Micro tono="#828A95">Costo del periodo</Micro>
-                <p className="f-mono text-[26px] md:text-[30px] font-medium leading-none mt-1" style={{ color: "#8CD6AC", letterSpacing: "-0.01em" }}>
+                <Micro>Costo del periodo</Micro>
+                <p className="cifra-grande mt-1.5" style={{ fontSize: 27, lineHeight: 1, color: "var(--euro)" }}>
                   {riep ? euro(costoLive) : "—"}
                 </p>
               </div>
-              <div className="text-right hidden sm:block pl-7" style={{ borderLeft: "1px solid rgba(255,255,255,.08)" }}>
-                <Micro tono="#828A95">Ore</Micro>
-                <p className="f-mono text-[26px] md:text-[30px] font-normal leading-none mt-1" style={{ color: "#D9D6CD" }}>{riep ? fmtOre.format(riep.totOre) : "—"}</p>
+              <div className="text-right hidden sm:block pl-7" style={{ borderLeft: "1px solid var(--hairline)" }}>
+                <Micro>Ore</Micro>
+                <p className="cifra-grande mt-1.5" style={{ fontSize: 27, lineHeight: 1, fontWeight: 500, color: "var(--txt)" }}>
+                  {riep ? fmtOre.format(riep.totOre) : "—"}
+                </p>
               </div>
-              <button onClick={uscire} aria-label="Esci" title="Esci" className="lg:hidden p-2 rounded-lg btn tasto-scuro" style={{ color: "#8B929C" }}>
+              <button onClick={uscire} aria-label="Esci" title="Esci" className="lg:hidden p-2 btn"
+                style={{ borderRadius: "var(--r-sm)", color: "var(--muted)", boxShadow: "var(--ombra-md)", background: "var(--card)" }}>
                 <LogOut size={16} strokeWidth={1.75} />
               </button>
             </div>
           </div>
           {erroreIntervallo && (
-            <p className="px-5 md:px-10 pb-3 text-sm flex items-center gap-1.5" style={{ color: "#E2A29B" }}>
+            <p className="px-5 md:px-10 pb-3 t-piccolo flex items-center gap-1.5" style={{ color: "var(--errore)" }}>
               <AlertTriangle size={14} strokeWidth={1.75} /> La data "Al" precede la data "Dal": correggi l'intervallo.
             </p>
           )}
         </header>
 
-        <main key={vista} className="flex-1 px-5 md:px-10 py-8 max-w-6xl w-full noprint anim-vista">
+        {/* Su schermi larghi il contenuto non si spalma da bordo a bordo: resta
+            entro una misura leggibile e centrato, col respiro ai lati. */}
+        <main key={vista} className="flex-1 px-5 md:px-10 py-10 max-w-[1180px] w-full mx-auto noprint anim-vista">
           {/* Finché il salvataggio non riesce, questa fascia resta lì: è
               l'unico modo perché nessuno continui a lavorare credendo che i
               dati vengano registrati mentre non lo sono. */}
           {salvataggioNonRiuscito && (
-            <div className="mb-8 rounded-xl px-4 py-3.5 anim-pop" role="alert"
-              style={{ background: "rgba(166,58,50,.07)", border: "1px solid rgba(166,58,50,.28)" }}>
-              <p className="text-sm flex items-start gap-2 font-medium" style={{ color: "#A63A32" }}>
-                <AlertTriangle size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
-                Le modifiche non vengono salvate ({salvataggioNonRiuscito}).
-              </p>
-              <p className="text-xs mt-1.5 ml-6 leading-relaxed" style={{ color: "#A63A32" }}>
-                Quello che vedi è solo su questo schermo: se ricarichi la pagina lo perdi. Prima di continuare,
-                scarica un backup dalla sezione Dati; l'avviso sparirà da solo appena il salvataggio tornerà a funzionare.
-              </p>
+            <div className="mb-9">
+              <Avviso tono="errore">
+                <span style={{ fontWeight: 600 }}>Le modifiche non vengono salvate ({salvataggioNonRiuscito}).</span>
+                <span className="block mt-1.5" style={{ opacity: .9 }}>
+                  Quello che vedi è solo su questo schermo: se ricarichi la pagina lo perdi. Prima di continuare,
+                  scarica un backup dalla sezione Dati; l'avviso sparirà da solo appena il salvataggio tornerà a funzionare.
+                </span>
+              </Avviso>
             </div>
           )}
 
           {riep && riep.avvisi.length > 0 && (
-            <div className="mb-8 rounded-xl px-4 py-3 space-y-1" style={{ background: "var(--velo-accento)", border: "1px solid rgba(154,120,58,.18)" }} role="alert">
+            <div className="mb-9 px-4 py-3 space-y-1.5" style={{ background: "var(--velo-accento)", boxShadow: "0 0 0 1px rgba(154,120,58,.2)", borderRadius: "var(--r-sm)" }} role="alert">
               {riep.avvisi.map((a, i) => (
-                <p key={i} className="text-sm flex items-start gap-2" style={{ color: "#7C6027" }}><AlertTriangle size={14} strokeWidth={1.75} className="mt-0.5 shrink-0" /> {a}</p>
+                <p key={i} className="t-piccolo flex items-start gap-2.5" style={{ color: "#7C6027" }}><AlertTriangle size={14} strokeWidth={1.75} className="mt-0.5 shrink-0" /> {a}</p>
               ))}
             </div>
           )}
@@ -2191,12 +2227,13 @@ export default function App() {
       </div>
 
       {/* ---- navigazione mobile ---- */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 grid noprint superficie-scura" style={{ borderTop: "1px solid rgba(255,255,255,.07)", gridTemplateColumns: `repeat(${NAV.length}, minmax(0, 1fr))` }} aria-label="Navigazione">
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 grid noprint superficie-scura"
+        style={{ borderTop: "1px solid var(--scuro-linea)", gridTemplateColumns: `repeat(${NAV.length}, minmax(0, 1fr))` }} aria-label="Navigazione">
         {NAV.map(({ id, nome, icona: Icona }) => (
-          <button key={id} onClick={() => setVista(id)} className="flex flex-col items-center gap-1 py-2.5 btn"
-            style={{ color: vista === id ? "var(--accent-chiaro)" : "#8B929C" }}>
+          <button key={id} onClick={() => setVista(id)} className="flex flex-col items-center gap-1.5 py-3 btn"
+            style={{ color: vista === id ? "var(--accent-chiaro)" : "var(--scuro-muted)" }}>
             <Icona size={18} strokeWidth={1.75} />
-            <span className="text-[11px] font-medium">{nome}</span>
+            <span style={{ fontSize: 10.5, fontWeight: 500, letterSpacing: ".02em" }}>{nome}</span>
           </button>
         ))}
       </nav>
