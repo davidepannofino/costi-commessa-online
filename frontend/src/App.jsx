@@ -711,6 +711,21 @@ function Avviso({ tono = "accento", icona: Icona, children, className = "" }) {
   );
 }
 
+/* --- GRAFICI: stessi assi, stesso riquadro informativo, in tutti i grafici.
+       Erano scritti a mano in ogni grafico, con misure e colori leggermente
+       diversi — e puntavano a un carattere monospaziato che non carichiamo
+       più. Qui c'è una definizione sola. --------------------------------- */
+const STILE_ASSE = { fontSize: 11, fontFamily: "Inter, system-ui, sans-serif", fill: "#9C9A93", fontVariantNumeric: "tabular-nums" };
+const STILE_ASSE_FORTE = { ...STILE_ASSE, fontSize: 11.5, fill: "#1A1A18" };
+const STILE_TOOLTIP = {
+  borderRadius: 10, border: "none", background: "var(--card)",
+  boxShadow: "0 0 0 1px rgba(26,26,24,.08), 0 12px 32px -8px rgba(26,26,24,.2)",
+  fontFamily: "Inter, system-ui, sans-serif", fontSize: 12.5, padding: "9px 13px",
+};
+/** Le due tinte delle barre: bronzo per la prima, grafite per le altre. */
+const BARRA_PRIMA = "#9A783A";
+const BARRA_ALTRE = "#B4B0A6";
+
 /** Pillola: stato, conteggio, etichetta breve. Tre toni, non uno di più. */
 const Pillola = ({ tono = "neutro", children }) => {
   const toni = {
@@ -2383,10 +2398,10 @@ function AndamentoMensile({ serieMensile }) {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={datiMesi} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
                     <CartesianGrid stroke="var(--hairline)" vertical={false} />
-                    <XAxis dataKey="mese" tick={{ fontSize: 10.5, fontFamily: "'IBM Plex Mono', monospace", fill: "#9AA0A8" }} minTickGap={4} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 10.5, fontFamily: "'IBM Plex Mono', monospace", fill: "#9AA0A8" }} tickFormatter={(v) => fmtOre.format(v)} width={54} axisLine={false} tickLine={false} />
+                    <XAxis dataKey="mese" tick={STILE_ASSE} minTickGap={4} axisLine={false} tickLine={false} />
+                    <YAxis tick={STILE_ASSE} tickFormatter={(v) => fmtOre.format(v)} width={54} axisLine={false} tickLine={false} />
                     <Tooltip formatter={(v) => [euro(v), "Costo del mese"]}
-                      contentStyle={{ borderRadius: 10, border: "1px solid var(--hairline)", boxShadow: "var(--ombra-md)", fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, padding: "8px 12px" }}
+                      contentStyle={STILE_TOOLTIP}
                       cursor={{ fill: "rgba(23,27,34,.04)" }} />
                     <Bar dataKey="costo" radius={[2, 2, 0, 0]} maxBarSize={38}>
                       {datiMesi.map((_, i) => <Cell key={i} fill={i === datiMesi.length - 1 ? "var(--accent)" : "#454C57"} />)}
@@ -2402,10 +2417,10 @@ function AndamentoMensile({ serieMensile }) {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={datiMesi} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
                     <CartesianGrid stroke="var(--hairline)" vertical={false} />
-                    <XAxis dataKey="mese" tick={{ fontSize: 10.5, fontFamily: "'IBM Plex Mono', monospace", fill: "#9AA0A8" }} minTickGap={4} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 10.5, fontFamily: "'IBM Plex Mono', monospace", fill: "#9AA0A8" }} tickFormatter={(v) => fmtOre.format(v)} width={46} axisLine={false} tickLine={false} />
+                    <XAxis dataKey="mese" tick={STILE_ASSE} minTickGap={4} axisLine={false} tickLine={false} />
+                    <YAxis tick={STILE_ASSE} tickFormatter={(v) => fmtOre.format(v)} width={46} axisLine={false} tickLine={false} />
                     <Tooltip formatter={(v) => [fmtOre.format(v) + " h", "Ore del mese"]}
-                      contentStyle={{ borderRadius: 10, border: "1px solid var(--hairline)", boxShadow: "var(--ombra-md)", fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, padding: "8px 12px" }}
+                      contentStyle={STILE_TOOLTIP}
                       cursor={{ fill: "rgba(23,27,34,.04)" }} />
                     <Bar dataKey="ore" radius={[2, 2, 0, 0]} maxBarSize={38} fill="#8A9099" />
                   </BarChart>
@@ -2432,17 +2447,15 @@ function FasciaCosti({ costi, titolo = "Costo del periodo" }) {
     { e: "Costo totale", v: euro(costi.totTotale), c: "var(--accent)", forte: true },
   ];
   return (
-    <section className="rounded-2xl overflow-hidden" style={{ background: "var(--card)", boxShadow: "var(--ombra-sm)" }}>
-      <div className="px-6 pt-5">
-        <Micro>{titolo}</Micro>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-3 mt-1">
+    <section className="overflow-hidden" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
+      <div className="px-7 pt-6"><Micro>{titolo}</Micro></div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 mt-2">
         {voci.map((k, i) => (
-          <div key={k.e} className="px-6 py-4"
-            style={{ borderLeft: i > 0 ? "1px solid var(--hairline)" : "none", background: k.forte ? "var(--tela)" : "transparent" }}>
+          <div key={k.e} className="px-7 py-6"
+            style={{ borderLeft: i > 0 ? "1px solid var(--hairline)" : "none", background: k.forte ? "var(--tela-alt)" : "transparent" }}>
             <Micro>{k.e}</Micro>
-            <p className={"f-mono mt-2 leading-none " + (k.forte ? "text-[24px]" : "text-[20px]")} style={{ color: k.c }}>{k.v}</p>
-            {k.forte && <p className="text-[11px] mt-2" style={{ color: "var(--muted)" }}>manodopera + materiali</p>}
+            <p className="cifra-grande mt-2.5" style={{ fontSize: k.forte ? 29 : 24, lineHeight: 1, color: k.c }}>{k.v}</p>
+            {k.forte && <p className="t-piccolo mt-2.5" style={{ color: "var(--tenue)" }}>manodopera + materiali</p>}
           </div>
         ))}
       </div>
@@ -2512,62 +2525,64 @@ function Dashboard({ riep, costi, dal, al, dipendenti, serieMensile, vaiCommesse
     <div className="space-y-10">
       <div>
         <Micro>Cruscotto</Micro>
-        <h1 className="f-display text-[26px] mt-1" style={{ letterSpacing: "-0.01em" }}>{fmtData(dal)} – {fmtData(al)}</h1>
+        <h1 className="t-titolo mt-2">{fmtData(dal)} – {fmtData(al)}</h1>
       </div>
 
       <FasciaCosti costi={costi} />
 
       {/* KPI: una fascia unica, separatori a filo */}
-      <div className="rounded-2xl grid grid-cols-2 xl:grid-cols-4 overflow-hidden" style={{ background: "var(--card)", boxShadow: "var(--ombra-sm)" }}>
+      <div className="grid grid-cols-2 xl:grid-cols-4 overflow-hidden" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
         {kpi.map((k, i) => (
-          <div key={k.e} className="px-6 py-5" style={{ borderLeft: i > 0 ? "1px solid var(--hairline)" : "none" }}>
+          <div key={k.e} className="px-7 py-6" style={{ borderLeft: i > 0 ? "1px solid var(--hairline)" : "none" }}>
             <Micro>{k.e}</Micro>
-            <p className="f-mono text-[22px] mt-2 leading-none" style={{ color: k.muto ? "var(--muted)" : "var(--txt)" }}>
-              {k.v}{k.u && <span className="text-sm ml-1" style={{ color: "var(--muted)" }}>{k.u}</span>}
+            <p className="cifra-grande mt-2.5" style={{ fontSize: 23, lineHeight: 1, color: k.muto ? "var(--muted)" : "var(--txt)" }}>
+              {k.v}{k.u && <span className="t-piccolo ml-1" style={{ fontWeight: 400, color: "var(--tenue)" }}>{k.u}</span>}
             </p>
-            {k.sub && <p className="f-mono text-xs mt-1.5" style={{ color: k.muto || k.subMuto ? "var(--muted)" : "var(--euro)" }}>{k.sub}</p>}
+            {k.sub && <p className="f-mono t-piccolo mt-2" style={{ color: k.muto || k.subMuto ? "var(--tenue)" : "var(--euro)" }}>{k.sub}</p>}
           </div>
         ))}
       </div>
 
-      <div className="grid xl:grid-cols-5 gap-6 items-start">
+      <div className="grid xl:grid-cols-5 gap-7 items-start">
         {/* costo per commessa */}
-        <section className="xl:col-span-3 rounded-2xl p-6" style={{ background: "var(--card)", boxShadow: "var(--ombra-sm)" }}>
-          <div className="flex items-baseline justify-between mb-5">
-            <h2 className="f-display text-lg">Costo per commessa</h2>
-            <button onClick={vaiCommesse} className="text-[13px] font-medium flex items-center gap-1 btn" style={{ color: "var(--accent)" }}>Riepilogo <ChevronRight size={13} strokeWidth={1.75} /></button>
+        <section className="xl:col-span-3 p-7" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
+          <div className="flex items-baseline justify-between gap-4 mb-6">
+            <h2 className="t-sotto">Costo per commessa</h2>
+            <button onClick={vaiCommesse} className="t-piccolo font-medium flex items-center gap-1 btn shrink-0" style={{ color: "var(--accent)" }}>
+              Riepilogo <ChevronRight size={13} strokeWidth={1.75} />
+            </button>
           </div>
-          <div style={{ height: Math.max(200, datiBarre.length * 25 + 24) }}>
+          <div style={{ height: Math.max(200, datiBarre.length * 26 + 24) }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={datiBarre} layout="vertical" margin={{ top: 0, right: 12, left: 0, bottom: 0 }} onClick={(e) => e && e.activePayload && apri(e.activePayload[0].payload.riga)}>
                 <CartesianGrid stroke="var(--hairline)" horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 11, fontFamily: "'IBM Plex Mono', monospace", fill: "#9AA0A8" }} tickFormatter={(v) => fmtOre.format(v)} axisLine={false} tickLine={false} />
-                <YAxis type="category" dataKey="nome" width={46} tick={{ fontSize: 11.5, fontFamily: "'IBM Plex Mono', monospace", fill: "var(--txt)" }} interval={0} axisLine={false} tickLine={false} />
+                <XAxis type="number" tick={STILE_ASSE} tickFormatter={(v) => fmtOre.format(v)} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="nome" width={46} tick={STILE_ASSE_FORTE} interval={0} axisLine={false} tickLine={false} />
                 <Tooltip formatter={(v) => [euro(v), "Costo totale"]} labelFormatter={(l) => "Commessa " + l}
-                  contentStyle={{ borderRadius: 10, border: "1px solid var(--hairline)", boxShadow: "var(--ombra-md)", fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, padding: "8px 12px" }}
-                  cursor={{ fill: "rgba(23,27,34,.04)" }} />
-                <Bar dataKey="costo" radius={[0, 2, 2, 0]} maxBarSize={9} className="cursor-pointer">
-                  {datiBarre.map((_, i) => <Cell key={i} fill={i === 0 ? "var(--accent)" : "#454C57"} />)}
+                  contentStyle={STILE_TOOLTIP}
+                  cursor={{ fill: "rgba(26,26,24,.035)" }} />
+                <Bar dataKey="costo" radius={[0, 3, 3, 0]} maxBarSize={10} className="cursor-pointer">
+                  {datiBarre.map((_, i) => <Cell key={i} fill={i === 0 ? BARRA_PRIMA : BARRA_ALTRE} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
-          <p className="text-xs mt-3" style={{ color: "var(--muted)" }}>Seleziona una barra per aprire il dettaglio della commessa.</p>
+          <p className="t-piccolo mt-4" style={{ color: "var(--tenue)" }}>Seleziona una barra per aprire il dettaglio della commessa.</p>
         </section>
 
-        <div className="xl:col-span-2 space-y-6">
+        <div className="xl:col-span-2 space-y-7">
           {/* per dipendente */}
-          <section className="rounded-2xl p-6" style={{ background: "var(--card)", boxShadow: "var(--ombra-sm)" }}>
-            <h2 className="f-display text-lg mb-5">Costo per dipendente</h2>
-            <div className="space-y-5">
+          <section className="p-7" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
+            <h2 className="t-sotto mb-6">Costo per dipendente</h2>
+            <div className="space-y-6">
               {perDip.map((d) => (
                 <div key={d.dip.id}>
-                  <div className="flex items-baseline justify-between gap-3 mb-1.5">
+                  <div className="flex items-baseline justify-between gap-3 mb-2">
                     <p className="text-sm font-medium truncate">{d.dip.nome} {d.dip.cognome}</p>
-                    <p className="f-mono text-sm shrink-0" style={{ color: "var(--euro)" }}>{euro(d.costo)}</p>
+                    <p className="f-mono text-sm shrink-0" style={{ color: "var(--euro)", fontWeight: 500 }}>{euro(d.costo)}</p>
                   </div>
-                  <BarraQuota quota={totCosto > 0 ? d.costo / totCosto : 0} />
-                  <p className="f-mono text-xs mt-1.5" style={{ color: "var(--muted)" }}>{fmtOre.format(d.ore)} h · {fmtPerc.format(totCosto > 0 ? (d.costo / totCosto) * 100 : 0)}%</p>
+                  <BarraQuota quota={totCosto > 0 ? d.costo / totCosto : 0} colore="#B4B0A6" />
+                  <p className="f-mono t-piccolo mt-2" style={{ color: "var(--tenue)" }}>{fmtOre.format(d.ore)} h · {fmtPerc.format(totCosto > 0 ? (d.costo / totCosto) * 100 : 0)}%</p>
                 </div>
               ))}
             </div>
@@ -2575,8 +2590,8 @@ function Dashboard({ riep, costi, dal, al, dipendenti, serieMensile, vaiCommesse
 
           {/* andamento */}
           {datiGiorni.length > 1 && (
-            <section className="rounded-2xl p-6" style={{ background: "var(--card)", boxShadow: "var(--ombra-sm)" }}>
-              <h2 className="f-display text-lg mb-4">Andamento giornaliero</h2>
+            <section className="p-7" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
+              <h2 className="t-sotto mb-5">Andamento giornaliero</h2>
               <div style={{ height: 170 }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={datiGiorni} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
@@ -2587,9 +2602,9 @@ function Dashboard({ riep, costi, dal, al, dipendenti, serieMensile, vaiCommesse
                       </linearGradient>
                     </defs>
                     <CartesianGrid stroke="var(--hairline)" vertical={false} />
-                    <XAxis dataKey="giorno" tick={{ fontSize: 10.5, fontFamily: "'IBM Plex Mono', monospace", fill: "#9AA0A8" }} minTickGap={28} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 10.5, fontFamily: "'IBM Plex Mono', monospace", fill: "#9AA0A8" }} tickFormatter={(v) => fmtOre.format(v)} width={46} axisLine={false} tickLine={false} />
-                    <Tooltip formatter={(v) => [euro(v), "Costo del giorno"]} contentStyle={{ borderRadius: 10, border: "1px solid var(--hairline)", boxShadow: "var(--ombra-md)", fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, padding: "8px 12px" }} />
+                    <XAxis dataKey="giorno" tick={STILE_ASSE} minTickGap={28} axisLine={false} tickLine={false} />
+                    <YAxis tick={STILE_ASSE} tickFormatter={(v) => fmtOre.format(v)} width={46} axisLine={false} tickLine={false} />
+                    <Tooltip formatter={(v) => [euro(v), "Costo del giorno"]} contentStyle={STILE_TOOLTIP} />
                     <Area type="monotone" dataKey="costo" stroke="var(--accent)" strokeWidth={1.75} fill="url(#gradCosto)" />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -2816,10 +2831,10 @@ function PannelloDettaglio({ riga, riep, costi, dal, al, serieMensile, allegati,
                       </linearGradient>
                     </defs>
                     <CartesianGrid stroke="var(--hairline)" vertical={false} />
-                    <XAxis dataKey="mese" tick={{ fontSize: 10.5, fontFamily: "'IBM Plex Mono', monospace", fill: "#9AA0A8" }} minTickGap={4} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 10.5, fontFamily: "'IBM Plex Mono', monospace", fill: "#9AA0A8" }} tickFormatter={(v) => fmtOre.format(v)} width={54} axisLine={false} tickLine={false} />
+                    <XAxis dataKey="mese" tick={STILE_ASSE} minTickGap={4} axisLine={false} tickLine={false} />
+                    <YAxis tick={STILE_ASSE} tickFormatter={(v) => fmtOre.format(v)} width={54} axisLine={false} tickLine={false} />
                     <Tooltip formatter={(v) => [euro(v), "Costo del mese"]}
-                      contentStyle={{ borderRadius: 10, border: "1px solid var(--hairline)", boxShadow: "var(--ombra-md)", fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, padding: "8px 12px" }} />
+                      contentStyle={STILE_TOOLTIP} />
                     <Area type="monotone" dataKey="costo" stroke="var(--accent)" strokeWidth={1.75} fill="url(#gradCostoCommessa)" />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -4177,22 +4192,22 @@ function ReportStampa({ riep, costi, dal, al, azienda }) {
         <tbody>
           {righeStampa.map((r) => (
             <tr key={r.commessa.id} style={{ borderBottom: "1px solid #DDD" }}>
-              <td style={{ padding: "5px 8px", fontFamily: "'IBM Plex Mono', monospace" }}>{r.commessa.codice}</td>
+              <td style={{ padding: "5px 8px", fontVariantNumeric: "tabular-nums" }}>{r.commessa.codice}</td>
               <td style={{ padding: "5px 8px" }}>{r.commessa.descrizione}</td>
-              <td style={{ padding: "5px 8px", textAlign: "right", fontFamily: "'IBM Plex Mono', monospace" }}>{fmtOre.format(r.ore)}</td>
-              <td style={{ padding: "5px 8px", textAlign: "right", fontFamily: "'IBM Plex Mono', monospace" }}>{fmtNum.format(r.costoManodopera)}</td>
-              <td style={{ padding: "5px 8px", textAlign: "right", fontFamily: "'IBM Plex Mono', monospace" }}>{fmtNum.format(r.costoMateriali)}</td>
-              <td style={{ padding: "5px 8px", textAlign: "right", fontFamily: "'IBM Plex Mono', monospace" }}>{fmtNum.format(r.costoTotale)}</td>
+              <td style={{ padding: "5px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtOre.format(r.ore)}</td>
+              <td style={{ padding: "5px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtNum.format(r.costoManodopera)}</td>
+              <td style={{ padding: "5px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtNum.format(r.costoMateriali)}</td>
+              <td style={{ padding: "5px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtNum.format(r.costoTotale)}</td>
             </tr>
           ))}
         </tbody>
         <tfoot>
           <tr style={{ borderTop: "1.5px solid #171B22", fontWeight: 700 }}>
             <td style={{ padding: "7px 8px" }} colSpan={2}>TOTALE</td>
-            <td style={{ padding: "7px 8px", textAlign: "right", fontFamily: "'IBM Plex Mono', monospace" }}>{fmtOre.format(riep.totOre)}</td>
-            <td style={{ padding: "7px 8px", textAlign: "right", fontFamily: "'IBM Plex Mono', monospace" }}>{fmtNum.format(costi?.totManodopera ?? riep.totCosto)}</td>
-            <td style={{ padding: "7px 8px", textAlign: "right", fontFamily: "'IBM Plex Mono', monospace" }}>{fmtNum.format(costi?.totMateriali ?? 0)}</td>
-            <td style={{ padding: "7px 8px", textAlign: "right", fontFamily: "'IBM Plex Mono', monospace" }}>{fmtNum.format(costi?.totTotale ?? riep.totCosto)}</td>
+            <td style={{ padding: "7px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtOre.format(riep.totOre)}</td>
+            <td style={{ padding: "7px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtNum.format(costi?.totManodopera ?? riep.totCosto)}</td>
+            <td style={{ padding: "7px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtNum.format(costi?.totMateriali ?? 0)}</td>
+            <td style={{ padding: "7px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtNum.format(costi?.totTotale ?? riep.totCosto)}</td>
           </tr>
         </tfoot>
       </table>
