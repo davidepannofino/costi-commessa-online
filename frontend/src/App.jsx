@@ -2262,7 +2262,13 @@ export default function App() {
                 style={{
                   borderRadius: "var(--r-sm)",
                   background: urgente ? "rgba(196,162,101,.1)" : "var(--scuro-velo)",
-                  boxShadow: urgente ? "inset 0 0 0 .5px var(--accento-bordo)" : "none",
+                  /* Bordo, non box-shadow: lo stile in linea batte per
+                     specificità l'anello di .btn:focus-visible, che è pure lui
+                     un box-shadow. Risultato misurato a schermo: questo era
+                     l'UNICO bottone visibile dell'applicazione che col Tab non
+                     mostrava nulla. Il bordo trasparente a riposo tiene ferma
+                     la misura, così non si sposta niente quando compare. */
+                  border: urgente ? ".5px solid var(--accento-bordo)" : ".5px solid transparent",
                 }}
               >
                 <div className="flex items-center gap-2 t-piccolo" style={{ fontWeight: 500, color: urgente ? "var(--accento-chiaro)" : "var(--scuro-muted)" }}>
@@ -2710,8 +2716,13 @@ function BandaEroe({ costi, dal, al, titolo = "Costo del periodo", metriche = []
     { e: "materiali", v: costi.totMateriali, tono: TONO_MATERIALI },
   ];
 
+  /* items-start, non items-end. Con l'allineamento in basso la colonna del
+     numero — che è più corta del libro mastro accanto — veniva spinta giù, e
+     sopra l'eroe restava un vuoto di circa centoquaranta pixel: la prima cosa
+     che l'occhio incontrava entrando nella Dashboard era il niente.
+     Visto solo a schermo: nessuna lettura del sorgente lo mostra. */
   return (
-    <section className="grid gap-x-14 gap-y-9 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] items-end">
+    <section className="grid gap-x-14 gap-y-9 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] items-start">
       <div>
         <h1 className="t-micro">{titolo}</h1>
         <p className="t-eroe-xl mt-3.5" style={{ color: "var(--verde)" }}>{euro(tot)}</p>
@@ -4853,6 +4864,7 @@ function StileGlobale() {
         font-size:13px; line-height:1.55; color:var(--txt-medio);
         background:var(--bg-app);
         -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+        font-synthesis-weight:none;
         /* Niente font-feature-settings qui: c'erano 'cv05' e 'cv11', due
            varianti di carattere che esistono SOLO in Inter (la elle con la
            coda, la a a un piano). Con Fira Sans non facevano nulla — restavano
@@ -4878,9 +4890,15 @@ function StileGlobale() {
          o stretta, si muove di mezzo centesimo per volta. */
       .t-eroe-xl{ font-size:56px; line-height:.98; font-weight:600; letter-spacing:-.03em; font-variant-numeric:tabular-nums; color:var(--txt); }
       /* Il grassetto si ferma a 600, che è il peso più alto che carichiamo.
-         Otto <strong> chiedevano il 700 del browser: non essendoci, il
-         browser lo fabbricava ingrassando le aste, e su Fira Sans si vede. */
+         Gli <strong> chiedevano il 700 del browser: non essendoci, il browser
+         lo fabbricava ingrassando le aste, e su Fira Sans si vede.
+         Le intestazioni nude valgono 700 per impostazione predefinita, quindi
+         ci cadono dentro anche loro; e font-synthesis-weight:none chiude la
+         porta a tutto il resto — markup di terze parti compreso — dicendo al
+         browser di usare il peso più vicino che ha, invece di fabbricarne uno.
+         Misurato a schermo: sei nodi renderizzavano ancora a 700. */
       strong, b{ font-weight:600; }
+      h1,h2,h3,h4,h5,h6{ font-weight:600; }
       .t-titolo{ font-size:21px; line-height:1.25; font-weight:600; letter-spacing:-.012em; color:var(--txt); }
       .t-sezione{ font-size:17px; line-height:1.3; font-weight:600; letter-spacing:-.008em; color:var(--txt-chiaro); }
       .t-sotto{ font-size:13.5px; line-height:1.4; font-weight:500; letter-spacing:0; color:var(--txt-chiaro); }
