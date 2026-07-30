@@ -736,13 +736,13 @@ function Avviso({ tono = "accento", icona: Icona, children, className = "" }) {
        Erano scritti a mano in ogni grafico, con misure e colori leggermente
        diversi — e puntavano a un carattere monospaziato che non carichiamo
        più. Qui c'è una definizione sola. --------------------------------- */
-const STILE_ASSE = { fontSize: 11, fontFamily: "Inter, system-ui, sans-serif", fill: "#71717A", fontVariantNumeric: "tabular-nums" };
+const STILE_ASSE = { fontSize: 11, fontFamily: "'Fira Sans', system-ui, sans-serif", fill: "#7E7E88", fontVariantNumeric: "tabular-nums" };
 const STILE_TOOLTIP = {
   borderRadius: 10, background: "var(--bg-elevato)",
   border: ".5px solid var(--bordo-input)", color: "var(--txt-chiaro)",
   // Qui l'ombra serve davvero: il riquadro galleggia sopra il grafico.
   boxShadow: "0 16px 40px -12px rgba(0,0,0,.8)",
-  fontFamily: "Inter, system-ui, sans-serif", fontSize: 12.5, padding: "9px 13px",
+  fontFamily: "'Fira Sans', system-ui, sans-serif", fontSize: 12.5, padding: "9px 13px",
 };
 /* Le tinte dei grafici, tutte neutre di proposito.
    Il bronzo se n'è andato da qui: la regola scritta nei token dice logo, voce
@@ -4714,12 +4714,19 @@ function ReportStampa({ riep, costi, dal, al, azienda }) {
 
    Le tre regole che tengono insieme l'insieme:
 
-   1. UNA FAMIGLIA DI CARATTERI. Inter, nella versione variabile: un file solo
-      per tutti i pesi da 400 a 600. Prima erano tre famiglie (Instrument Sans,
-      IBM Plex Mono, Inter) per sette file: più roba da scaricare e tre voci
-      diverse nella stessa frase. I numeri non hanno bisogno di un carattere
-      monospaziato per incolonnarsi: basta font-variant-numeric:tabular-nums,
-      che Inter fa benissimo. Una voce sola, e i numeri restano allineati.
+   1. UNA FAMIGLIA DI CARATTERI. Fira Sans, tre pesi (400, 500, 600). Prima
+      erano tre famiglie (Instrument Sans, IBM Plex Mono, Inter) per sette
+      file: più roba da scaricare e tre voci diverse nella stessa frase. Poi è
+      stata Inter, che funziona benissimo ed è identica a mezzo web.
+      Fira Sans è stata commissionata da Mozilla a Erik Spiekermann per Firefox
+      OS, cioè per telefoni economici con schermi mediocri: aperture larghe,
+      terminali netti, fatta per restare leggibile quando il rendering non
+      aiuta. È l'argomento più vicino a un geometra che legge il totale di una
+      commessa dal telefono, in cantiere, con il sole. Distingue l da 1 da I
+      per disegno, non per una variante da attivare.
+      I numeri non hanno bisogno di un carattere monospaziato per incolonnarsi:
+      basta font-variant-numeric:tabular-nums, e le dieci cifre di Fira Sans
+      hanno la stessa larghezza — misurato, non sperato.
 
    2. LINEE, NON OMBRE. Le variabili --ombra-* non disegnano più ombre diffuse
       ma ANELLI di un pixel (box-shadow senza sfocatura). Le card quindi non
@@ -4835,11 +4842,16 @@ function StileGlobale() {
       }
       html{ background:var(--bg-app); }
       body{
-        font-family:'Inter',-apple-system,system-ui,sans-serif;
+        font-family:'Fira Sans',-apple-system,system-ui,sans-serif;
         font-size:13px; line-height:1.55; color:var(--txt-medio);
         background:var(--bg-app);
         -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
-        font-feature-settings:'cv05' 1,'cv11' 1;   /* l/1 più distinguibili */
+        /* Niente font-feature-settings qui: c'erano 'cv05' e 'cv11', due
+           varianti di carattere che esistono SOLO in Inter (la elle con la
+           coda, la a a un piano). Con Fira Sans non facevano nulla — restavano
+           lì a dichiarare un'intenzione che il carattere non poteva eseguire.
+           Fira Sans distingue l/1/I per disegno suo, che è il motivo per cui
+           è stato scelto. */
       }
       /* Su fondo scuro i selettori nativi di data e i menù a tendina vanno
          detti al browser, altrimenti disegna i suoi in tema chiaro. */
@@ -4850,21 +4862,30 @@ function StileGlobale() {
       /* Il numero-eroe della Dashboard non vive dentro una card: sta sul fondo
          della pagina, dove non ha vicini della sua taglia. Perché regga quel
          vuoto è più grande di ogni altro numero dell'applicazione. */
-      .t-eroe-xl{ font-size:56px; line-height:.98; font-weight:600; letter-spacing:-.05em; font-variant-numeric:tabular-nums; color:var(--txt); }
-      .t-eroe{ font-size:45px; line-height:1.02; font-weight:600; letter-spacing:-.045em; color:var(--txt); }
-      .t-titolo{ font-size:21px; line-height:1.25; font-weight:600; letter-spacing:-.02em; color:var(--txt); }
-      .t-sezione{ font-size:17px; line-height:1.3; font-weight:600; letter-spacing:-.015em; color:var(--txt-chiaro); }
-      .t-sotto{ font-size:13.5px; line-height:1.4; font-weight:500; letter-spacing:-.005em; color:var(--txt-chiaro); }
+      /* La crenatura è stata riaperta passando a Fira Sans. I valori di prima
+         erano tarati su Inter, che ha un occhio grande e forme strette e regge
+         un serraggio forte; Fira Sans è più umanista e più aperta, e con lo
+         stesso serraggio le lettere si toccano. In più il -.05em dell'eroe
+         sfondava il pavimento di -.04em che ci siamo dati. Questi sono valori
+         ragionati, non guardati a schermo: se una riga ti sembra ancora larga
+         o stretta, si muove di mezzo centesimo per volta. */
+      .t-eroe-xl{ font-size:56px; line-height:.98; font-weight:600; letter-spacing:-.03em; font-variant-numeric:tabular-nums; color:var(--txt); }
+      .t-eroe{ font-size:45px; line-height:1.02; font-weight:600; letter-spacing:-.028em; color:var(--txt); }
+      .t-titolo{ font-size:21px; line-height:1.25; font-weight:600; letter-spacing:-.012em; color:var(--txt); }
+      .t-sezione{ font-size:17px; line-height:1.3; font-weight:600; letter-spacing:-.008em; color:var(--txt-chiaro); }
+      .t-sotto{ font-size:13.5px; line-height:1.4; font-weight:500; letter-spacing:0; color:var(--txt-chiaro); }
       .t-corpo{ font-size:13px; line-height:1.6; }
       .t-piccolo{ font-size:12px; line-height:1.5; }
       .t-micro{ font-size:11px; font-weight:500; letter-spacing:.06em; text-transform:uppercase; color:var(--txt-etichetta); }
       .t-leggibile{ max-width:66ch; }
-      @media (max-width:640px){ .t-eroe-xl{ font-size:37px; letter-spacing:-.04em; } .t-eroe{ font-size:34px; } .t-titolo{ font-size:19px; } }
+      @media (max-width:640px){ .t-eroe-xl{ font-size:37px; letter-spacing:-.022em; } .t-eroe{ font-size:34px; } .t-titolo{ font-size:19px; } }
 
-      .f-display{ font-weight:600; letter-spacing:-.018em; }
-      /* Cifre a larghezza fissa: si incolonnano come in una tabella. */
-      .f-mono{ font-variant-numeric:tabular-nums; font-feature-settings:'tnum' 1; letter-spacing:-.004em; }
-      .cifra-grande{ font-variant-numeric:tabular-nums; font-weight:600; letter-spacing:-.032em; color:var(--txt); }
+      .f-display{ font-weight:600; letter-spacing:-.01em; }
+      /* Cifre a larghezza fissa: si incolonnano come in una tabella. Nessun
+         serraggio: su una colonna di importi anche un centesimo di em toglie
+         aria fra la virgola e i decimali. */
+      .f-mono{ font-variant-numeric:tabular-nums; font-feature-settings:'tnum' 1; letter-spacing:0; }
+      .cifra-grande{ font-variant-numeric:tabular-nums; font-weight:600; letter-spacing:-.02em; color:var(--txt); }
 
       .superficie-scura{ background:var(--bg-sidebar); }
 
