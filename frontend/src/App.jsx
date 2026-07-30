@@ -2864,10 +2864,6 @@ function Dashboard({ riep, costi, dal, al, dipendenti, serieMensile, vaiCommesse
                 <button onClick={() => apri(r)}
                   className="w-full text-left px-6 py-3 flex items-center gap-4 btn riga"
                   title={`Apri il dettaglio di ${r.commessa.codice}`}>
-                  {/* La numerazione è l'unico posto dove --txt-fioco è
-                      ammesso: non è testo da leggere, è un appiglio per
-                      l'occhio quando si scorre. */}
-                  <span className="f-mono shrink-0 text-right" style={{ width: 14, fontSize: 11, color: "var(--txt-fioco)" }}>{i + 1}</span>
                   <span className={"shrink-0 badge-codice" + (i === 0 ? " badge-codice-primo" : "")}>{r.commessa.codice}</span>
                   <span className="truncate t-piccolo" style={{ color: "var(--txt-attenuato)" }}>{r.commessa.descrizione}</span>
                   <span className="ml-auto shrink-0 flex items-center gap-5">
@@ -3022,7 +3018,6 @@ function VistaCommesse({ riep, costi, dal, al, apri, esportaCsv, esportaXlsx, es
             <table className="tabella text-sm">
               <thead>
                 <tr>
-                  <th className="w-9 pr-0" aria-label="Numero di riga" />
                   {[["codice", "Codice", ""], [null, "Descrizione", "hidden lg:table-cell"], ["ore", "Ore", "text-right"],
                     [null, "Quota", "w-36 hidden xl:table-cell"],
                     ["manodopera", "Manodopera", "text-right"], ["materiali", "Materiali", "text-right"], ["totale", "Totale", "text-right"]].map(([campo, nome, cls]) => (
@@ -3038,7 +3033,6 @@ function VistaCommesse({ riep, costi, dal, al, apri, esportaCsv, esportaXlsx, es
                     {/* La numerazione non è un dato: è un appiglio per l'occhio
                         quando si scorre una lista lunga. Perciò sta nel grigio
                         più tenue che abbiamo. */}
-                    <td className="f-mono pr-0 text-right" style={{ color: "var(--txt-fioco)" }}>{i + 1}</td>
                     <td>
                       {/* Il badge pieno segna la commessa che costa più di
                           tutte — non la prima riga dell'ordinamento corrente,
@@ -3064,7 +3058,6 @@ function VistaCommesse({ riep, costi, dal, al, apri, esportaCsv, esportaXlsx, es
               </tbody>
               <tfoot>
                 <tr style={{ borderTop: ".5px solid var(--bordo-input)", background: "var(--bg-elevato)" }}>
-                  <td className="pr-0" />
                   <td className="font-medium">Totale</td>
                   <td className="hidden lg:table-cell" />
                   <td className="f-mono text-right font-medium">{fmtOre.format(riep.totOre)}</td>
@@ -4450,7 +4443,49 @@ function VistaDati({ dipendenti, commesse, registrazioni, setCommesse, aggiungi,
             </button>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          {/* ============ SOTTO I 640px: ELENCO, NON TABELLA ============
+              Misurato nel browser: a 390px questa tabella era larga 453px in un
+              contenitore da 338, quindi 115px stavano fuori — e in quei 115px
+              c'erano ENTRAMBI i bottoni di riga. Per modificare una
+              registrazione dal telefono bisognava prima scorrere la tabella di
+              lato, cioè scoprire che si poteva.
+              Una tabella a cinque colonne su uno schermo da quattro pollici non
+              si aggiusta stringendo le spaziature: si smette di usarla. Qui
+              ogni registrazione è una riga d'elenco su due righe di testo, con
+              davanti il dato per cui si scorre — le ore — e i due bottoni
+              sempre raggiungibili col pollice. */}
+          <ul className="sm:hidden">
+            {elenco.map((r, i) => {
+              const d = dipById.get(r.dipendenteId), c = comById.get(r.commessaId);
+              return (
+                <li key={r.id} className="px-5 py-3.5 flex items-center gap-3 riga"
+                  style={{ borderTop: i > 0 ? ".5px solid var(--bordo-tenue)" : "none" }}>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline gap-2.5">
+                      <span className="f-mono t-corpo" style={{ color: "var(--txt)", fontWeight: 500 }}>
+                        {fmtOre.format(r.ore)} h
+                      </span>
+                      <span className="badge-codice">{c ? c.codice : "—"}</span>
+                    </div>
+                    <p className="t-piccolo mt-1 truncate" style={{ color: "var(--txt-tenue)" }}>
+                      <span className="f-mono">{fmtData(r.data)}</span> · {d ? d.nome + " " + d.cognome : "—"}
+                    </p>
+                  </div>
+                  <div className="shrink-0 flex gap-2">
+                    <button onClick={() => setModifica(r)} aria-label={`Modifica la registrazione del ${fmtData(r.data)}`}
+                      className="inline-flex items-center justify-center btn btn-fantasma"
+                      style={{ width: 36, height: 36, borderRadius: "var(--r-sm)" }}><Pencil size={14} strokeWidth={1.75} /></button>
+                    <button onClick={() => eliminaReg(r)} aria-label={`Elimina la registrazione del ${fmtData(r.data)}`}
+                      className="inline-flex items-center justify-center btn btn-riga-elimina"
+                      style={{ width: 36, height: 36, borderRadius: "var(--r-sm)" }}><Trash2 size={14} strokeWidth={1.75} /></button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+
+          <div className="hidden sm:block overflow-x-auto">
             <table className="tabella t-corpo">
               <thead>
                 <tr>
@@ -4483,12 +4518,17 @@ function VistaDati({ dipendenti, commesse, registrazioni, setCommesse, aggiungi,
                 })}
               </tbody>
             </table>
-            {registrazioni.length > 300 && elenco.length === 300 && (
-              <p className="t-piccolo px-6 py-3.5" style={{ color: "var(--txt-tenue)", borderTop: ".5px solid var(--bordo-tenue)" }}>
-                Mostrate le prime 300 righe: usa la ricerca per trovarne altre.
-              </p>
-            )}
           </div>
+
+          {/* Il tetto delle 300 righe vale per l'elenco e per la tabella, quindi
+              la nota sta fuori da entrambi: dentro la tabella si vedeva solo da
+              640px in su, cioè proprio non dove lo spazio scarseggia. */}
+          {registrazioni.length > 300 && elenco.length === 300 && (
+            <p className="t-piccolo px-5 sm:px-6 py-3.5" style={{ color: "var(--txt-tenue)", borderTop: ".5px solid var(--bordo-tenue)" }}>
+              Mostrate le prime 300 righe: usa la ricerca per trovarne altre.
+            </p>
+          )}
+          </>
         )}
       </section>
 
@@ -4790,22 +4830,22 @@ function StileGlobale() {
         --txt-chiaro:#F4F4F5;     /* testo forte */
         --txt-medio:#E4E4E7;      /* testo normale nelle righe */
         --txt-attenuato:#A1A1AA;  /* testo secondario */
-        /* I tre gradini bassi hanno un pavimento, e il pavimento è WCAG AA
-           (4,5:1) sul fondo dell'app, non il gusto. PRODUCT.md lo dice fuori
-           dai denti: utenti non giovani, non tecnici, su un telefono in
-           cattiva luce — contrasto e corpo del testo non sono materia di
-           gusto. I rapporti sono calcolati su --bg-app #08080A:
+        /* I gradini bassi hanno un pavimento, e il pavimento è WCAG AA (4,5:1)
+           sul fondo dell'app, non il gusto. PRODUCT.md lo dice fuori dai denti:
+           utenti non giovani, non tecnici, su un telefono in cattiva luce —
+           contrasto e corpo del testo non sono materia di gusto. I rapporti
+           sono calcolati su --bg-app #08080A e verificati a schermo:
              --txt-etichetta  5,85:1   maiuscoletto e intestazioni di tabella
              --txt-tenue      4,98:1   didascalie, segnaposto, note
              --txt-debole     2,59:1   SOLO decorativo, mai testo da leggere
-             --txt-fioco      2,27:1   SOLO la numerazione delle righe
-           Prima --txt-fioco era il colore di ogni etichetta in maiuscoletto e
-           di ogni intestazione di tabella: 2,27:1, cioè illeggibile proprio
-           dove diceva in che colonna sei. */
+           Qui sotto c'era anche --txt-fioco (#4A4A50, 2,27:1), riservato alla
+           numerazione delle righe. La numerazione è stata tolta: doveva essere
+           un appiglio per l'occhio, ma a quel contrasto non si vedeva, e un
+           appiglio invisibile non è un appiglio — è rumore nel markup. Senza
+           il suo unico uso, il token se n'è andato con lei. */
         --txt-etichetta:#8A8A93;  /* etichette e intestazioni: il gradino leggibile */
         --txt-tenue:#7E7E88;      /* didascalie e segnaposto */
         --txt-debole:#52525B;     /* decorativo: separatori, cifre spente */
-        --txt-fioco:#4A4A50;      /* numerazione di riga, non è testo */
 
         /* --- accento bronzo spento: logo, voce attiva, link, badge. E basta.
                Se comincia a comparire su ogni riga non è più un accento. --- */
