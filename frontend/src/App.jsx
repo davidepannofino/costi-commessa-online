@@ -673,6 +673,44 @@ const Valore = ({ etichetta, valore, nota, tono, grande }) => (
   </div>
 );
 
+/** Il marchio: monogramma e nome. Compariva scritto a mano in quattro pagine,
+ *  con tre gradienti diversi. Ora è uno. */
+const Marchio = ({ chiaro, centrato }) => (
+  <div className={"flex items-center gap-3" + (centrato ? " justify-center" : "")}>
+    <div className="flex items-center justify-center shrink-0 f-display"
+      style={{
+        width: 30, height: 30, borderRadius: "var(--r-sm)", fontSize: 13,
+        background: chiaro ? "var(--scuro-velo)" : "var(--ink)",
+        color: chiaro ? "var(--accent-chiaro)" : "#F4F1EA",
+        boxShadow: chiaro ? "inset 0 0 0 1px var(--scuro-linea)" : "none",
+      }}>C</div>
+    <div className="t-piccolo" style={{ fontWeight: 500, color: chiaro ? "var(--scuro-txt)" : "var(--txt)" }}>Costi Commessa</div>
+  </div>
+);
+
+/**
+ * Messaggio in linea: avviso, errore, conferma. Prima questi riquadri erano
+ * riscritti a mano ogni volta che servivano, con colori e bordi leggermente
+ * diversi in ogni schermata. Qui c'è una forma sola, e cambiarla li cambia tutti.
+ */
+function Avviso({ tono = "accento", icona: Icona, children, className = "" }) {
+  const toni = {
+    accento: { background: "var(--velo-accento)", colore: "#7C6027", linea: "rgba(154,120,58,.2)", predefinita: AlertTriangle },
+    errore: { background: "var(--velo-errore)", colore: "var(--errore)", linea: "rgba(166,58,50,.22)", predefinita: AlertTriangle },
+    ok: { background: "var(--velo-euro)", colore: "var(--euro)", linea: "rgba(30,115,80,.2)", predefinita: CheckCircle2 },
+    neutro: { background: "var(--velo)", colore: "var(--muted)", linea: "var(--hairline)", predefinita: Info },
+  }[tono];
+  const Segno = Icona || toni.predefinita;
+  return (
+    <div className={"flex items-start gap-2.5 px-4 py-3 t-piccolo anim-pop " + className}
+      style={{ background: toni.background, boxShadow: `0 0 0 1px ${toni.linea}`, borderRadius: "var(--r-sm)", color: toni.colore }}
+      role="alert">
+      <Segno size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
+      <span>{children}</span>
+    </div>
+  );
+}
+
 /** Pillola: stato, conteggio, etichetta breve. Tre toni, non uno di più. */
 const Pillola = ({ tono = "neutro", children }) => {
   const toni = {
@@ -879,138 +917,123 @@ function SchermataAccesso({ alSuccesso, messaggio }) {
     }
   };
 
-  const barreDecorative = [38, 62, 46, 82, 54, 70, 34];
-
   return (
     <div className="min-h-screen flex" style={{ background: "var(--tela)", color: "var(--txt)" }}>
       <StileGlobale />
 
-      {/* ================= PANNELLO DESCRITTIVO (solo desktop) ================= */}
-      <div className="hidden lg:flex lg:w-[45%] xl:w-[40%] relative flex-col justify-between overflow-hidden noprint superficie-scura px-12 py-14 xl:px-16">
-        {/* forme geometriche di sfondo, puramente decorative */}
-        <div aria-hidden="true" className="absolute inset-0 pointer-events-none">
-          <div className="absolute rounded-full" style={{ width: 340, height: 340, top: -130, right: -110, border: "1px solid rgba(255,255,255,.06)" }} />
-          <div className="absolute rounded-full" style={{ width: 220, height: 220, top: -40, right: -60, border: "1px solid rgba(196,162,101,.14)" }} />
-          <div className="absolute" style={{ width: 200, height: 200, bottom: 40, left: -70, border: "1px solid rgba(255,255,255,.05)", borderRadius: 44, transform: "rotate(18deg)" }} />
-          <div className="absolute" style={{ width: 120, height: 120, top: "38%", left: -50, border: "1px solid rgba(255,255,255,.045)", borderRadius: 30, transform: "rotate(-12deg)" }} />
-        </div>
-
+      {/* ================= PANNELLO DESCRITTIVO (solo desktop) =================
+          Prima qui c'erano quattro forme geometriche di sfondo e un grafico a
+          barre finto. Il grafico era la cosa peggiore: sembrava un dato e non
+          lo era. Restano il nome, una frase, e molto spazio — che è ciò che fa
+          sembrare curata una schermata, non il numero di elementi che contiene. */}
+      <div className="hidden lg:flex lg:w-[46%] xl:w-[42%] relative flex-col justify-between overflow-hidden noprint superficie-scura px-14 py-16 xl:px-20">
         <div className="relative flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg flex items-center justify-center f-display text-base shrink-0" style={{ background: "linear-gradient(160deg,#2A313C,#1A1F27)", color: "var(--accent-chiaro)", border: "1px solid rgba(255,255,255,.08)" }}>C</div>
-          <div className="f-display text-[15px]" style={{ color: "#EDEAE2" }}>Costi Commessa</div>
+          <div className="flex items-center justify-center shrink-0 f-display"
+            style={{ width: 32, height: 32, borderRadius: "var(--r-sm)", background: "var(--scuro-velo)", boxShadow: "inset 0 0 0 1px var(--scuro-linea)", color: "var(--accent-chiaro)", fontSize: 14 }}>C</div>
+          <div className="t-piccolo" style={{ color: "var(--scuro-txt)", fontWeight: 500 }}>Costi Commessa</div>
         </div>
 
         <div className="relative">
-          <p className="text-[11px] font-semibold uppercase mb-4" style={{ letterSpacing: ".14em", color: "var(--accent-chiaro)" }}>
-            Costo del lavoro, sotto controllo
-          </p>
-          <p className="f-display text-[30px] xl:text-[36px] leading-[1.16] mb-5" style={{ color: "#F0EDE5" }}>
+          <h1 className="f-display mb-6" style={{ fontSize: 40, lineHeight: 1.14, letterSpacing: "-.028em", color: "#F4F1EA" }}>
             Il costo del lavoro,<br />commessa per commessa.
+          </h1>
+          <p className="t-corpo" style={{ color: "var(--scuro-muted)", maxWidth: "42ch" }}>
+            Registra le ore, calcola il costo esatto per ogni commessa e ogni dipendente,
+            esporta il report. Ogni azienda con i propri dati, separati e al sicuro.
           </p>
-          <p className="text-sm leading-relaxed max-w-sm" style={{ color: "#9BA1AB" }}>
-            Registra le ore, calcola il costo esatto per ogni commessa e ogni dipendente, esporta il report. Ogni azienda con i propri dati, separati e al sicuro.
-          </p>
-
-          {/* grafico decorativo astratto (nessun dato reale) */}
-          <div className="mt-11 flex items-end gap-2.5 h-24" aria-hidden="true">
-            {barreDecorative.map((h, i) => (
-              <div key={i} className="flex-1 rounded-t-md anim-barra" style={{ height: `${h}%`, background: i === 3 ? "var(--accent-chiaro)" : "rgba(255,255,255,.10)" }} />
-            ))}
-          </div>
         </div>
 
-        <p className="relative text-xs" style={{ color: "#5A616C" }}>Calcoli in piena precisione. Ogni azienda, dati isolati.</p>
+        <p className="relative t-piccolo" style={{ color: "#6E6A62" }}>
+          Calcoli in piena precisione. Ogni azienda, dati isolati.
+        </p>
       </div>
 
       {/* ================= FORM ================= */}
-      <div className="flex-1 flex items-center justify-center px-4 py-10">
-        <div className="w-full max-w-sm">
-          <div className="flex items-center gap-3 mb-8 lg:hidden">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center f-display text-sm shrink-0" style={{ background: "linear-gradient(160deg,#2A313C,#1A1F27)", color: "#EDEAE2" }}>C</div>
-            <div className="f-display text-[15px]">Costi Commessa</div>
+      <div className="flex-1 flex items-center justify-center px-5 py-12">
+        <div className="w-full" style={{ maxWidth: 384 }}>
+          <div className="flex items-center gap-3 mb-9 lg:hidden">
+            <div className="flex items-center justify-center shrink-0 f-display"
+              style={{ width: 30, height: 30, borderRadius: "var(--r-sm)", background: "var(--ink)", color: "#F4F1EA", fontSize: 13 }}>C</div>
+            <div className="t-piccolo" style={{ fontWeight: 500 }}>Costi Commessa</div>
           </div>
 
-          <div className="rounded-2xl p-6 sm:p-7" style={{ background: "var(--card)", boxShadow: "var(--ombra-lg)" }}>
+          {/* Il modulo non è una card che galleggia: è il contenuto della
+              pagina. Nessuna ombra, nessun riquadro — solo spazio intorno. */}
+          <div>
             {vistaRecupero ? (
               <div key="recupero" className="anim-vista">
-                <p className="f-display text-xl mb-1">Recupera la password</p>
-                <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>
+                <h2 className="t-sezione mb-2">Recupera la password</h2>
+                <p className="t-piccolo mb-7" style={{ color: "var(--muted)" }}>
                   Inserisci l'email del tuo account: se esiste, ti mandiamo un link per reimpostare la password.
                 </p>
 
                 {inviatoRecupero ? (
-                  <div className="flex items-start gap-2.5 rounded-xl px-3.5 py-3 text-sm anim-pop" style={{ background: "var(--velo-accento)", border: "1px solid rgba(154,120,58,.18)", color: "#7C6027" }}>
-                    <CheckCircle2 size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
+                  <Avviso tono="ok">
                     Controlla la tua email: se l'indirizzo esiste, riceverai a breve un link per reimpostare la password.
-                  </div>
+                  </Avviso>
                 ) : (
-                  <form onSubmit={inviaRecupero} className="space-y-4">
+                  <form onSubmit={inviaRecupero} className="space-y-5">
                     <Campo etichetta="Email">
                       <div className="relative">
-                        <Mail size={15} strokeWidth={1.75} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--muted)" }} />
-                        <input type="email" className={inputCls + " pl-9"} value={emailRecupero} onChange={(e) => setEmailRecupero(e.target.value)} placeholder="nome@azienda.it" required autoFocus />
+                        <Mail size={15} strokeWidth={1.75} className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--tenue)" }} />
+                        <input type="email" className={inputCls + " pl-10"} value={emailRecupero} onChange={(e) => setEmailRecupero(e.target.value)} placeholder="nome@azienda.it" required autoFocus />
                       </div>
                     </Campo>
 
-                    {messaggioRecupero && (
-                      <div className="flex items-start gap-2.5 rounded-xl px-3.5 py-3 text-sm anim-pop" style={{ background: "rgba(166,58,50,.07)", border: "1px solid rgba(166,58,50,.2)", color: "#A63A32" }}>
-                        <AlertTriangle size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" /> {messaggioRecupero.testo}
-                      </div>
-                    )}
+                    {messaggioRecupero && <Avviso tono="errore">{messaggioRecupero.testo}</Avviso>}
 
-                    <Bottone type="submit" variante="accento" className="w-full" disabled={caricandoRecupero}>
+                    <Bottone type="submit" variante="primario" className="w-full" disabled={caricandoRecupero}>
                       {caricandoRecupero ? <Loader2 size={15} strokeWidth={1.75} className="animate-spin" /> : <ArrowRight size={15} strokeWidth={1.75} />}
                       {caricandoRecupero ? "Invio…" : "Invia link di reset"}
                     </Bottone>
                   </form>
                 )}
 
-                <button type="button" onClick={chiudiRecupero} className="text-xs mt-5 block mx-auto btn" style={{ color: "var(--muted)" }}>
+                <button type="button" onClick={chiudiRecupero} className="t-piccolo mt-6 block mx-auto btn" style={{ color: "var(--muted)" }}>
                   ← Torna al login
                 </button>
               </div>
             ) : (
               <div key={modo} className="anim-vista">
-                <p className="f-display text-xl mb-1">{modo === "accedi" ? "Bentornato" : "Crea il tuo account"}</p>
-                <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>
+                <h2 className="t-titolo mb-2.5">{modo === "accedi" ? "Bentornato" : "Crea il tuo account"}</h2>
+                <p className="t-corpo mb-8" style={{ color: "var(--muted)" }}>
                   {modo === "accedi" ? "Accedi per continuare a gestire i costi delle tue commesse." : "Un account per azienda: dati separati e al sicuro."}
                 </p>
 
-                <div className="relative flex mb-5 rounded-lg p-1" style={{ background: "var(--velo)" }}>
-                  <div className="absolute top-1 bottom-1 rounded-md transition-transform duration-300 ease-out"
-                    style={{ width: "calc(50% - 4px)", left: 4, background: "var(--card)", boxShadow: "var(--ombra-xs)", transform: modo === "registrati" ? "translateX(100%)" : "translateX(0)" }} />
-                  <button type="button" onClick={() => cambiaModo("accedi")}
-                    className="relative z-10 flex-1 text-sm font-medium rounded-md py-1.5 transition-colors"
-                    style={{ color: modo === "accedi" ? "var(--txt)" : "var(--muted)" }}>
-                    Accedi
-                  </button>
-                  <button type="button" onClick={() => cambiaModo("registrati")}
-                    className="relative z-10 flex-1 text-sm font-medium rounded-md py-1.5 transition-colors"
-                    style={{ color: modo === "registrati" ? "var(--txt)" : "var(--muted)" }}>
-                    Registrati
-                  </button>
+                <div className="relative flex mb-7 p-1" style={{ background: "var(--velo)", borderRadius: "var(--r-sm)" }}>
+                  <div className="absolute top-1 bottom-1" style={{ width: "calc(50% - 4px)", left: 4, background: "var(--card)",
+                    borderRadius: "var(--r-xs)", boxShadow: "var(--ombra-md)",
+                    transform: modo === "registrati" ? "translateX(100%)" : "translateX(0)",
+                    transition: "transform var(--moto)" }} />
+                  {[["accedi", "Accedi"], ["registrati", "Registrati"]].map(([id, testo]) => (
+                    <button key={id} type="button" onClick={() => cambiaModo(id)}
+                      className="relative z-10 flex-1 text-sm font-medium py-2"
+                      style={{ borderRadius: "var(--r-xs)", color: modo === id ? "var(--txt)" : "var(--muted)", transition: "color var(--moto)" }}>
+                      {testo}
+                    </button>
+                  ))}
                 </div>
 
                 {modo === "registrati" && (
-                  <div className="flex items-start gap-2.5 rounded-xl px-3.5 py-3 text-xs leading-relaxed mb-5" style={{ background: "var(--velo-accento)", border: "1px solid rgba(154,120,58,.18)", color: "#7C6027" }}>
-                    <Gift size={14} strokeWidth={1.75} className="mt-0.5 shrink-0" />
-                    <span><strong>14 giorni di prova gratuita</strong>, poi 29 €/mese. Nessuna carta richiesta per iniziare — disdici quando vuoi.</span>
-                  </div>
+                  <Avviso tono="accento" icona={Gift} className="mb-6">
+                    <strong style={{ fontWeight: 600 }}>14 giorni di prova gratuita</strong>, poi 29 €/mese.
+                    Nessuna carta richiesta per iniziare — disdici quando vuoi.
+                  </Avviso>
                 )}
 
-                <form onSubmit={invia} className="space-y-4">
+                <form onSubmit={invia} className="space-y-5">
                   {modo === "registrati" && (
                     <Campo etichetta="Nome azienda">
                       <div className="relative">
-                        <Building2 size={15} strokeWidth={1.75} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--muted)" }} />
-                        <input className={inputCls + " pl-9"} value={nomeAzienda} onChange={(e) => setNomeAzienda(e.target.value)} placeholder="es. Rossi Costruzioni S.r.l." required autoFocus />
+                        <Building2 size={15} strokeWidth={1.75} className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--tenue)" }} />
+                        <input className={inputCls + " pl-10"} value={nomeAzienda} onChange={(e) => setNomeAzienda(e.target.value)} placeholder="es. Rossi Costruzioni S.r.l." required autoFocus />
                       </div>
                     </Campo>
                   )}
                   <Campo etichetta="Email">
                     <div className="relative">
-                      <Mail size={15} strokeWidth={1.75} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--muted)" }} />
-                      <input type="email" className={inputCls + " pl-9"} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="nome@azienda.it" required />
+                      <Mail size={15} strokeWidth={1.75} className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--tenue)" }} />
+                      <input type="email" className={inputCls + " pl-10"} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="nome@azienda.it" required />
                     </div>
                   </Campo>
                   <Campo etichetta="Password">
@@ -1025,24 +1048,16 @@ function SchermataAccesso({ alSuccesso, messaggio }) {
                   </Campo>
 
                   {modo === "accedi" && (
-                    <button type="button" onClick={apriRecupero} className="text-xs -mt-2 btn" style={{ color: "var(--muted)" }}>
+                    <button type="button" onClick={apriRecupero} className="t-piccolo -mt-2 btn" style={{ color: "var(--muted)" }}>
                       Password dimenticata?
                     </button>
                   )}
 
                   {messaggioForm && (
-                    messaggioForm.tipo === "avviso" ? (
-                      <div className="flex items-start gap-2.5 rounded-xl px-3.5 py-3 text-sm anim-pop" style={{ background: "var(--velo-accento)", border: "1px solid rgba(154,120,58,.18)", color: "#7C6027" }}>
-                        <AlertTriangle size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" /> {messaggioForm.testo}
-                      </div>
-                    ) : (
-                      <div className="flex items-start gap-2.5 rounded-xl px-3.5 py-3 text-sm anim-pop" style={{ background: "rgba(166,58,50,.07)", border: "1px solid rgba(166,58,50,.2)", color: "#A63A32" }}>
-                        <AlertTriangle size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" /> {messaggioForm.testo}
-                      </div>
-                    )
+                    <Avviso tono={messaggioForm.tipo === "avviso" ? "accento" : "errore"}>{messaggioForm.testo}</Avviso>
                   )}
 
-                  <Bottone type="submit" variante="accento" className="w-full" disabled={caricando}>
+                  <Bottone type="submit" variante="primario" className="w-full" disabled={caricando}>
                     {caricando ? <Loader2 size={15} strokeWidth={1.75} className="animate-spin" /> : <ArrowRight size={15} strokeWidth={1.75} />}
                     {caricando ? "Attendere…" : modo === "accedi" ? "Accedi" : "Crea account"}
                   </Bottone>
@@ -1051,7 +1066,7 @@ function SchermataAccesso({ alSuccesso, messaggio }) {
             )}
           </div>
 
-          <p className="text-center text-xs mt-5" style={{ color: "var(--muted)" }}>
+          <p className="text-center t-piccolo mt-8" style={{ color: "var(--tenue)" }}>
             Costo del lavoro per commessa. Calcoli in piena precisione.
           </p>
         </div>
@@ -1102,17 +1117,14 @@ function PaginaResetPassword({ token, alSuccesso }) {
   return (
     <div className="min-h-screen flex items-center justify-center px-4" style={{ background: "var(--tela)", color: "var(--txt)" }}>
       <StileGlobale />
-      <div className="w-full max-w-sm">
-        <div className="flex items-center gap-3 mb-8 justify-center">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center f-display text-sm shrink-0" style={{ background: "linear-gradient(160deg,#2A313C,#1A1F27)", color: "#EDEAE2" }}>C</div>
-          <div className="f-display text-[15px]">Costi Commessa</div>
-        </div>
+      <div className="w-full" style={{ maxWidth: 384 }}>
+        <div className="mb-10"><Marchio centrato /></div>
 
-        <div className="rounded-2xl p-7" style={{ background: "var(--card)", boxShadow: "var(--ombra-lg)" }}>
-          <p className="f-display text-xl mb-1">Imposta una nuova password</p>
-          <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>Scegli una nuova password per il tuo account.</p>
+        <div>
+          <h2 className="t-sezione mb-2">Imposta una nuova password</h2>
+          <p className="t-piccolo mb-7" style={{ color: "var(--muted)" }}>Scegli una nuova password per il tuo account.</p>
 
-          <form onSubmit={invia} className="space-y-4">
+          <form onSubmit={invia} className="space-y-5">
             <Campo etichetta="Nuova password">
               <CampoPassword value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Almeno 8 caratteri" minLength={8} required autoFocus autoComplete="new-password" />
             </Campo>
@@ -1120,13 +1132,9 @@ function PaginaResetPassword({ token, alSuccesso }) {
               <CampoPassword value={conferma} onChange={(e) => setConferma(e.target.value)} placeholder="Ripeti la password" minLength={8} required autoComplete="new-password" />
             </Campo>
 
-            {messaggioForm && (
-              <div className="flex items-start gap-2.5 rounded-xl px-3.5 py-3 text-sm anim-pop" style={{ background: "rgba(166,58,50,.07)", border: "1px solid rgba(166,58,50,.2)", color: "#A63A32" }}>
-                <AlertTriangle size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" /> {messaggioForm.testo}
-              </div>
-            )}
+            {messaggioForm && <Avviso tono="errore">{messaggioForm.testo}</Avviso>}
 
-            <Bottone type="submit" variante="accento" className="w-full" disabled={caricando}>
+            <Bottone type="submit" variante="primario" className="w-full" disabled={caricando}>
               {caricando ? <Loader2 size={15} strokeWidth={1.75} className="animate-spin" /> : <ArrowRight size={15} strokeWidth={1.75} />}
               {caricando ? "Attendere…" : "Imposta la nuova password"}
             </Bottone>
@@ -1159,37 +1167,31 @@ function PaginaAbbonamento({ onUscire }) {
   return (
     <div className="min-h-screen flex items-center justify-center px-4" style={{ background: "var(--tela)", color: "var(--txt)" }}>
       <StileGlobale />
-      <div className="w-full max-w-md">
-        <div className="flex items-center gap-3 mb-8 justify-center">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center f-display text-sm shrink-0" style={{ background: "linear-gradient(160deg,#2A313C,#1A1F27)", color: "#EDEAE2" }}>C</div>
-          <div className="f-display text-[15px]">Costi Commessa</div>
-        </div>
+      <div className="w-full" style={{ maxWidth: 420 }}>
+        <div className="mb-10"><Marchio centrato /></div>
 
-        <div className="rounded-2xl p-8 text-center" style={{ background: "var(--card)", boxShadow: "var(--ombra-lg)" }}>
-          <div className="w-11 h-11 rounded-xl flex items-center justify-center mx-auto mb-4" style={{ background: "var(--velo-accento)" }}>
-            <Sparkles size={20} strokeWidth={1.75} style={{ color: "var(--accent)" }} />
-          </div>
-          <p className="f-display text-xl mb-2">Il periodo di prova è terminato</p>
-          <p className="text-sm mb-6 leading-relaxed" style={{ color: "var(--muted)" }}>
+        {/* Il prezzo è il protagonista della schermata: grande, calmo, con
+            accanto la cosa che rassicura di più (si disdice quando si vuole). */}
+        <div className="text-center">
+          <h2 className="t-sezione mb-3">Il periodo di prova è terminato</h2>
+          <p className="t-corpo mb-9 mx-auto" style={{ color: "var(--muted)", maxWidth: "44ch" }}>
             Hai usato liberamente Costi Commessa per 14 giorni. Per continuare ad accedere ai tuoi dati, attiva l'abbonamento mensile.
           </p>
 
-          <div className="rounded-xl px-5 py-4 mb-6" style={{ background: "var(--velo)" }}>
-            <p className="f-mono text-[28px] font-medium" style={{ color: "var(--txt)" }}>29 €<span className="text-sm font-normal" style={{ color: "var(--muted)" }}> / mese</span></p>
-            <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>Disdici quando vuoi, senza vincoli.</p>
+          <div className="px-6 py-7 mb-8" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
+            <p className="cifra-grande" style={{ fontSize: 44, lineHeight: 1, letterSpacing: "-.035em" }}>
+              29 €<span className="t-corpo" style={{ fontWeight: 400, color: "var(--tenue)", letterSpacing: 0 }}> / mese</span>
+            </p>
+            <p className="t-piccolo mt-3" style={{ color: "var(--muted)" }}>Disdici quando vuoi, senza vincoli.</p>
           </div>
 
-          {errore && (
-            <div className="flex items-start gap-2.5 rounded-xl px-3.5 py-3 text-sm anim-pop mb-4 text-left" style={{ background: "rgba(166,58,50,.07)", border: "1px solid rgba(166,58,50,.2)", color: "#A63A32" }}>
-              <AlertTriangle size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" /> {errore}
-            </div>
-          )}
+          {errore && <div className="mb-5 text-left"><Avviso tono="errore">{errore}</Avviso></div>}
 
-          <Bottone variante="accento" className="w-full" onClick={abbonati} disabled={caricando}>
+          <Bottone variante="primario" className="w-full" onClick={abbonati} disabled={caricando}>
             {caricando ? <Loader2 size={15} strokeWidth={1.75} className="animate-spin" /> : <ArrowRight size={15} strokeWidth={1.75} />}
             {caricando ? "Un attimo…" : "Abbonati ora"}
           </Bottone>
-          <button type="button" onClick={onUscire} className="text-xs mt-5 btn" style={{ color: "var(--muted)" }}>
+          <button type="button" onClick={onUscire} className="t-piccolo mt-6 btn" style={{ color: "var(--muted)" }}>
             Esci e torna più tardi
           </button>
         </div>
@@ -1204,8 +1206,8 @@ function VerificaPagamento() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center gap-4 px-4" style={{ background: "var(--tela)", color: "var(--txt)" }}>
       <StileGlobale />
-      <Loader2 size={22} strokeWidth={1.75} className="animate-spin" style={{ color: "var(--accent)" }} />
-      <p className="text-sm" style={{ color: "var(--muted)" }}>Stiamo confermando il pagamento…</p>
+      <Loader2 size={20} strokeWidth={1.75} className="animate-spin" style={{ color: "var(--muted)" }} />
+      <p className="t-piccolo" style={{ color: "var(--muted)" }}>Stiamo confermando il pagamento…</p>
     </div>
   );
 }
