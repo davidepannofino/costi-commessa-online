@@ -3940,18 +3940,27 @@ function VistaDipendenti({ dipendenti, setDipendenti, riep, elimina, notifica })
     notifica("Dipendente salvato.");
   };
 
-  const oreIntervallo = useMemo(() => {
+  /* Ore E costo nell'intervallo, dalla stessa passata: la schermata parlava
+     solo di ore, ma la domanda che si fa su un dipendente in un'applicazione
+     di costi è quanto è costato. */
+  const nellIntervallo = useMemo(() => {
     const m = new Map();
-    if (riep) for (const r of riep.righe) for (const d of r.dipendenti) m.set(d.dip.id, (m.get(d.dip.id) || 0) + d.ore);
+    if (riep) for (const r of riep.righe) for (const d of r.dipendenti) {
+      const x = m.get(d.dip.id) || { ore: 0, costo: 0 };
+      x.ore += d.ore; x.costo += d.costo;
+      m.set(d.dip.id, x);
+    }
     return m;
   }, [riep]);
 
   return (
     <div className="space-y-8">
-      <div className="flex items-end justify-between gap-4">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <Micro>Squadra</Micro>
-          <h1 className="t-titolo mt-2">Dipendenti</h1>
+          <h1 className="t-titolo">Dipendenti</h1>
+          <p className="t-piccolo mt-1.5" style={{ color: "var(--txt-tenue)" }}>
+            Il lordo di ogni mese diviso per le ore di quel mese: da qui esce la tariffa.
+          </p>
         </div>
         <Bottone onClick={() => setEditor({ nuovo: true })}><Plus size={14} strokeWidth={1.75} /> Nuovo dipendente</Bottone>
       </div>
@@ -3960,56 +3969,82 @@ function VistaDipendenti({ dipendenti, setDipendenti, riep, elimina, notifica })
         <StatoVuoto icona={Users} titolo="Nessun dipendente" testo="Aggiungi il primo dipendente con il suo lordo mensile per iniziare a registrare le ore."
           azione={<Bottone onClick={() => setEditor({ nuovo: true })}><Plus size={14} strokeWidth={1.75} /> Nuovo dipendente</Bottone>} />
       ) : (
-        <div className="grid gap-5 xl:grid-cols-2">
-          {dipendenti.map((dip) => {
-            const mesi = new Set(Object.keys(dip.lordoMensile || {}));
-            if (riep) for (const k of riep.oreMensili.keys()) { const [id, m] = k.split("|"); if (id === dip.id) mesi.add(m); }
-            const elenco = [...mesi].sort().reverse();
-            const iniziali = ((dip.nome[0] || "") + (dip.cognome[0] || "")).toUpperCase();
-            return (
-              <div key={dip.id} className="card p-7">
-                <div className="flex items-center gap-3.5 mb-5">
-                  <div className="w-10 h-10 rounded-[var(--r-sm)] flex items-center justify-center f-mono t-piccolo shrink-0" style={{ background: "var(--velo)", color: "var(--txt)" }}>{iniziali}</div>
-                  <div className="min-w-0">
-                    <p className="t-sotto truncate">{dip.nome} {dip.cognome}</p>
-                    <p className="t-piccolo f-mono mt-1.5" style={{ color: "var(--muted)" }}>Ore nell'intervallo: {fmtOre.format(oreIntervallo.get(dip.id) || 0)} h</p>
+        /* Prima ogni dipendente era una card in una griglia a due colonne, con
+           dentro la sua tabellina dei mesi: contenitori uguali ripetuti, e la
+           tabella schiacciata in mezza pagina con quattro colonne di numeri.
+           Ora c'è UN contenitore e i dipendenti sono le sue righe, divise da un
+           filo — così la tabella dei mesi ha tutta la larghezza che le serve e
+           i lordi si incolonnano davvero. */
+        <div className="card overflow-hidden">
+          <ul>
+            {dipendenti.map((dip, idx) => {
+              const mesi = new Set(Object.keys(dip.lordoMensile || {}));
+              if (riep) for (const k of riep.oreMensili.keys()) { const [id, m] = k.split("|"); if (id === dip.id) mesi.add(m); }
+              const elenco = [...mesi].sort().reverse();
+              const iniziali = ((dip.nome[0] || "") + (dip.cognome[0] || "")).toUpperCase();
+              const nel = nellIntervallo.get(dip.id);
+              return (
+                <li key={dip.id} className="px-6 py-6" style={{ borderTop: idx > 0 ? ".5px solid var(--bordo)" : "none" }}>
+                  <div className="flex items-center gap-3.5">
+                    <span className="flex items-center justify-center shrink-0 box f-mono t-piccolo"
+                      style={{ width: 32, height: 32, color: "var(--txt-attenuato)" }}>{iniziali}</span>
+                    <div className="min-w-0">
+                      <p className="t-sotto truncate">{dip.nome} {dip.cognome}</p>
+                      <p className="t-piccolo f-mono mt-1" style={{ color: "var(--txt-fioco)" }}>
+                        {nel ? `${fmtOre.format(nel.ore)} h nell'intervallo · ` : "nessuna ora nell'intervallo"}
+                        {nel && <span style={{ color: "var(--verde)" }}>{euro(nel.costo)}</span>}
+                      </p>
+                    </div>
+                    <div className="ml-auto flex gap-2 shrink-0">
+                      <button onClick={() => setEditor({ dip })} aria-label={`Modifica ${dip.nome} ${dip.cognome}`}
+                        className="p-2 btn btn-fantasma" style={{ borderRadius: "var(--r-sm)" }}><Pencil size={13} strokeWidth={1.75} /></button>
+                      <button onClick={() => elimina(dip)} aria-label={`Elimina ${dip.nome} ${dip.cognome}`}
+                        className="p-2 btn btn-pericolo" style={{ borderRadius: "var(--r-sm)" }}><Trash2 size={13} strokeWidth={1.75} /></button>
+                    </div>
                   </div>
-                  <div className="ml-auto flex gap-1 shrink-0">
-                    <button onClick={() => setEditor({ dip })} aria-label="Modifica dipendente" className="p-2 rounded-[var(--r-sm)] btn" style={{ boxShadow: "var(--ombra-sm)" }}><Pencil size={13} strokeWidth={1.75} /></button>
-                    <button onClick={() => elimina(dip)} aria-label="Elimina dipendente" className="p-2 rounded-[var(--r-sm)] btn" style={{ border: ".5px solid var(--rosso-bordo)", color: "var(--errore)" }}><Trash2 size={13} strokeWidth={1.75} /></button>
-                  </div>
-                </div>
-                {elenco.length === 0 ? (
-                  <p className="text-sm" style={{ color: "var(--muted)" }}>Nessun mese impostato: modifica il dipendente per aggiungere il lordo mensile.</p>
-                ) : (
-                  <table className="tabella text-sm">
-                    <thead>
-                      <tr className="text-left">
-                        {["Mese", "Lordo", "Ore mese", "Tariffa"].map((h, i) => (
-                          <th key={h} className={`py-2 t-micro ${i > 0 ? "text-right" : ""}`} style={{ letterSpacing: ".1em", color: "var(--muted)" }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="f-mono">
-                      {elenco.map((m) => {
-                        const ore = riep ? (riep.oreMensili.get(dip.id + "|" + m) || 0) : 0;
-                        const lordo = dip.lordoMensile?.[m];
-                        const tar = lordo != null && ore > 0 ? lordo / ore : null;
-                        return (
-                          <tr key={m} style={{ borderTop: ".5px solid var(--hairline)" }}>
-                            <td className="py-3">{fmtMese(m)}</td>
-                            <td className="py-3 text-right">{lordo != null ? euro(lordo) : <span className="font-sans" style={{ color: "var(--errore)" }}>manca</span>}</td>
-                            <td className="py-3 text-right">{fmtOre.format(ore)}</td>
-                            <td className="py-3 text-right">{tar != null ? fmtNum4.format(tar) + " €/h" : "—"}</td>
+
+                  {elenco.length === 0 ? (
+                    <p className="t-piccolo mt-4" style={{ color: "var(--txt-tenue)" }}>
+                      Nessun mese impostato: modifica il dipendente per aggiungere il lordo mensile.
+                    </p>
+                  ) : (
+                    <div className="mt-5 overflow-x-auto">
+                      <table className="tabella t-corpo">
+                        <thead>
+                          <tr>
+                            {["Mese", "Lordo del mese", "Ore del mese", "Tariffa oraria"].map((h, i) => (
+                              <th key={h} className={i > 0 ? "text-right" : ""} style={{ padding: "6px 0" }}>{h}</th>
+                            ))}
                           </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            );
-          })}
+                        </thead>
+                        <tbody className="f-mono">
+                          {elenco.map((m) => {
+                            const ore = riep ? (riep.oreMensili.get(dip.id + "|" + m) || 0) : 0;
+                            const lordo = dip.lordoMensile?.[m];
+                            const tar = lordo != null && ore > 0 ? lordo / ore : null;
+                            return (
+                              <tr key={m}>
+                                <td style={{ padding: "9px 0", color: "var(--txt-medio)" }}>{fmtMese(m)}</td>
+                                <td className="text-right" style={{ padding: "9px 0" }}>
+                                  {lordo != null
+                                    ? euro(lordo)
+                                    : <span className="font-sans t-piccolo" style={{ color: "var(--errore)" }}>manca</span>}
+                                </td>
+                                <td className="text-right" style={{ padding: "9px 0" }}>{fmtOre.format(ore)}</td>
+                                <td className="text-right" style={{ padding: "9px 0", color: tar != null ? "var(--txt)" : "var(--txt-debole)" }}>
+                                  {tar != null ? fmtNum4.format(tar) + " €/h" : "—"}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
         </div>
       )}
 
