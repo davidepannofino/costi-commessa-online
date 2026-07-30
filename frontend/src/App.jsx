@@ -688,18 +688,12 @@ const Campo = ({ etichetta, children, errore }) => {
 };
 const inputCls = "w-full px-3.5 py-2.5 text-sm outline-none campo";
 
-/**
- * Il valore in evidenza: sovratitolo, cifra grande, eventuale nota sotto.
- * I numeri sono il contenuto di questa applicazione, e questo è il componente
- * che li mette al centro invece di annegarli fra le etichette.
- */
-const Valore = ({ etichetta, valore, nota, tono, grande }) => (
-  <div>
-    <Micro>{etichetta}</Micro>
-    <p className="cifra-grande mt-2" style={{ fontSize: grande ? 30 : 23, lineHeight: 1.1, color: tono || "var(--txt)" }}>{valore}</p>
-    {nota && <p className="t-piccolo mt-1.5" style={{ color: "var(--tenue)" }}>{nota}</p>}
-  </div>
-);
+/* Qui viveva `Valore`, il componente "etichetta + cifra grande + nota".
+   È rimasto senza un solo posto che lo chiamasse quando la fascia dei KPI e i
+   riquadri a tre colonne sono spariti: quel lavoro ora lo fanno la banda-eroe
+   e il libro mastro, con le loro misure. Un primitivo morto nel sistema di
+   design è peggio di nessun primitivo — il prossimo che cerca "come si mostra
+   un numero" ne trova due e sceglie quello sbagliato. */
 
 /** Il marchio: monogramma e nome. Compariva scritto a mano in quattro pagine,
  *  con tre gradienti diversi. Ora è uno — e il quadratino è l'UNICO posto in
@@ -961,13 +955,17 @@ function ThOrdinabile({ campo, nome, cls = "", stile, ordina, onOrdina }) {
 }
 
 /** Riquadro con intestazione (titolo + azione opzionale). */
+/* Le misure sono px-6 / py-4 in testa come tutte le card scritte dopo. Prima
+   qui era px-7 / py-5 e nella Dashboard px-6 / py-4: due ritmi diversi nella
+   stessa famiglia di pagine, che si notano quando due card finiscono affiancate
+   — e in Dati ci finiscono. */
 const Sezione = ({ titolo, extra, children }) => (
   <section className="card">
-    <div className="px-7 py-5 flex flex-wrap items-center justify-between gap-3" style={{ borderBottom: ".5px solid var(--hairline)" }}>
+    <div className="px-6 py-4 flex flex-wrap items-center justify-between gap-3" style={{ borderBottom: ".5px solid var(--bordo)" }}>
       <h2 className="t-sotto">{titolo}</h2>
       {extra}
     </div>
-    <div className="p-7">{children}</div>
+    <div className="px-6 py-6">{children}</div>
   </section>
 );
 
@@ -1414,7 +1412,7 @@ function VistaAbbonamento({ info }) {
 }
 
 const ETICHETTE_STATO_ADMIN = { prova: "Prova", attivo: "Attivo", scaduto: "Scaduto", esente: "Esente" };
-const COLORI_STATO_ADMIN = { prova: "var(--accent)", attivo: "var(--euro)", scaduto: "var(--errore)", esente: "var(--euro)" };
+const COLORI_STATO_ADMIN = { prova: "var(--accento)", attivo: "var(--euro)", scaduto: "var(--errore)", esente: "var(--euro)" };
 
 /** Pannello di amministrazione, visibile solo a chi il server riconosce come
  *  admin (voce di navigazione già filtrata, controllo reale sulle rotte
@@ -2267,7 +2265,7 @@ export default function App() {
                   boxShadow: urgente ? "inset 0 0 0 .5px var(--accento-bordo)" : "none",
                 }}
               >
-                <div className="flex items-center gap-2 t-piccolo" style={{ fontWeight: 500, color: urgente ? "var(--accent-chiaro)" : "var(--scuro-muted)" }}>
+                <div className="flex items-center gap-2 t-piccolo" style={{ fontWeight: 500, color: urgente ? "var(--accento-chiaro)" : "var(--scuro-muted)" }}>
                   <Clock size={14} strokeWidth={1.75} className="shrink-0" />
                   {abbonamentoInfo.giorniProvaRestanti === 1
                     ? "Ultimo giorno di prova"
@@ -2303,12 +2301,13 @@ export default function App() {
       {/* ================= COLONNA PRINCIPALE ================= */}
       <div className="flex-1 min-w-0 flex flex-col pb-16 lg:pb-0">
 
-        {/* ---- testata: periodo + i due numeri che contano ----
-             Era scura come la barra laterale. Ora è chiara, perché contiene
-             DATI, e i dati appartengono all'area di lavoro: il verde degli euro
-             su avorio si legge per quello che è, mentre sul fondo scuro doveva
-             schiarirsi fino a diventare un altro colore. Comandi e numeri sono
-             rimasti dove erano. */}
+        {/* ---- testata: dove sei, che periodo stai guardando ----
+             Fondo dell'app velato e sfocato, non opaco: scorrendo, il
+             contenuto passa DIETRO e si capisce che la pagina si sta muovendo
+             sotto una lastra, invece di sparire sotto una fascia piena.
+             Sulla Dashboard i due numeri non ci sono: li dice la pagina, molto
+             più grandi, e un totale scritto due volte a due taglie diverse
+             insegna all'occhio a non fidarsi di nessuna delle due. */}
         <header className="sticky top-0 z-30 noprint"
           style={{ background: "rgba(8,8,10,.82)", backdropFilter: "blur(14px)", borderBottom: ".5px solid var(--bordo)" }}>
           {/* La briciola dice dove sei: azienda, poi sezione. È l'unica cosa
@@ -2422,7 +2421,7 @@ export default function App() {
             </div>
           )}
 
-          {vista === "dashboard" && <Dashboard riep={riep} costi={costi} dal={dal} al={al} dipendenti={dipendenti} serieMensile={serieMensile} vaiCommesse={() => setVista("commesse")} vaiDati={() => setVista("dati")} haDati={registrazioni.length > 0} apri={setDettaglio} />}
+          {vista === "dashboard" && <Dashboard riep={riep} costi={costi} dal={dal} al={al} dipendenti={dipendenti} serieMensile={serieMensile} vaiCommesse={() => setVista("commesse")} vaiDati={() => setVista("dati")} vaiDipendenti={() => setVista("dipendenti")} haDati={registrazioni.length > 0} apri={setDettaglio} />}
           {vista === "commesse" && <VistaCommesse riep={riep} costi={costi} dal={dal} al={al} apri={setDettaglio} esportaCsv={() => riep && esportaCSV(costi.righe, costi, dal, al)} esportaXlsx={() => riep && esportaXLSX(costi.righe, costi, dal, al)} esportaTutto={() => esportaCompletoXLSX({ dipendenti, commesse, registrazioni, materiali }, dal, al)} stampa={stampaPDF} vaiDati={() => setVista("dati")} />}
           {vista === "dipendenti" && <VistaDipendenti dipendenti={dipendenti} setDipendenti={setDipendenti} riep={riep} elimina={eliminaDipendente} notifica={notifica} />}
           {vista === "dati" && (
@@ -2450,9 +2449,16 @@ export default function App() {
         {NAV.map(({ id, nome, icona: Icona }) => (
           <button key={id} onClick={() => setVista(id)} aria-current={vista === id ? "page" : undefined}
             className="flex flex-col items-center gap-1.5 py-3 btn"
-            style={{ color: vista === id ? "var(--accent-chiaro)" : "var(--scuro-muted)" }}>
-            <Icona size={18} strokeWidth={1.75} />
-            <span style={{ fontSize: 10.5, fontWeight: 500, letterSpacing: ".02em" }}>{nome}</span>
+            style={{ color: vista === id ? "var(--accento-chiaro)" : "var(--scuro-muted)" }}>
+            <Icona size={18} strokeWidth={1.75} className="shrink-0" />
+            {/* A 375px con sei voci ogni cella ha una sessantina di pixel:
+                "Amministrazione" usciva dalla propria cella. Ora tronca invece
+                di sbordare, e il nome intero resta nell'etichetta accessibile.
+                Il troncamento è un cerotto: la cura vera è portare le voci
+                secondarie sotto una voce "Altro", ma quella è una decisione di
+                architettura dell'informazione, non una misura da aggiustare. */}
+            <span className="block w-full truncate px-0.5 text-center"
+              style={{ fontSize: 10.5, fontWeight: 500, letterSpacing: ".02em" }}>{nome}</span>
           </button>
         ))}
       </nav>
@@ -2526,7 +2532,7 @@ export default function App() {
           <div key={t.id} className="flex items-start gap-3 px-4 py-3.5 t-piccolo anim-pop"
             style={{ maxWidth: 380, background: "var(--bg-pill)", color: "var(--txt-chiaro)", borderRadius: "var(--r-sm)", boxShadow: "var(--ombra-lg)" }}>
             {t.tipo === "errore" ? <AlertTriangle size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: "var(--rosso)" }} />
-              : t.tipo === "avviso" ? <AlertTriangle size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: "var(--accent-chiaro)" }} />
+              : t.tipo === "avviso" ? <AlertTriangle size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: "var(--accento-chiaro)" }} />
               : <CheckCircle2 size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: "var(--verde)" }} />}
             <span className="flex-1">{t.testo}</span>
             {t.azione && (
@@ -2692,7 +2698,13 @@ const TONO_MATERIALI = "#2A2A31";
  */
 function BandaEroe({ costi, dal, al, titolo = "Costo del periodo", metriche = [] }) {
   const tot = costi.totTotale;
-  const quotaMano = tot > 0 ? costi.totManodopera / tot : 1;
+  /* A totale zero non c'è NIENTE da ripartire. Prima la quota di manodopera
+     veniva forzata a 1, e un periodo vuoto disegnava una barra piena da parte
+     a parte: un grafico che dichiara "tutto manodopera" dove non c'è un euro.
+     Su un'applicazione di costi è esattamente il tipo di numero inventato che
+     il prodotto promette di non fare. Ora a zero la barra resta vuota. */
+  const haRipartizione = tot > 0;
+  const quotaMano = haRipartizione ? costi.totManodopera / tot : 0;
   const voci = [
     { e: "manodopera", v: costi.totManodopera, tono: TONO_MANODOPERA },
     { e: "materiali", v: costi.totMateriali, tono: TONO_MATERIALI },
@@ -2707,8 +2719,12 @@ function BandaEroe({ costi, dal, al, titolo = "Costo del periodo", metriche = []
         {/* Come il totale si divide, in una riga sola: prima la proporzione,
             poi i due importi che la spiegano. */}
         <div className="mt-7 flex overflow-hidden" style={{ height: 3, borderRadius: 99, background: "var(--bg-pill)" }}>
-          <div style={{ width: `${quotaMano * 100}%`, background: TONO_MANODOPERA }} />
-          <div style={{ width: `${(1 - quotaMano) * 100}%`, background: TONO_MATERIALI }} />
+          {haRipartizione && (
+            <>
+              <div style={{ width: `${quotaMano * 100}%`, background: TONO_MANODOPERA }} />
+              <div style={{ width: `${(1 - quotaMano) * 100}%`, background: TONO_MATERIALI }} />
+            </>
+          )}
         </div>
         <div className="mt-3.5 flex flex-wrap items-baseline gap-x-7 gap-y-2 t-piccolo">
           {voci.map((v) => (
@@ -2747,7 +2763,7 @@ function BandaEroe({ costi, dal, al, titolo = "Costo del periodo", metriche = []
   );
 }
 
-function Dashboard({ riep, costi, dal, al, dipendenti, serieMensile, vaiCommesse, vaiDati, haDati, apri }) {
+function Dashboard({ riep, costi, dal, al, dipendenti, serieMensile, vaiCommesse, vaiDati, vaiDipendenti, haDati, apri }) {
   /* Questo useMemo stava DOPO il `return null` qui sotto: un hook dentro un
      ramo condizionale. Finché `riep` è già valorizzato al primo montaggio non
      si vede niente, ma se passasse da null a valorizzato con la Dashboard già
@@ -2807,6 +2823,8 @@ function Dashboard({ riep, costi, dal, al, dipendenti, serieMensile, vaiCommesse
   const MAX_CLASSIFICA = 8;
   const classifica = costi.righe.slice(0, MAX_CLASSIFICA);
   const restanti = costi.righe.length - classifica.length;
+  const squadra = perDip.slice(0, MAX_CLASSIFICA);
+  const altriDip = perDip.length - squadra.length;
   const maxRiga = classifica.length ? classifica[0].costoTotale : 0;
 
   return (
@@ -2864,7 +2882,7 @@ function Dashboard({ riep, costi, dal, al, dipendenti, serieMensile, vaiCommesse
               <h2 className="t-sotto">Chi ha lavorato</h2>
             </div>
             <div className="px-6 py-5 space-y-5">
-              {perDip.map((d) => (
+              {squadra.map((d) => (
                 <div key={d.dip.id}>
                   <div className="flex items-baseline justify-between gap-3 mb-2">
                     <p className="t-corpo truncate" style={{ fontWeight: 500, color: "var(--txt-chiaro)" }}>{d.dip.nome} {d.dip.cognome}</p>
@@ -2877,6 +2895,16 @@ function Dashboard({ riep, costi, dal, al, dipendenti, serieMensile, vaiCommesse
                 </div>
               ))}
             </div>
+            {/* Questo elenco non aveva tetto mentre la classifica accanto si
+                ferma a otto: con trenta dipendenti diventava una colonna da
+                duemila pixel di fianco a un grafico alto centottanta. Stesso
+                tetto, stessa via d'uscita. */}
+            {altriDip > 0 && (
+              <button onClick={vaiDipendenti} className="w-full px-6 py-3 text-left t-piccolo btn riga"
+                style={{ borderTop: ".5px solid var(--bordo-tenue)", color: "var(--txt-tenue)" }}>
+                e altri {altriDip} dipendenti nel periodo →
+              </button>
+            )}
           </section>
 
           {/* IL PERIODO GIORNO PER GIORNO — qui il grafico ci vuole davvero:
@@ -3092,9 +3120,15 @@ function PannelloDettaglio({ riga, riep, costi, dal, al, serieMensile, allegati,
             {euro(riga.costoTotale)}
           </p>
 
+          {/* Come nella banda della Dashboard: a totale zero non si disegna
+              nessuna ripartizione, perché non ce n'è una. */}
           <div className="mt-6 flex overflow-hidden" style={{ height: 3, borderRadius: 99, background: "var(--bg-pill)" }}>
-            <div style={{ width: `${(riga.costoTotale > 0 ? riga.costoManodopera / riga.costoTotale : 1) * 100}%`, background: TONO_MANODOPERA }} />
-            <div style={{ width: `${(riga.costoTotale > 0 ? riga.costoMateriali / riga.costoTotale : 0) * 100}%`, background: TONO_MATERIALI }} />
+            {riga.costoTotale > 0 && (
+              <>
+                <div style={{ width: `${(riga.costoManodopera / riga.costoTotale) * 100}%`, background: TONO_MANODOPERA }} />
+                <div style={{ width: `${(riga.costoMateriali / riga.costoTotale) * 100}%`, background: TONO_MATERIALI }} />
+              </>
+            )}
           </div>
           <div className="mt-3.5 flex flex-wrap items-baseline gap-x-6 gap-y-2 t-piccolo">
             {[
@@ -3417,7 +3451,7 @@ function SezioneDocumenti({ commessa, allegati, spazio, fornitoriNoti = [], onCa
             <p className="text-sm truncate">Caricamento di {inCaricamento}…</p>
           </div>
           <div className="mt-3 h-1 rounded-full overflow-hidden" style={{ background: "var(--hairline)" }}>
-            <div className="h-full anim-scorre" style={{ background: "var(--accent)", width: "40%" }} />
+            <div className="h-full anim-scorre" style={{ background: "var(--accento)", width: "40%" }} />
           </div>
         </div>
       ) : form ? (
@@ -4671,8 +4705,9 @@ function ReportStampa({ riep, costi, dal, al, azienda }) {
 }
 
 /* ---------------------------------------------------------------------------
-   STILE GLOBALE — sistema: tela avorio, inchiostro profondo, un accento
-   bronzo spento; verde solo per gli importi; ombre morbide a più livelli.
+   STILE GLOBALE — sistema: sei fondi scuri dal più profondo al più rialzato,
+   bordi di mezzo pixel al posto delle ombre, un accento bronzo spento tenuto
+   per marchio, voce attiva, link e badge; verde solo per gli importi in euro.
 --------------------------------------------------------------------------- */
 /* ---------------------------------------------------------------------------
    DESIGN SYSTEM — definito qui, in un punto solo, e usato da tutto il resto.
@@ -4702,7 +4737,10 @@ function ReportStampa({ riep, costi, dal, al, azienda }) {
 function StileGlobale() {
   return (
     <style>{`
-      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400..600&display=swap');
+      /* Inter si carica da index.html, non da qui: un @import dentro uno stile
+         iniettato a runtime viene scoperto tardissimo e fa saltare il
+         numero-eroe al primo disegno. Se un giorno serve toglierlo dalla rete
+         e ospitarlo in proprio, si tocca solo la testa del documento. */
       :root{
         /* ============ TEMA SCURO — la tavolozza approvata ============
            Sei livelli di fondo, dal più profondo al più rialzato. In un tema
@@ -4780,7 +4818,11 @@ function StileGlobale() {
         --muted:var(--txt-attenuato); --tenue:var(--txt-tenue);
         --hairline:var(--bordo);
         --velo:rgba(255,255,255,.028);
-        --accent:var(--accento); --accent-chiaro:var(--accento-chiaro);
+        /* --accent e --accent-chiaro non esistono più: erano l'unico pezzo di
+           ponte con due nomi vivi per la stessa cosa, e chi scriveva una riga
+           nuova sceglieva a caso. Gli altri alias qui sotto restano finché non
+           si riscrivono i punti che li usano — sono centinaia, e vanno tolti
+           in un passaggio dedicato, non di sfuggita. */
         --velo-accento:var(--accento-bg);
         --euro:var(--verde); --velo-euro:var(--verde-bg);
         --errore:var(--rosso); --velo-errore:var(--rosso-bg);

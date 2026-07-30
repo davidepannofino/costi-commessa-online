@@ -4,6 +4,22 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Commexa — costi di commessa</title>
+
+    <!-- Il carattere sta QUI e non dentro l'applicazione. Prima era un @import
+         dentro un <style> che React scriveva a montaggio avvenuto: il browser
+         scopriva di dover scaricare Inter solo dopo aver caricato ed eseguito
+         tutto il pacchetto JavaScript, e fino a quel momento disegnava con il
+         carattere di sistema. Il risultato si vedeva sul numero piu' grande
+         della Dashboard, che al primo disegno cambiava larghezza sotto gli
+         occhi. Da qui invece il download parte mentre l'HTML si sta ancora
+         leggendo, in parallelo al JavaScript.
+         Il preconnect apre in anticipo le due connessioni (il CSS sta su un
+         dominio, i file del carattere su un altro): senza, il browser le
+         negozia solo quando incontra il foglio di stile. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400..600&display=swap" />
   </head>
   <body>
     <div id="root"></div>
