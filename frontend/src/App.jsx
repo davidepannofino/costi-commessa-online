@@ -3830,11 +3830,109 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
         </div>
         <input ref={refFile} type="file" accept=".xml,.p7m,.pdf,application/xml,text/xml,application/pdf" className="hidden"
           onChange={(e) => { const f = e.target.files[0]; e.target.value = ""; scegliFile(f); }} />
-        <StatoVuoto icona={ReceiptText} titolo={inLettura ? "Lettura della fattura in corso…" : "Importa una fattura"}
-          testo="Carica il file XML della fattura (anche firmato .p7m) e il software ne legge le righe con i prezzi esatti, raggruppate per DDT. Se un DDT è già archiviato su una commessa con numero, data e fornitore, la commessa viene proposta da sola. Se l'XML non ce l'hai va bene anche un PDF: da quello i dati vengono interpretati, quindi vanno controllati con più attenzione. In ogni caso niente entra nei costi finché non confermi tu."
-          azione={inLettura
-            ? <Bottone disabled><Loader2 size={14} strokeWidth={1.75} className="animate-spin" /> Lettura…</Bottone>
-            : <Bottone onClick={() => refFile.current.click()}><Upload size={14} strokeWidth={1.75} /> Carica fattura (XML o PDF)</Bottone>} />
+
+        {/* ================= LA PORTA D'INGRESSO =================
+            Qui c'era uno StatoVuoto con ottanta parole di grigio a 12px dentro
+            il prop `testo`: la cosa che questo prodotto fa e che i gestionali
+            non hanno si presentava SPIEGANDOSI. Adesso si mostra.
+
+            Prima l'azione, alla scala di un'azione. Poi, sotto, l'anteprima di
+            quello che si otterrà: non un disegnino esplicativo, ma gli stessi
+            atomi veri della schermata di assegnazione — filo di stato, badge
+            del codice, pastiglia dell'abbinamento. Chi carica il file ha già
+            visto dove andrà a finire, e quando ci arriva riconosce tutto.
+            I valori sono quelli del file di prova in esempi/, ed è scritto. */}
+        <section className="card px-7 py-9 sm:px-10 sm:py-11">
+          <div className="flex items-start gap-4 flex-wrap">
+            <span className="flex items-center justify-center shrink-0 box" style={{ width: 44, height: 44, borderRadius: "var(--r-md)" }}>
+              <ReceiptText size={20} strokeWidth={1.5} style={{ color: "var(--txt-attenuato)" }} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h2 className="t-sezione">
+                {inLettura ? "Sto leggendo la fattura…" : "Carica la fattura del fornitore"}
+              </h2>
+              <p className="t-corpo mt-2" style={{ color: "var(--txt-attenuato)", maxWidth: "58ch" }}>
+                Le righe vengono raggruppate per DDT e ogni gruppo cerca da solo
+                la commessa su cui quel DDT è già archiviato.
+              </p>
+
+              <div className="mt-6 flex flex-wrap items-center gap-3">
+                {inLettura
+                  ? <Bottone disabled><Loader2 size={14} strokeWidth={1.75} className="animate-spin" /> Lettura…</Bottone>
+                  : <Bottone onClick={() => refFile.current.click()}><Upload size={14} strokeWidth={1.75} /> Scegli il file</Bottone>}
+                <p className="f-mono t-piccolo" style={{ color: "var(--txt-tenue)" }}>XML · XML firmato .p7m · PDF</p>
+              </div>
+
+              {/* Le due righe che cambiano il modo di guardare i numeri, dette
+                  con gli stessi colori che poi si troveranno nella schermata:
+                  neutro non chiede niente, ambra chiede un controllo. */}
+              <div className="mt-7 pt-6 grid gap-3 sm:grid-cols-2" style={{ borderTop: ".5px solid var(--bordo-tenue)" }}>
+                <p className="t-piccolo flex items-start gap-2">
+                  <CheckCircle2 size={13} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: "var(--txt-attenuato)" }} />
+                  <span style={{ color: "var(--txt-tenue)" }}>
+                    <span style={{ color: "var(--txt-medio)" }}>Dall'XML i valori sono esatti:</span> è il dato che il fornitore ha scritto.
+                  </span>
+                </p>
+                <p className="t-piccolo flex items-start gap-2">
+                  <AlertTriangle size={13} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: "var(--ambra)" }} />
+                  <span style={{ color: "var(--txt-tenue)" }}>
+                    <span style={{ color: "var(--txt-medio)" }}>Dal PDF si interpretano:</span> le righe incerte arrivano marcate da controllare.
+                  </span>
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div>
+          <div className="flex items-baseline justify-between gap-4 flex-wrap mb-4">
+            <h2 className="t-sotto">Cosa ti ritrovi davanti</h2>
+            <p className="t-piccolo" style={{ color: "var(--txt-tenue)" }}>
+              Esempio, con i valori del file di prova
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            {[
+              {
+                filo: "var(--bordo-input)", velo: "var(--bg-elevato)", tono: "var(--txt-chiaro)", icona: CheckCircle2,
+                ddt: "DDT 4711", data: "06/07/2026", righe: "3 righe", totale: "652,00 €",
+                codice: "P19", stato: <>Abbinato in automatico a <strong>P19</strong></>,
+                motivo: "numero, data e fornitore combaciano col documento archiviato",
+              },
+              {
+                filo: "var(--ambra)", velo: "var(--ambra-bg)", tono: "var(--ambra)", icona: HelpCircle,
+                ddt: "DDT 4738", data: "14/07/2026", righe: "2 righe", totale: "744,80 €",
+                codice: null, stato: <>Possibile abbinamento a <strong>P13</strong> — da confermare</>,
+                motivo: "il fornitore non combacia: i numeri di DDT non sono unici fra fornitori diversi",
+              },
+            ].map((g) => (
+              <div key={g.ddt} className="card px-6 py-5" style={{ borderLeft: `3px solid ${g.filo}` }}>
+                <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                  <p className="t-sotto">
+                    {g.ddt} <span className="t-piccolo" style={{ fontWeight: 400, color: "var(--txt-tenue)" }}>del {g.data}</span>
+                  </p>
+                  <p className="f-mono t-piccolo" style={{ color: "var(--txt-tenue)" }}>{g.righe} · {g.totale}</p>
+                </div>
+                <div className="mt-3 inline-flex flex-col gap-1 px-3 py-2" style={{ background: g.velo, border: `.5px solid ${g.filo === "var(--ambra)" ? "var(--ambra-bordo)" : "var(--bordo-input)"}`, borderRadius: "var(--r-sm)" }}>
+                  <p className="t-piccolo flex items-start gap-1.5" style={{ color: g.tono }}>
+                    <g.icona size={13} strokeWidth={1.75} className="mt-0.5 shrink-0" /> <span>{g.stato}</span>
+                  </p>
+                  <p className="t-piccolo pl-[19px]" style={{ color: "var(--txt-tenue)" }}>{g.motivo}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* La promessa che regge tutto il resto, e che va detta per ultima
+              perché è quella con cui si preme il bottone. */}
+          <p className="t-corpo mt-5 flex items-start gap-2" style={{ color: "var(--txt-attenuato)" }}>
+            <ShieldCheck size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: "var(--txt-tenue)" }} />
+            Nessun numero entra nei costi finché non premi tu «Conferma». Fino a
+            quel momento puoi cambiare ogni assegnazione, correggere ogni riga,
+            o escluderne quante vuoi.
+          </p>
+        </div>
       </div>
     );
   }
