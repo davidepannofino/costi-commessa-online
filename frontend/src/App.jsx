@@ -841,8 +841,8 @@ function StatoVuoto({ icona: Icona, titolo, testo, azione }) {
 
 /** Barra di quota sottile. */
 const BarraQuota = ({ quota, colore }) => (
-  <div className="w-full" style={{ height: 4, borderRadius: 99, background: "var(--velo)" }}>
-    <div className="anim-barra" style={{ height: 4, borderRadius: 99, width: `${Math.max(1.5, quota * 100)}%`, background: colore || "var(--accent)" }} />
+  <div className="w-full" style={{ height: 5, borderRadius: 99, background: "var(--bg-pill)" }}>
+    <div className="anim-barra" style={{ height: 5, borderRadius: 99, width: `${Math.max(1.5, quota * 100)}%`, background: colore || "var(--accento)" }} />
   </div>
 );
 
@@ -2723,6 +2723,9 @@ function VistaCommesse({ riep, costi, dal, al, apri, esportaCsv, esportaXlsx, es
   const clic = (campo) => setOrdina((o) => ({ campo, disc: o.campo === campo ? !o.disc : true }));
   const freccia = (campo) => (ordina.campo === campo ? (ordina.disc ? " ↓" : " ↑") : "");
   const maxCosto = costi.righe.length ? Math.max(...costi.righe.map((r) => r.costoTotale)) : 0;
+  // costi.righe arriva già ordinato per costo decrescente dal calcolo: la
+  // prima è la più costosa, e resta lei anche se l'utente riordina la tabella.
+  const idPiuCostosa = costi.righe[0]?.commessa.id;
 
   return (
     <div className="space-y-9">
@@ -2759,6 +2762,7 @@ function VistaCommesse({ riep, costi, dal, al, apri, esportaCsv, esportaXlsx, es
             <table className="tabella text-sm">
               <thead>
                 <tr>
+                  <th className="w-9 pr-0" aria-label="Numero di riga" />
                   {[["codice", "Codice", ""], [null, "Descrizione", "hidden lg:table-cell"], ["ore", "Ore", "text-right"],
                     [null, "Quota", "w-36 hidden xl:table-cell"],
                     ["manodopera", "Manodopera", "text-right"], ["materiali", "Materiali", "text-right"], ["totale", "Totale", "text-right"]].map(([campo, nome, cls]) => (
@@ -2771,16 +2775,27 @@ function VistaCommesse({ riep, costi, dal, al, apri, esportaCsv, esportaXlsx, es
                 </tr>
               </thead>
               <tbody>
-                {righe.map((r) => (
+                {righe.map((r, i) => (
                   <tr key={r.commessa.id} onClick={() => apri(r)} tabIndex={0} onKeyDown={(e) => e.key === "Enter" && apri(r)}
                     className="cursor-pointer riga">
-                    <td className="f-mono font-medium">{r.commessa.codice}</td>
-                    <td className="hidden lg:table-cell" style={{ color: "var(--muted)" }}>{r.commessa.descrizione}</td>
+                    {/* La numerazione non è un dato: è un appiglio per l'occhio
+                        quando si scorre una lista lunga. Perciò sta nel grigio
+                        più tenue che abbiamo. */}
+                    <td className="f-mono pr-0 text-right" style={{ color: "var(--txt-fioco)" }}>{i + 1}</td>
+                    <td>
+                      {/* Il badge pieno segna la commessa che costa più di
+                          tutte — non la prima riga dell'ordinamento corrente,
+                          che cambia a ogni clic sull'intestazione. */}
+                      <span className={"badge-codice" + (r.commessa.id === idPiuCostosa ? " badge-codice-primo" : "")}>
+                        {r.commessa.codice}
+                      </span>
+                    </td>
+                    <td className="hidden lg:table-cell" style={{ color: "var(--txt-attenuato)" }}>{r.commessa.descrizione}</td>
                     <td className="f-mono text-right">{fmtOre.format(r.ore)}</td>
                     <td className="hidden xl:table-cell">
                       <div className="flex items-center gap-3">
                         <div className="flex-1"><BarraQuota quota={maxCosto > 0 ? r.costoTotale / maxCosto : 0} colore="#2E2E36" /></div>
-                        <span className="f-mono t-piccolo w-11 text-right" style={{ color: "var(--tenue)" }}>{fmtPerc.format(costi.totTotale > 0 ? (r.costoTotale / costi.totTotale) * 100 : 0)}%</span>
+                        <span className="f-mono t-piccolo w-11 text-right" style={{ color: "var(--txt-tenue)" }}>{fmtPerc.format(costi.totTotale > 0 ? (r.costoTotale / costi.totTotale) * 100 : 0)}%</span>
                       </div>
                     </td>
                     <td className="f-mono text-right" style={{ color: "var(--euro)" }}>{euro(r.costoManodopera)}</td>
@@ -2791,7 +2806,8 @@ function VistaCommesse({ riep, costi, dal, al, apri, esportaCsv, esportaXlsx, es
                 ))}
               </tbody>
               <tfoot>
-                <tr style={{ borderTop: ".5px solid var(--hairline-forte)", background: "var(--tela-alt)" }}>
+                <tr style={{ borderTop: ".5px solid var(--bordo-input)", background: "var(--bg-elevato)" }}>
+                  <td className="pr-0" />
                   <td className="font-medium">Totale</td>
                   <td className="hidden lg:table-cell" />
                   <td className="f-mono text-right font-medium">{fmtOre.format(riep.totOre)}</td>
@@ -4529,10 +4545,15 @@ function StileGlobale() {
         *{ transition:none!important; }
       }
       .soloprint{ display:none; }
+      /* La stampa resta su CARTA BIANCA con inchiostro scuro: il tema scuro
+         finisce allo schermo. Va azzerato anche l'html (non solo il body) e
+         va detto al browser di tornare in chiaro, altrimenti color-scheme:dark
+         gli fa disegnare i propri elementi in scuro anche sul foglio. */
       @media print{
+        :root{ color-scheme:light; }
         .noprint{ display:none!important; }
         .soloprint{ display:block; padding:8mm; color:#111; }
-        body{ background:#fff; }
+        html, body{ background:#fff!important; color:#111; }
         @page{ margin:14mm; }
       }
     `}</style>
