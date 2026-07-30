@@ -8,7 +8,7 @@ import {
   FileSpreadsheet, FileText, AlertTriangle, CheckCircle2, X, ChevronRight, ChevronLeft,
   Search, RotateCcw, Save, Eraser, Info, FileDown, LogOut, Mail, Lock, Building2, ArrowRight, Loader2,
   Clock, Sparkles, Eye, EyeOff, CreditCard, Gift, PartyPopper, ShieldCheck, FileImage,
-  ReceiptText, Link2, CheckCircle, Check, HelpCircle, CircleDot,
+  ReceiptText, Link2, CheckCircle, Check, HelpCircle, CircleDot, CalendarDays,
 } from "lucide-react";
 import { datiAPI, suSessioneScaduta, suAbbonamentoRichiesto, API_BASE } from "./datiAPI.js";
 import { statoGruppo, assegnazioneIniziale, NON_IMPORTARE } from "./statoGruppoDDT.js";
@@ -2177,26 +2177,42 @@ export default function App() {
              rimasti dove erano. */}
         <header className="sticky top-0 z-30 noprint"
           style={{ background: "rgba(8,8,10,.82)", backdropFilter: "blur(14px)", borderBottom: ".5px solid var(--bordo)" }}>
-          <div className="px-5 md:px-10 py-4 flex flex-wrap items-center gap-x-8 gap-y-4">
-            <div className="flex items-center gap-1.5">
-              <button onClick={() => scorriMese(-1)} aria-label="Mese precedente" className="p-2 btn"
-                style={{ borderRadius: "var(--r-sm)", color: "var(--muted)", boxShadow: "var(--ombra-md)", background: "var(--card)" }}>
-                <ChevronLeft size={15} strokeWidth={1.75} />
+          {/* La briciola dice dove sei: azienda, poi sezione. È l'unica cosa
+              che prima mancava per capire a colpo d'occhio in che schermata
+              ci si trova quando la barra laterale è nascosta. */}
+          <div className="px-5 md:px-10 pt-3.5 flex items-center gap-2 t-piccolo">
+            <span className="truncate" style={{ color: "var(--txt-tenue)", maxWidth: "18ch" }}>
+              {azienda || "La tua azienda"}
+            </span>
+            <ChevronRight size={12} strokeWidth={1.75} style={{ color: "var(--txt-fioco)" }} className="shrink-0" />
+            <span style={{ color: "var(--txt-chiaro)", fontWeight: 500 }}>
+              {NAV.find((v) => v.id === vista)?.nome ?? "Dashboard"}
+            </span>
+          </div>
+          <div className="px-5 md:px-10 pt-2.5 pb-4 flex flex-wrap items-center gap-x-8 gap-y-4">
+            {/* Il periodo era una fila di controlli sciolti sul fondo. Ora è un
+                oggetto solo, con l'icona del calendario a dire cos'è: i
+                controlli dentro sono gli stessi, uno per uno. */}
+            <div className="flex items-center gap-1 pl-2.5 pr-1 py-1 box">
+              <CalendarDays size={14} strokeWidth={1.75} className="shrink-0 mr-1" style={{ color: "var(--txt-tenue)" }} />
+              <button onClick={() => scorriMese(-1)} aria-label="Mese precedente" className="p-1.5 btn"
+                style={{ borderRadius: "var(--r-xs)", color: "var(--txt-attenuato)" }}>
+                <ChevronLeft size={14} strokeWidth={1.75} />
               </button>
               <input type="date" value={dal} onChange={(e) => setDal(e.target.value)} aria-label="Inizio intervallo"
-                className="f-mono t-piccolo px-2.5 py-1.5 outline-none campo" />
-              <span style={{ color: "var(--tenue)" }}>–</span>
+                className="f-mono t-piccolo px-1.5 py-1 outline-none campo-nudo" />
+              <span style={{ color: "var(--txt-fioco)" }}>–</span>
               <input type="date" value={al} onChange={(e) => setAl(e.target.value)} aria-label="Fine intervallo"
-                className="f-mono t-piccolo px-2.5 py-1.5 outline-none campo"
-                style={erroreIntervallo ? { boxShadow: "0 0 0 .5px var(--errore)" } : undefined} />
-              <button onClick={() => scorriMese(1)} aria-label="Mese successivo" className="p-2 btn"
-                style={{ borderRadius: "var(--r-sm)", color: "var(--muted)", boxShadow: "var(--ombra-md)", background: "var(--card)" }}>
-                <ChevronRight size={15} strokeWidth={1.75} />
+                className="f-mono t-piccolo px-1.5 py-1 outline-none campo-nudo"
+                style={erroreIntervallo ? { color: "var(--errore)" } : undefined} />
+              <button onClick={() => scorriMese(1)} aria-label="Mese successivo" className="p-1.5 btn"
+                style={{ borderRadius: "var(--r-xs)", color: "var(--txt-attenuato)" }}>
+                <ChevronRight size={14} strokeWidth={1.75} />
               </button>
               {estremiDati && !erroreIntervallo && (
                 <button onClick={() => { setDal(estremiDati.min); setAl(estremiDati.max); }}
-                  className="ml-1.5 hidden sm:inline-block t-piccolo px-3 py-1.5 btn"
-                  style={{ borderRadius: "var(--r-sm)", color: "var(--muted)", boxShadow: "var(--ombra-md)", background: "var(--card)" }}>
+                  className="ml-0.5 hidden sm:inline-block t-piccolo px-2.5 py-1 btn"
+                  style={{ borderRadius: "var(--r-xs)", color: "var(--txt-tenue)" }}>
                   Tutto
                 </button>
               )}
@@ -4411,6 +4427,14 @@ function StileGlobale() {
         border-radius:var(--r-sm); color:var(--txt-chiaro);
         transition:border-color var(--moto), background var(--moto);
       }
+      /* Un campo che vive DENTRO un box già bordato (il selettore di periodo):
+         un bordo dentro un bordo fa rumore, quindi qui non ce n'è. */
+      .campo-nudo{
+        background:transparent; border:none; border-radius:var(--r-xs);
+        color:var(--txt-chiaro); transition:background var(--moto);
+      }
+      .campo-nudo:hover{ background:var(--bg-hover); }
+      .campo-nudo:focus{ background:var(--bg-hover); outline:none; }
       .campo:hover{ border-color:#26262C; }
       .campo:focus{ border-color:var(--accento); background:var(--bg-hover); outline:none; }
       .campo::placeholder{ color:var(--txt-debole); }
