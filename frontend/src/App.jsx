@@ -8,7 +8,7 @@ import {
   FileSpreadsheet, FileText, AlertTriangle, CheckCircle2, X, ChevronRight, ChevronLeft,
   Search, RotateCcw, Save, Eraser, Info, FileDown, LogOut, Mail, Lock, Building2, ArrowRight, Loader2, ChevronDown,
   Clock, Sparkles, Eye, EyeOff, CreditCard, Gift, PartyPopper, ShieldCheck, FileImage,
-  ReceiptText, Link2, CheckCircle, Check, HelpCircle, CircleDot, CalendarDays,
+  ReceiptText, Link2, CheckCircle, Check, HelpCircle, CircleDot, CalendarDays, TrendingUp, TrendingDown,
 } from "lucide-react";
 import { datiAPI, suSessioneScaduta, suAbbonamentoRichiesto, API_BASE } from "./datiAPI.js";
 import { statoGruppo, assegnazioneIniziale, NON_IMPORTARE } from "./statoGruppoDDT.js";
@@ -750,8 +750,15 @@ const STILE_TOOLTIP = {
   boxShadow: "0 16px 40px -12px rgba(0,0,0,.8)",
   fontFamily: "Inter, system-ui, sans-serif", fontSize: 12.5, padding: "9px 13px",
 };
-/** La grafite delle barre non in evidenza. */
+/* Le tinte dei grafici, tutte neutre di proposito.
+   Il bronzo se n'è andato da qui: la regola scritta nei token dice logo, voce
+   attiva, link e badge — e un'area riempita di bronzo per tutta la sua
+   larghezza non è nessuna di quelle quattro cose. Quando l'accento colora
+   anche i grafici smette di indicare, perché indica dappertutto. L'ultimo mese
+   resta distinguibile dagli altri, ma per luminosità, non per tinta. */
 const BARRA_ALTRE = "#2E2E36";
+const BARRA_ULTIMA = "#52525B";
+const TRATTO_GRAFICO = "#71717A";
 
 /** Pillola: stato, conteggio, etichetta breve. Tre toni, non uno di più. */
 const Pillola = ({ tono = "neutro", children }) => {
@@ -2561,6 +2568,7 @@ function AndamentoMensile({ serieMensile }) {
   const variazione = penultimoMese && penultimoMese.costo > 0
     ? (ultimoMese.costo - penultimoMese.costo) / penultimoMese.costo
     : null;
+  const IconaVariazione = variazione > 0 ? TrendingUp : TrendingDown;
 
   return (
     <section className="card p-7">
@@ -2587,12 +2595,25 @@ function AndamentoMensile({ serieMensile }) {
         </div>
       ) : (
         <>
+          {/* La variazione diceva la sua direzione con tre cose sbagliate: un
+              esadecimale (#A6753A) che non esiste in nessun token, il VERDE
+              quando i costi scendono — e il verde qui significa "euro", non
+              "bene", altrimenti le cifre in euro smettono di leggersi come
+              denaro — e i glifi ▲▼, che a un lettore di schermo sono
+              "triangolo nero rivolto in alto". Ora la direzione sta nelle
+              parole ("in più" / "in meno"), l'icona è disegnata come tutte le
+              altre e non porta significato da sola, e il colore non ci prova
+              nemmeno. L'unico verde della riga è l'importo, che è un euro. */}
           {variazione !== null && (
-            <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>
+            <p className="t-corpo mb-6" style={{ color: "var(--txt-attenuato)" }}>
               {fmtMese(ultimoMese.mese)}: <span className="f-mono" style={{ color: "var(--euro)" }}>{euro(ultimoMese.costo)}</span>
               {" · "}
-              <span className="f-mono" style={{ color: variazione > 0 ? "#A6753A" : variazione < 0 ? "var(--euro)" : "var(--muted)" }}>
-                {variazione > 0 ? "▲" : variazione < 0 ? "▼" : "="} {fmtPerc.format(Math.abs(variazione) * 100)}%
+              <span className="inline-flex items-baseline gap-1.5" style={{ color: "var(--txt-medio)" }}>
+                {variazione !== 0 && (
+                  <IconaVariazione size={13} strokeWidth={2} aria-hidden="true" className="shrink-0" style={{ alignSelf: "center" }} />
+                )}
+                <span className="f-mono">{fmtPerc.format(Math.abs(variazione) * 100)}%</span>
+                {variazione > 0 ? " in più" : variazione < 0 ? " in meno" : " uguale"}
               </span>
               {" rispetto a "}{fmtMese(penultimoMese.mese)}
             </p>
@@ -2611,7 +2632,7 @@ function AndamentoMensile({ serieMensile }) {
                       contentStyle={STILE_TOOLTIP}
                       cursor={{ fill: "rgba(255,255,255,.03)" }} />
                     <Bar dataKey="costo" radius={[2, 2, 0, 0]} maxBarSize={38}>
-                      {datiMesi.map((_, i) => <Cell key={i} fill={i === datiMesi.length - 1 ? "var(--accent)" : BARRA_ALTRE} />)}
+                      {datiMesi.map((_, i) => <Cell key={i} fill={i === datiMesi.length - 1 ? BARRA_ULTIMA : BARRA_ALTRE} />)}
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
@@ -2819,7 +2840,7 @@ function Dashboard({ riep, costi, dal, al, dipendenti, serieMensile, vaiCommesse
                   <span className="truncate t-piccolo" style={{ color: "var(--txt-attenuato)" }}>{r.commessa.descrizione}</span>
                   <span className="ml-auto shrink-0 flex items-center gap-5">
                     <span className="hidden sm:block" style={{ width: 92 }}>
-                      <BarraQuota quota={maxRiga > 0 ? r.costoTotale / maxRiga : 0} colore={i === 0 ? "var(--accento)" : TONO_MANODOPERA} />
+                      <BarraQuota quota={maxRiga > 0 ? r.costoTotale / maxRiga : 0} colore={TONO_MANODOPERA} />
                     </span>
                     <span className="f-mono text-right" style={{ width: 104, fontWeight: 500, color: "var(--txt)" }}>{euro(r.costoTotale)}</span>
                   </span>
@@ -2871,15 +2892,15 @@ function Dashboard({ riep, costi, dal, al, dipendenti, serieMensile, vaiCommesse
                   <AreaChart data={datiGiorni} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
                     <defs>
                       <linearGradient id="gradCosto" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="var(--accento)" stopOpacity={0.2} />
-                        <stop offset="100%" stopColor="var(--accento)" stopOpacity={0.02} />
+                        <stop offset="0%" stopColor={TRATTO_GRAFICO} stopOpacity={0.22} />
+                        <stop offset="100%" stopColor={TRATTO_GRAFICO} stopOpacity={0.02} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid stroke="var(--bordo)" vertical={false} />
                     <XAxis dataKey="giorno" tick={STILE_ASSE} minTickGap={28} axisLine={false} tickLine={false} />
                     <YAxis tick={STILE_ASSE} tickFormatter={(v) => fmtOre.format(v)} width={46} axisLine={false} tickLine={false} />
                     <Tooltip formatter={(v) => [euro(v), "Costo del giorno"]} contentStyle={STILE_TOOLTIP} />
-                    <Area type="monotone" dataKey="costo" stroke="var(--accento)" strokeWidth={1.75} fill="url(#gradCosto)" />
+                    <Area type="monotone" dataKey="costo" stroke={TRATTO_GRAFICO} strokeWidth={1.75} fill="url(#gradCosto)" />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -3138,8 +3159,8 @@ function PannelloDettaglio({ riga, riep, costi, dal, al, serieMensile, allegati,
                   <AreaChart data={datiCommessa} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
                     <defs>
                       <linearGradient id="gradCostoCommessa" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.22} />
-                        <stop offset="100%" stopColor="var(--accent)" stopOpacity={0.02} />
+                        <stop offset="0%" stopColor={TRATTO_GRAFICO} stopOpacity={0.22} />
+                        <stop offset="100%" stopColor={TRATTO_GRAFICO} stopOpacity={0.02} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid stroke="var(--bordo)" vertical={false} />
@@ -3147,7 +3168,7 @@ function PannelloDettaglio({ riga, riep, costi, dal, al, serieMensile, allegati,
                     <YAxis tick={STILE_ASSE} tickFormatter={(v) => fmtOre.format(v)} width={54} axisLine={false} tickLine={false} />
                     <Tooltip formatter={(v) => [euro(v), "Costo del mese"]}
                       contentStyle={STILE_TOOLTIP} />
-                    <Area type="monotone" dataKey="costo" stroke="var(--accent)" strokeWidth={1.75} fill="url(#gradCostoCommessa)" />
+                    <Area type="monotone" dataKey="costo" stroke={TRATTO_GRAFICO} strokeWidth={1.75} fill="url(#gradCostoCommessa)" />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
