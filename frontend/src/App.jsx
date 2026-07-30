@@ -1281,7 +1281,7 @@ function VistaAbbonamento({ info }) {
               <p className="f-mono text-2xl font-medium" style={{ color: "var(--txt)" }}>
                 29 €<span className="text-sm font-normal" style={{ color: "var(--muted)" }}> / mese</span>
               </p>
-              <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>Fatturazione mensile ricorrente. Disdici quando vuoi.</p>
+              <p className="t-piccolo mt-1" style={{ color: "var(--muted)" }}>Fatturazione mensile ricorrente. Disdici quando vuoi.</p>
             </div>
 
             {errore && (
@@ -1399,14 +1399,14 @@ function VistaAdmin() {
           ) : (
             <div className="overflow-hidden" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
               <div className="px-6 py-4 flex items-center justify-between gap-3" style={{ borderBottom: "1px solid var(--hairline)" }}>
-                <p className="text-[13px] f-mono" style={{ color: "var(--muted)" }}>{righe.length} aziende</p>
+                <p className="t-piccolo f-mono" style={{ color: "var(--muted)" }}>{righe.length} aziende</p>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="tabella text-sm">
                   <thead>
                     <tr className="text-left">
                       {[["nome", "Azienda", ""], ["email", "Email", "hidden sm:table-cell"], ["registratoIl", "Registrata il", "text-right"], ["stato", "Stato", "text-right"], [null, "Prova", "text-right hidden md:table-cell"]].map(([campo, nome, cls]) => (
-                        <th key={nome} className={`px-6 py-3.5 text-[11px] font-semibold uppercase ${cls} ${campo ? "cursor-pointer select-none" : ""}`}
+                        <th key={nome} className={`px-6 py-3.5 t-micro ${cls} ${campo ? "cursor-pointer select-none" : ""}`}
                           style={{ letterSpacing: ".1em", color: "var(--muted)" }} onClick={campo ? () => clic(campo) : undefined}>
                           {nome}{campo ? freccia(campo) : ""}
                         </th>
@@ -1420,7 +1420,7 @@ function VistaAdmin() {
                         <td className="px-6 py-4 hidden sm:table-cell" style={{ color: "var(--muted)" }}>{a.email}</td>
                         <td className="px-6 py-4 f-mono text-right">{fmtData(String(a.registratoIl).slice(0, 10))}</td>
                         <td className="px-6 py-4 text-right">
-                          <span className="text-xs font-medium px-2 py-1 rounded-md" style={{ color: COLORI_STATO_ADMIN[a.stato] || "var(--txt)", background: "var(--velo)" }}>
+                          <span className="t-piccolo font-medium px-2 py-1 rounded-md" style={{ color: COLORI_STATO_ADMIN[a.stato] || "var(--txt)", background: "var(--velo)" }}>
                             {ETICHETTE_STATO_ADMIN[a.stato] || a.stato}
                           </span>
                         </td>
@@ -2139,10 +2139,10 @@ export default function App() {
                 <ChevronLeft size={15} strokeWidth={1.75} />
               </button>
               <input type="date" value={dal} onChange={(e) => setDal(e.target.value)} aria-label="Inizio intervallo"
-                className="f-mono text-[13px] px-2.5 py-1.5 outline-none campo" />
+                className="f-mono t-piccolo px-2.5 py-1.5 outline-none campo" />
               <span style={{ color: "var(--tenue)" }}>–</span>
               <input type="date" value={al} onChange={(e) => setAl(e.target.value)} aria-label="Fine intervallo"
-                className="f-mono text-[13px] px-2.5 py-1.5 outline-none campo"
+                className="f-mono t-piccolo px-2.5 py-1.5 outline-none campo"
                 style={erroreIntervallo ? { boxShadow: "0 0 0 1px var(--errore)" } : undefined} />
               <button onClick={() => scorriMese(1)} aria-label="Mese successivo" className="p-2 btn"
                 style={{ borderRadius: "var(--r-sm)", color: "var(--muted)", boxShadow: "var(--ombra-md)", background: "var(--card)" }}>
@@ -2275,7 +2275,7 @@ export default function App() {
           </p>
           <p className="text-sm leading-relaxed mb-5" style={{ color: "var(--muted)" }}>
             Sostituirle con quelle del file ({pianoConflitto.righe.length} registrazioni) o lasciarle come sono?
-            {flussoImport.conflitti.length > 1 && <span className="block mt-1 text-xs">Conflitto {flussoImport.idx + 1} di {flussoImport.conflitti.length}.</span>}
+            {flussoImport.conflitti.length > 1 && <span className="block mt-1 t-piccolo">Conflitto {flussoImport.idx + 1} di {flussoImport.conflitti.length}.</span>}
           </p>
           <div className="flex flex-wrap justify-end gap-2">
             <Bottone variante="pericolo" onClick={() => decidiConflitto("annulla")}>Annulla tutto</Bottone>
@@ -2359,7 +2359,7 @@ function AndamentoMensile({ serieMensile }) {
     <section className="p-7" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-5">
         <h2 className="t-sotto">Andamento mensile</h2>
-        <p className="text-xs" style={{ color: "var(--muted)" }}>
+        <p className="t-piccolo" style={{ color: "var(--muted)" }}>
           {datiMesi.length >= 2
             ? `Ultimi ${datiMesi.length} mesi con ore registrate · indipendente dall'intervallo scelto`
             : "Storico completo, indipendente dall'intervallo scelto"}
@@ -2819,7 +2819,7 @@ function PannelloDettaglio({ riga, riep, costi, dal, al, serieMensile, allegati,
           {/* storico della commessa: tutti i mesi in cui ha avuto ore, non solo l'intervallo */}
           <div>
             <h4 className="t-sotto mb-2">Andamento di questa commessa</h4>
-            <p className="text-xs mb-4" style={{ color: "var(--muted)" }}>
+            <p className="t-piccolo mb-4" style={{ color: "var(--muted)" }}>
               Costo mese per mese da quando ha ore registrate, indipendente dall'intervallo scelto.
             </p>
             {datiCommessa.length < 2 ? (
@@ -2908,11 +2908,11 @@ function SezioneMateriali({ commessa, voci, totale, dal, al, onAggiungi, onAggio
         <h4 className="t-sotto">Materiali</h4>
         <p className="f-mono text-sm" style={{ color: totale > 0 ? "var(--euro)" : "var(--muted)" }}>{euro(totale)}</p>
       </div>
-      <p className="text-xs mb-4" style={{ color: "var(--muted)" }}>
+      <p className="t-piccolo mb-4" style={{ color: "var(--muted)" }}>
         Voci di spesa inserite a mano, nell'intervallo scelto. Il costo della riga è quantità × prezzo unitario e si somma alla manodopera solo nel costo totale.
       </p>
 
-      <div className="rounded-xl p-4 space-y-3" style={{ background: "var(--tela)", border: "1px solid var(--hairline)" }}
+      <div className="rounded-xl p-4 space-y-3" style={{ background: "var(--tela-alt)", borderRadius: "var(--r-sm)", boxShadow: "var(--ombra-xs)" }}
         onKeyDown={(e) => e.key === "Enter" && invia()}>
         <div className="grid grid-cols-2 gap-3">
           <Campo etichetta="Data" errore={err.data}>
@@ -2959,10 +2959,10 @@ function SezioneMateriali({ commessa, voci, totale, dal, al, onAggiungi, onAggio
               style={{ border: "1px solid var(--hairline)", background: inModifica === m.id ? "var(--velo-accento)" : "transparent" }}>
               <div className="min-w-0">
                 <p className="text-sm font-medium truncate">{m.descrizione}</p>
-                <p className="f-mono text-xs mt-1" style={{ color: "var(--muted)" }}>
+                <p className="f-mono t-piccolo mt-1" style={{ color: "var(--muted)" }}>
                   {fmtData(m.data)}{m.fornitore ? " · " + m.fornitore : ""}
                 </p>
-                <p className="f-mono text-xs mt-0.5" style={{ color: "var(--muted)" }}>
+                <p className="f-mono t-piccolo mt-0.5" style={{ color: "var(--muted)" }}>
                   {fmtOre.format(m.quantita)} × {fmtNum.format(m.prezzoUnitario)} €
                 </p>
               </div>
@@ -3076,9 +3076,9 @@ function SezioneDocumenti({ commessa, allegati, spazio, fornitoriNoti = [], onCa
     <div>
       <div className="flex items-baseline justify-between gap-3 mb-1">
         <h4 className="t-sotto">Documenti · DDT</h4>
-        <p className="f-mono text-xs" style={{ color: "var(--muted)" }}>{allegati.length} {allegati.length === 1 ? "documento" : "documenti"}</p>
+        <p className="f-mono t-piccolo" style={{ color: "var(--muted)" }}>{allegati.length} {allegati.length === 1 ? "documento" : "documenti"}</p>
       </div>
-      <p className="text-xs mb-4" style={{ color: "var(--muted)" }}>
+      <p className="t-piccolo mb-4" style={{ color: "var(--muted)" }}>
         Archivio dei documenti di trasporto della commessa: PDF o foto, fino a {spazio ? fmtDimensione(spazio.maxFile) : "5 MB"} l'uno. Le foto vengono rimpicciolite prima di essere caricate. Del contenuto non si legge nulla: il documento si conserva e resta collegato a questa commessa.
       </p>
 
@@ -3086,7 +3086,7 @@ function SezioneDocumenti({ commessa, allegati, spazio, fornitoriNoti = [], onCa
         onChange={(e) => { const f = e.target.files[0]; e.target.value = ""; scegli(f); }} />
 
       {inCaricamento ? (
-        <div className="rounded-xl px-4 py-3.5" style={{ background: "var(--tela)", border: "1px solid var(--hairline)" }}>
+        <div className="rounded-xl px-4 py-3.5" style={{ background: "var(--tela-alt)", borderRadius: "var(--r-sm)", boxShadow: "var(--ombra-xs)" }}>
           <div className="flex items-center gap-2.5">
             <Loader2 size={14} strokeWidth={1.75} className="animate-spin" style={{ color: "var(--accent)" }} />
             <p className="text-sm truncate">Caricamento di {inCaricamento}…</p>
@@ -3098,8 +3098,8 @@ function SezioneDocumenti({ commessa, allegati, spazio, fornitoriNoti = [], onCa
       ) : form ? (
         /* I tre campi del DDT, prima di scegliere il file. Si può premere
            "Scegli il file" con tutti i campi vuoti: sono facoltativi davvero. */
-        <div className="rounded-xl px-4 py-4" style={{ background: "var(--tela)", border: "1px solid var(--hairline)" }}>
-          <p className="text-xs mb-3" style={{ color: "var(--muted)" }}>
+        <div className="rounded-xl px-4 py-4" style={{ background: "var(--tela-alt)", borderRadius: "var(--r-sm)", boxShadow: "var(--ombra-xs)" }}>
+          <p className="t-piccolo mb-3" style={{ color: "var(--muted)" }}>
             Se scrivi <strong style={{ color: "var(--txt)" }}>numero, data e fornitore</strong> del DDT, quando arriverà la fattura che lo cita
             questa commessa verrà proposta da sola. Non è obbligatorio: puoi lasciarli vuoti e archiviare il documento come sempre.
           </p>
@@ -3138,9 +3138,9 @@ function SezioneDocumenti({ commessa, allegati, spazio, fornitoriNoti = [], onCa
                     {/* I dati del DDT compaiono solo se ci sono: un documento
                         archiviato senza compilarli si legge come prima. */}
                     {rigaDDT(a) && (
-                      <p className="f-mono text-xs mt-0.5 truncate" style={{ color: "var(--accent)" }}>{rigaDDT(a)}</p>
+                      <p className="f-mono t-piccolo mt-0.5 truncate" style={{ color: "var(--accent)" }}>{rigaDDT(a)}</p>
                     )}
-                    <p className="f-mono text-xs mt-0.5" style={{ color: "var(--muted)" }}>
+                    <p className="f-mono t-piccolo mt-0.5" style={{ color: "var(--muted)" }}>
                       {fmtData(a.caricatoIl.slice(0, 10))} · {fmtDimensione(a.dimensione)}
                     </p>
                   </div>
@@ -3190,7 +3190,7 @@ function SezioneDocumenti({ commessa, allegati, spazio, fornitoriNoti = [], onCa
         <div className="mt-4">
           <div className="flex items-baseline justify-between gap-3">
             <Micro>Spazio archivio</Micro>
-            <p className="f-mono text-xs" style={{ color: quotaPiena > 0.9 ? "#A63A32" : "var(--muted)" }}>
+            <p className="f-mono t-piccolo" style={{ color: quotaPiena > 0.9 ? "#A63A32" : "var(--muted)" }}>
               {fmtDimensione(usato)} di {fmtDimensione(quota)}
             </p>
           </div>
@@ -3262,13 +3262,13 @@ function StatoAbbinamento({ stato, commessa }) {
   return (
     <div className="rounded-lg px-3 py-2 mt-2 inline-flex flex-col gap-1"
       style={{ background: s.velo, border: `1px solid ${s.bordo}` }}>
-      <p className="text-xs flex items-start gap-1.5" style={{ color: s.colore }}>
+      <p className="t-piccolo flex items-start gap-1.5" style={{ color: s.colore }}>
         <Icona size={13} strokeWidth={1.75} className="mt-0.5 shrink-0" /> <span>{testo}</span>
       </p>
       {/* Il perché: sul giallo è l'informazione che permette di decidere in due
           secondi invece di andare a riaprire l'archivio. */}
       {abbinamento?.motivo && tipo !== "manuale" && tipo !== "vuoto" && (
-        <p className="text-[11px] pl-[19px]" style={{ color: "var(--muted)" }}>{abbinamento.motivo}</p>
+        <p className="t-piccolo pl-[19px]" style={{ color: "var(--muted)" }}>{abbinamento.motivo}</p>
       )}
     </div>
   );
@@ -3488,14 +3488,12 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
             <Micro>Importazione fattura</Micro>
             {/* Da dove arrivano i numeri: un XML è un dato esatto, un PDF è
                 una stampa interpretata. Chi controlla deve saperlo. */}
-            <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-md" style={{ letterSpacing: ".08em",
-              background: daPDF ? "var(--velo-accento)" : "rgba(47,110,79,.10)",
-              color: daPDF ? "#7C6027" : "var(--euro)" }}>
+            <Pillola tono={daPDF ? "accento" : "euro"}>
               {etichettaOrigine[lettura.origine] || etichettaOrigine.pdf}
-            </span>
+            </Pillola>
           </div>
           <h1 className="t-titolo mt-2">{lettura.fornitore.denominazione || "Fornitore non letto"}</h1>
-          <p className="f-mono text-[13px] mt-1.5" style={{ color: "var(--muted)" }}>
+          <p className="f-mono t-piccolo mt-1.5" style={{ color: "var(--muted)" }}>
             {lettura.fornitore.partitaIVA && `P.IVA ${lettura.fornitore.partitaIVA} · `}
             Fattura {doc.numero || "—"} del {doc.data ? fmtData(doc.data) : "—"}
             {doc.totale != null && ` · totale documento ${euro(doc.totale)}`}
@@ -3535,14 +3533,14 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
             /* Il filetto sul bordo: rende leggibile a colpo d'occhio, scorrendo
                la pagina, quali gruppi sono a posto e quali chiedono qualcosa. */
             borderLeft: `3px solid ${stato.tipo === "vuoto" ? "var(--hairline)" : stile.colore}` }}>
-            <div className="px-6 py-4 flex flex-wrap items-end justify-between gap-4" style={{ borderBottom: "1px solid var(--hairline)", background: "var(--tela)" }}>
+            <div className="px-7 py-5 flex flex-wrap items-end justify-between gap-5" style={{ borderBottom: "1px solid var(--hairline)", background: "var(--tela-alt)" }}>
               <div>
                 <Micro>{g.ddtNumero ? "Documento di trasporto" : "Righe senza DDT"}</Micro>
                 <p className="f-display text-lg mt-1">
                   {g.ddtNumero ? `DDT ${g.ddtNumero}` : "Nessun riferimento a un DDT"}
                   {g.ddtData && <span className="text-sm font-normal" style={{ color: "var(--muted)" }}> del {fmtData(g.ddtData)}</span>}
                 </p>
-                <p className="f-mono text-xs mt-1" style={{ color: "var(--muted)" }}>
+                <p className="f-mono t-piccolo mt-1" style={{ color: "var(--muted)" }}>
                   {righeGruppo.length} {righeGruppo.length === 1 ? "riga" : "righe"} · {euro(totaleGruppo)}
                 </p>
 
@@ -3551,7 +3549,7 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
                 {/* Quale documento in archivio ha fatto scattare la proposta:
                     serve a poter andare a controllare la carta, se si vuole. */}
                 {abbinamento?.allegato?.nomeFile && (
-                  <p className="text-[11px] mt-1.5 flex items-start gap-1.5" style={{ color: "var(--muted)" }}>
+                  <p className="t-piccolo mt-1.5 flex items-start gap-1.5" style={{ color: "var(--muted)" }}>
                     <Link2 size={11} strokeWidth={1.75} className="mt-0.5 shrink-0" />
                     dal documento archiviato "{abbinamento.allegato.nomeFile}"
                     {abbinamento.allegato.fornitore && ` · ${abbinamento.allegato.fornitore}`}
@@ -3579,12 +3577,11 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="tabella text-sm">
                 <thead>
                   <tr className="text-left">
                     {["Descrizione", "Quantità", "Prezzo unitario", "Totale", "Commessa"].map((h) => (
-                      <th key={h} className={`px-4 py-2.5 text-[11px] font-semibold uppercase ${h === "Descrizione" || h === "Commessa" ? "" : "text-right"}`}
-                        style={{ letterSpacing: ".1em", color: "var(--muted)" }}>{h}</th>
+                      <th key={h} className={h === "Descrizione" || h === "Commessa" ? "" : "text-right"}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -3594,28 +3591,28 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
                     const daControllare = r.daControllare.length > 0;
                     return (
                       <tr key={r.id} style={{ borderTop: "1px solid var(--hairline)", background: daControllare ? "var(--velo-accento)" : "transparent" }}>
-                        <td className="px-4 py-2.5" style={{ minWidth: 280 }}>
+                        <td  style={{ minWidth: 280 }}>
                           <input value={r.descrizione} onChange={(e) => modificaRiga(r.id, { descrizione: e.target.value })}
                             className={inputCls + " py-1.5"} style={{ background: "var(--tela)" }} aria-label="Descrizione della riga" />
                           {daControllare && (
-                            <p className="text-[11px] mt-1 flex items-center gap-1" style={{ color: "#7C6027" }}>
+                            <p className="t-piccolo mt-1 flex items-center gap-1" style={{ color: "#7C6027" }}>
                               <AlertTriangle size={11} strokeWidth={1.75} /> da controllare: {r.daControllare.join(", ")}
                             </p>
                           )}
-                          {r.unitaMisura && <span className="text-[11px] f-mono" style={{ color: "var(--muted)" }}>unità: {r.unitaMisura}</span>}
+                          {r.unitaMisura && <span className="t-piccolo f-mono" style={{ color: "var(--muted)" }}>unità: {r.unitaMisura}</span>}
                         </td>
-                        <td className="px-4 py-2.5 text-right">
+                        <td className="text-right">
                           <input value={r.quantita} onChange={(e) => modificaRiga(r.id, { quantita: e.target.value })}
                             className={inputCls + " f-mono text-right py-1.5"} style={{ width: 90, background: "var(--tela)" }} aria-label="Quantità" />
                         </td>
-                        <td className="px-4 py-2.5 text-right">
+                        <td className="text-right">
                           <input value={r.prezzoUnitario} onChange={(e) => modificaRiga(r.id, { prezzoUnitario: e.target.value })}
                             className={inputCls + " f-mono text-right py-1.5"} style={{ width: 110, background: "var(--tela)" }} aria-label="Prezzo unitario" />
                         </td>
-                        <td className="px-4 py-2.5 f-mono text-right whitespace-nowrap" style={{ color: tot == null ? "#A63A32" : "var(--euro)" }}>
+                        <td className="f-mono text-right whitespace-nowrap" style={{ color: tot == null ? "#A63A32" : "var(--euro)" }}>
                           {tot == null ? "da controllare" : euro(tot)}
                         </td>
-                        <td className="px-4 py-2.5">
+                        <td >
                           {/* Anche la singola riga si cambia: e da quel momento
                               l'assegnazione è dell'utente, non del software. */}
                           <select value={r.commessaId} onChange={(e) => modificaRiga(r.id, { commessaId: e.target.value, assegnazione: "manuale" })}
@@ -3664,7 +3661,7 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
               const s = STILI_STATO[v.tipo];
               const Icona = s.icona;
               return (
-                <div key={v.tipo} className="rounded-lg px-3 py-2 flex items-center gap-2 text-xs"
+                <div key={v.tipo} className="rounded-lg px-3 py-2 flex items-center gap-2 t-piccolo"
                   style={{ background: s.velo, border: `1px solid ${s.bordo}`, color: s.colore }}>
                   <Icona size={13} strokeWidth={1.75} />
                   <span className="f-mono font-medium">{v.n}</span> {v.testo}
@@ -3679,7 +3676,7 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
             premere Conferma — che è l'unico momento in cui i costi entrano. */}
         {gruppiAutomatici.length > 0 && (
           <div className="rounded-xl px-4 py-3.5 mb-5" style={{ background: "rgba(30,115,80,.06)", border: "1px solid rgba(30,115,80,.18)" }}>
-            <p className="text-xs font-semibold mb-2" style={{ color: "var(--euro)" }}>
+            <p className="t-piccolo font-semibold mb-2" style={{ color: "var(--euro)" }}>
               Abbinati in automatico, da controllare:
             </p>
             <div className="space-y-1">
@@ -3694,7 +3691,7 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
                 </p>
               ))}
             </div>
-            <p className="text-xs mt-2.5" style={{ color: "var(--muted)" }}>
+            <p className="t-piccolo mt-2.5" style={{ color: "var(--muted)" }}>
               Sono proposte: finché non premi "Conferma e importa" nessun costo è entrato in nessuna commessa. Per cambiarne una, usa il menù nella testata del suo gruppo.
             </p>
           </div>
@@ -3714,7 +3711,7 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
         )}
 
         {righe.length - daImportare.length > 0 && (
-          <p className="text-xs mb-5 flex items-start gap-1.5" style={{ color: "var(--muted)" }}>
+          <p className="t-piccolo mb-5 flex items-start gap-1.5" style={{ color: "var(--muted)" }}>
             <Info size={12} strokeWidth={1.75} className="mt-0.5 shrink-0" />
             Le righe lasciate su "non importare" restano fuori dai costi. Il file della fattura resta comunque archiviato e puoi importarle più avanti.
           </p>
@@ -3776,10 +3773,10 @@ function VistaDipendenti({ dipendenti, setDipendenti, riep, elimina, notifica })
             return (
               <div key={dip.id} className="p-7" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
                 <div className="flex items-center gap-3.5 mb-5">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center f-mono text-[13px] shrink-0" style={{ background: "var(--velo)", color: "var(--txt)" }}>{iniziali}</div>
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center f-mono t-piccolo shrink-0" style={{ background: "var(--velo)", color: "var(--txt)" }}>{iniziali}</div>
                   <div className="min-w-0">
                     <p className="f-display text-[17px] leading-none truncate">{dip.nome} {dip.cognome}</p>
-                    <p className="text-xs f-mono mt-1.5" style={{ color: "var(--muted)" }}>Ore nell'intervallo: {fmtOre.format(oreIntervallo.get(dip.id) || 0)} h</p>
+                    <p className="t-piccolo f-mono mt-1.5" style={{ color: "var(--muted)" }}>Ore nell'intervallo: {fmtOre.format(oreIntervallo.get(dip.id) || 0)} h</p>
                   </div>
                   <div className="ml-auto flex gap-1 shrink-0">
                     <button onClick={() => setEditor({ dip })} aria-label="Modifica dipendente" className="p-2 rounded-lg btn" style={{ border: "1px solid var(--hairline)" }}><Pencil size={13} strokeWidth={1.75} /></button>
@@ -3789,11 +3786,11 @@ function VistaDipendenti({ dipendenti, setDipendenti, riep, elimina, notifica })
                 {elenco.length === 0 ? (
                   <p className="text-sm" style={{ color: "var(--muted)" }}>Nessun mese impostato: modifica il dipendente per aggiungere il lordo mensile.</p>
                 ) : (
-                  <table className="w-full text-sm">
+                  <table className="tabella text-sm">
                     <thead>
                       <tr className="text-left">
                         {["Mese", "Lordo", "Ore mese", "Tariffa"].map((h, i) => (
-                          <th key={h} className={`py-2 text-[11px] font-semibold uppercase ${i > 0 ? "text-right" : ""}`} style={{ letterSpacing: ".1em", color: "var(--muted)" }}>{h}</th>
+                          <th key={h} className={`py-2 t-micro ${i > 0 ? "text-right" : ""}`} style={{ letterSpacing: ".1em", color: "var(--muted)" }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
@@ -3859,10 +3856,10 @@ function EditorDipendente({ iniziale, onSalva, onChiudi }) {
         </Campo>
       </div>
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-[11px] font-semibold uppercase" style={{ letterSpacing: ".1em", color: "var(--muted)" }}>Lordo mensile (per mese)</span>
-        <Bottone variante="fantasma" onClick={() => setLordi((l) => [...l, { mese: oggiISO().slice(0, 7), importo: "" }])} className="py-1 px-2.5 text-xs"><Plus size={12} strokeWidth={1.75} /> Aggiungi mese</Bottone>
+        <span className="t-micro" style={{ letterSpacing: ".1em", color: "var(--muted)" }}>Lordo mensile (per mese)</span>
+        <Bottone variante="fantasma" onClick={() => setLordi((l) => [...l, { mese: oggiISO().slice(0, 7), importo: "" }])} className="py-1 px-2.5 t-piccolo"><Plus size={12} strokeWidth={1.75} /> Aggiungi mese</Bottone>
       </div>
-      {errori.lordi && <p className="text-xs mb-2" style={{ color: "#A63A32" }}>{errori.lordi}</p>}
+      {errori.lordi && <p className="t-piccolo mb-2" style={{ color: "#A63A32" }}>{errori.lordi}</p>}
       <div className="space-y-2 mb-7">
         {lordi.length === 0 && <p className="text-sm" style={{ color: "var(--muted)" }}>Nessun mese: aggiungine uno per poter calcolare le tariffe.</p>}
         {lordi.map((riga, i) => (
@@ -3966,7 +3963,7 @@ function VistaDati({ dipendenti, commesse, registrazioni, setCommesse, aggiungi,
               </Campo>
               <Bottone onClick={registra}><Plus size={14} strokeWidth={1.75} /> Registra</Bottone>
             </div>
-            <p className="text-xs mt-4" style={{ color: "var(--muted)" }}>Dopo ogni registrazione il modulo resta impostato: cambia solo le ore e premi Invio per inserire una giornata dopo l'altra.</p>
+            <p className="t-piccolo mt-4" style={{ color: "var(--muted)" }}>Dopo ogni registrazione il modulo resta impostato: cambia solo le ore e premi Invio per inserire una giornata dopo l'altra.</p>
           </>
         )}
       </Sezione>
@@ -3980,7 +3977,7 @@ function VistaDati({ dipendenti, commesse, registrazioni, setCommesse, aggiungi,
         {commesse.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {commesse.map((c) => (
-              <span key={c.id} className="inline-flex items-center gap-1.5 text-xs rounded-lg pl-2.5 pr-1 py-1" style={{ border: "1px solid var(--hairline)", background: "var(--tela)" }} title={c.descrizione}>
+              <span key={c.id} className="inline-flex items-center gap-1.5 t-piccolo rounded-lg pl-2.5 pr-1 py-1" style={{ border: "1px solid var(--hairline)", background: "var(--tela)" }} title={c.descrizione}>
                 <span className="f-mono font-medium">{c.codice}</span>
                 <button onClick={() => setRinomina(c)} aria-label={"Rinomina commessa " + c.codice} title="Rinomina" className="p-0.5 rounded btn" style={{ color: "var(--muted)" }}><Pencil size={10} strokeWidth={1.75} /></button>
                 <button onClick={() => eliminaCommessa(c)} aria-label={"Elimina commessa " + c.codice} className="p-0.5 rounded btn" style={{ color: "var(--muted)" }}><X size={11} strokeWidth={1.75} /></button>
@@ -3990,7 +3987,7 @@ function VistaDati({ dipendenti, commesse, registrazioni, setCommesse, aggiungi,
         )}
       </Sezione>
 
-      <Sezione titolo={<>Registrazioni <span className="f-mono text-[13px]" style={{ color: "var(--muted)" }}>({registrazioni.length})</span></>}
+      <Sezione titolo={<>Registrazioni <span className="f-mono t-piccolo" style={{ color: "var(--muted)" }}>({registrazioni.length})</span></>}
         extra={
           <div className="relative">
             <Search size={13} strokeWidth={1.75} className="absolute left-3 top-2.5" style={{ color: "var(--muted)" }} />
@@ -4001,11 +3998,11 @@ function VistaDati({ dipendenti, commesse, registrazioni, setCommesse, aggiungi,
           <p className="text-sm py-2" style={{ color: "var(--muted)" }}>Le ore che registri compariranno qui, ordinate dalla più recente.</p>
         ) : (
           <div className="overflow-x-auto -mx-6 -mb-6">
-            <table className="w-full text-sm">
+            <table className="tabella text-sm">
               <thead>
                 <tr className="text-left">
                   {["Data", "Dipendente", "Commessa", "Ore", ""].map((h, i) => (
-                    <th key={i} className={`px-6 py-2.5 text-[11px] font-semibold uppercase ${h === "Ore" ? "text-right" : ""}`} style={{ letterSpacing: ".1em", color: "var(--muted)" }}>{h}</th>
+                    <th key={i} className={`px-6 py-2.5 t-micro ${h === "Ore" ? "text-right" : ""}`} style={{ letterSpacing: ".1em", color: "var(--muted)" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -4027,7 +4024,7 @@ function VistaDati({ dipendenti, commesse, registrazioni, setCommesse, aggiungi,
                 })}
               </tbody>
             </table>
-            {registrazioni.length > 300 && elenco.length === 300 && <p className="text-xs px-6 py-3" style={{ color: "var(--muted)" }}>Mostrate le prime 300 righe: usa la ricerca per trovarne altre.</p>}
+            {registrazioni.length > 300 && elenco.length === 300 && <p className="t-piccolo px-6 py-3" style={{ color: "var(--muted)" }}>Mostrate le prime 300 righe: usa la ricerca per trovarne altre.</p>}
           </div>
         )}
       </Sezione>
@@ -4047,7 +4044,7 @@ function VistaDati({ dipendenti, commesse, registrazioni, setCommesse, aggiungi,
           <Bottone variante="fantasma" onClick={esempio}><RotateCcw size={14} strokeWidth={1.75} /> Ricarica esempio</Bottone>
           <Bottone variante="pericolo" onClick={svuota}><Eraser size={14} strokeWidth={1.75} /> Svuota tutto</Bottone>
         </div>
-        <p className="text-xs mt-5 flex items-start gap-1.5 leading-relaxed" style={{ color: "var(--muted)" }}>
+        <p className="t-piccolo mt-5 flex items-start gap-1.5 leading-relaxed" style={{ color: "var(--muted)" }}>
           <Info size={12} strokeWidth={1.75} className="mt-0.5 shrink-0" /> I dati vengono salvati automaticamente su questo PC a ogni modifica, con backup di sicurezza a data e ora conservati in caso di problemi. "Backup (JSON)" resta utile per portare una copia dei dati altrove o archiviarla a parte. Se reimporti un file con dipendenti e mesi già presenti, l'app ti chiederà se sostituire o saltare, senza mai creare doppioni.
         </p>
       </Sezione>
@@ -4151,7 +4148,7 @@ function EditorRinominaCommessa({ commessa, commesse, oreCollegate, onSalva, onF
         <input value={f.descrizione} onChange={(e) => setF((x) => ({ ...x, descrizione: e.target.value }))}
           placeholder="es. Ristrutturazione Villa Rossi" className={inputCls} />
       </Campo>
-      <p className="text-xs flex items-start gap-1.5 leading-relaxed" style={{ color: "var(--muted)" }}>
+      <p className="t-piccolo flex items-start gap-1.5 leading-relaxed" style={{ color: "var(--muted)" }}>
         <Info size={12} strokeWidth={1.75} className="mt-0.5 shrink-0" />
         {oreCollegate > 0
           ? `Cambia solo il nome: le ${oreCollegate} registrazioni collegate, i costi e i report restano identici.`
