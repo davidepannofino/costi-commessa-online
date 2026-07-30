@@ -681,8 +681,8 @@ const Marchio = ({ chiaro, centrato }) => (
       style={{
         width: 30, height: 30, borderRadius: "var(--r-sm)", fontSize: 13,
         background: chiaro ? "var(--scuro-velo)" : "var(--ink)",
-        color: chiaro ? "var(--accent-chiaro)" : "#F4F1EA",
-        boxShadow: chiaro ? "inset 0 0 0 1px var(--scuro-linea)" : "none",
+        color: chiaro ? "var(--accent-chiaro)" : "var(--txt)",
+        boxShadow: chiaro ? "inset 0 0 0 .5px var(--scuro-linea)" : "none",
       }}>C</div>
     <div className="t-piccolo" style={{ fontWeight: 500, color: chiaro ? "var(--scuro-txt)" : "var(--txt)" }}>Costi Commessa</div>
   </div>
@@ -695,15 +695,15 @@ const Marchio = ({ chiaro, centrato }) => (
  */
 function Avviso({ tono = "accento", icona: Icona, children, className = "" }) {
   const toni = {
-    accento: { background: "var(--velo-accento)", colore: "#7C6027", linea: "rgba(154,120,58,.2)", predefinita: AlertTriangle },
-    errore: { background: "var(--velo-errore)", colore: "var(--errore)", linea: "rgba(166,58,50,.22)", predefinita: AlertTriangle },
-    ok: { background: "var(--velo-euro)", colore: "var(--euro)", linea: "rgba(30,115,80,.2)", predefinita: CheckCircle2 },
+    accento: { background: "var(--velo-accento)", colore: "var(--accento-chiaro)", linea: "var(--accento-bordo)", predefinita: AlertTriangle },
+    errore: { background: "var(--velo-errore)", colore: "var(--errore)", linea: "var(--rosso-bordo)", predefinita: AlertTriangle },
+    ok: { background: "var(--velo-euro)", colore: "var(--euro)", linea: "var(--verde-bordo)", predefinita: CheckCircle2 },
     neutro: { background: "var(--velo)", colore: "var(--muted)", linea: "var(--hairline)", predefinita: Info },
   }[tono];
   const Segno = Icona || toni.predefinita;
   return (
     <div className={"flex items-start gap-2.5 px-4 py-3 t-piccolo anim-pop " + className}
-      style={{ background: toni.background, boxShadow: `0 0 0 1px ${toni.linea}`, borderRadius: "var(--r-sm)", color: toni.colore }}
+      style={{ background: toni.background, boxShadow: `0 0 0 .5px ${toni.linea}`, borderRadius: "var(--r-sm)", color: toni.colore }}
       role="alert">
       <Segno size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
       <span>{children}</span>
@@ -715,23 +715,25 @@ function Avviso({ tono = "accento", icona: Icona, children, className = "" }) {
        Erano scritti a mano in ogni grafico, con misure e colori leggermente
        diversi — e puntavano a un carattere monospaziato che non carichiamo
        più. Qui c'è una definizione sola. --------------------------------- */
-const STILE_ASSE = { fontSize: 11, fontFamily: "Inter, system-ui, sans-serif", fill: "#9C9A93", fontVariantNumeric: "tabular-nums" };
-const STILE_ASSE_FORTE = { ...STILE_ASSE, fontSize: 11.5, fill: "#1A1A18" };
+const STILE_ASSE = { fontSize: 11, fontFamily: "Inter, system-ui, sans-serif", fill: "#71717A", fontVariantNumeric: "tabular-nums" };
+const STILE_ASSE_FORTE = { ...STILE_ASSE, fontSize: 11.5, fill: "#E4E4E7" };
 const STILE_TOOLTIP = {
-  borderRadius: 10, border: "none", background: "var(--card)",
-  boxShadow: "0 0 0 1px rgba(26,26,24,.08), 0 12px 32px -8px rgba(26,26,24,.2)",
+  borderRadius: 10, background: "var(--bg-elevato)",
+  border: ".5px solid var(--bordo-input)", color: "var(--txt-chiaro)",
+  // Qui l'ombra serve davvero: il riquadro galleggia sopra il grafico.
+  boxShadow: "0 16px 40px -12px rgba(0,0,0,.8)",
   fontFamily: "Inter, system-ui, sans-serif", fontSize: 12.5, padding: "9px 13px",
 };
 /** Le due tinte delle barre: bronzo per la prima, grafite per le altre. */
-const BARRA_PRIMA = "#9A783A";
-const BARRA_ALTRE = "#B4B0A6";
+const BARRA_PRIMA = "#8A6D4B";
+const BARRA_ALTRE = "#2E2E36";
 
 /** Pillola: stato, conteggio, etichetta breve. Tre toni, non uno di più. */
 const Pillola = ({ tono = "neutro", children }) => {
   const toni = {
     neutro: { background: "var(--velo)", color: "var(--muted)" },
     euro: { background: "var(--velo-euro)", color: "var(--euro)" },
-    accento: { background: "var(--velo-accento)", color: "#7C6027" },
+    accento: { background: "var(--velo-accento)", color: "var(--accento-chiaro)" },
     errore: { background: "var(--velo-errore)", color: "var(--errore)" },
   }[tono];
   return <span className="pill" style={toni}>{children}</span>;
@@ -758,7 +760,7 @@ function CampoPassword({ value, onChange, placeholder, minLength, required, auto
       <button
         type="button"
         onClick={() => setMostra((m) => !m)}
-        className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-md btn"
+        className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-[var(--r-xs)] btn"
         style={{ color: "var(--muted)" }}
         aria-label={mostra ? "Nascondi password" : "Mostra password"}
         tabIndex={-1}
@@ -777,10 +779,10 @@ function CampoPassword({ value, onChange, placeholder, minLength, required, auto
  */
 function Bottone({ variante = "primario", className = "", ...p }) {
   const stile = {
-    primario: { background: "var(--ink)", color: "#FAF8F4" },
-    accento: { background: "var(--accent)", color: "#FFFDF8" },
+    primario: { background: "var(--accento)", color: "var(--accento-testo)" },
+    accento: { background: "var(--accento)", color: "var(--accento-testo)" },
     fantasma: { background: "var(--card)", color: "var(--txt)", boxShadow: "var(--ombra-md)" },
-    pericolo: { background: "transparent", color: "var(--errore)", boxShadow: "0 0 0 1px rgba(166,58,50,.22)" },
+    pericolo: { background: "transparent", color: "var(--errore)", boxShadow: "0 0 0 .5px var(--rosso-bordo)" },
   }[variante];
   return (
     <button
@@ -798,7 +800,7 @@ function Modale({ titolo, children, onChiudi, largo, bloccante }) {
   }, [onChiudi, bloccante]);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 noprint" role="dialog" aria-modal="true" aria-label={titolo}>
-      <div className="absolute inset-0 anim-velo" style={{ background: "rgba(26,26,24,.32)", backdropFilter: "blur(3px)" }} onClick={() => !bloccante && onChiudi()} />
+      <div className="absolute inset-0 anim-velo" style={{ background: "rgba(0,0,0,.66)", backdropFilter: "blur(4px)" }} onClick={() => !bloccante && onChiudi()} />
       {/* È il caso in cui un'ombra vera serve: il modale sta davvero sopra il
           resto, e deve leggersi come un piano staccato. */}
       <div className={`relative w-full ${largo ? "max-w-2xl" : "max-w-md"} anim-pop`}
@@ -848,7 +850,7 @@ const BarraQuota = ({ quota, colore }) => (
 /** Riquadro con intestazione (titolo + azione opzionale). */
 const Sezione = ({ titolo, extra, children }) => (
   <section style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
-    <div className="px-7 py-5 flex flex-wrap items-center justify-between gap-3" style={{ borderBottom: "1px solid var(--hairline)" }}>
+    <div className="px-7 py-5 flex flex-wrap items-center justify-between gap-3" style={{ borderBottom: ".5px solid var(--hairline)" }}>
       <h2 className="t-sotto">{titolo}</h2>
       {extra}
     </div>
@@ -944,12 +946,12 @@ function SchermataAccesso({ alSuccesso, messaggio }) {
       <div className="hidden lg:flex lg:w-[46%] xl:w-[42%] relative flex-col justify-between overflow-hidden noprint superficie-scura px-14 py-16 xl:px-20">
         <div className="relative flex items-center gap-3">
           <div className="flex items-center justify-center shrink-0 f-display"
-            style={{ width: 32, height: 32, borderRadius: "var(--r-sm)", background: "var(--scuro-velo)", boxShadow: "inset 0 0 0 1px var(--scuro-linea)", color: "var(--accent-chiaro)", fontSize: 14 }}>C</div>
+            style={{ width: 32, height: 32, borderRadius: "var(--r-sm)", background: "var(--scuro-velo)", boxShadow: "inset 0 0 0 .5px var(--scuro-linea)", color: "var(--accent-chiaro)", fontSize: 14 }}>C</div>
           <div className="t-piccolo" style={{ color: "var(--scuro-txt)", fontWeight: 500 }}>Costi Commessa</div>
         </div>
 
         <div className="relative">
-          <h1 className="f-display mb-6" style={{ fontSize: 40, lineHeight: 1.14, letterSpacing: "-.028em", color: "#F4F1EA" }}>
+          <h1 className="f-display mb-6" style={{ fontSize: 40, lineHeight: 1.14, letterSpacing: "-.028em", color: "var(--txt)" }}>
             Il costo del lavoro,<br />commessa per commessa.
           </h1>
           <p className="t-corpo" style={{ color: "var(--scuro-muted)", maxWidth: "42ch" }}>
@@ -958,7 +960,7 @@ function SchermataAccesso({ alSuccesso, messaggio }) {
           </p>
         </div>
 
-        <p className="relative t-piccolo" style={{ color: "#6E6A62" }}>
+        <p className="relative t-piccolo" style={{ color: "var(--txt-fioco)" }}>
           Calcoli in piena precisione. Ogni azienda, dati isolati.
         </p>
       </div>
@@ -968,7 +970,7 @@ function SchermataAccesso({ alSuccesso, messaggio }) {
         <div className="w-full" style={{ maxWidth: 384 }}>
           <div className="flex items-center gap-3 mb-9 lg:hidden">
             <div className="flex items-center justify-center shrink-0 f-display"
-              style={{ width: 30, height: 30, borderRadius: "var(--r-sm)", background: "var(--ink)", color: "#F4F1EA", fontSize: 13 }}>C</div>
+              style={{ width: 30, height: 30, borderRadius: "var(--r-sm)", background: "var(--ink)", color: "var(--txt)", fontSize: 13 }}>C</div>
             <div className="t-piccolo" style={{ fontWeight: 500 }}>Costi Commessa</div>
           </div>
 
@@ -1371,7 +1373,7 @@ function VistaAdmin() {
       </div>
 
       {errore && (
-        <div className="flex items-start gap-2.5 rounded-[9px] px-4 py-3 text-sm" style={{ background: "var(--velo-errore)", border: "1px solid rgba(166,58,50,.2)", color: "var(--errore)" }}>
+        <div className="flex items-start gap-2.5 rounded-[var(--r-sm)] px-4 py-3 text-sm" style={{ background: "var(--velo-errore)", border: ".5px solid var(--rosso-bordo)", color: "var(--errore)" }}>
           <AlertTriangle size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" /> {errore}
         </div>
       )}
@@ -1381,9 +1383,9 @@ function VistaAdmin() {
       ) : (
         <>
           {schede.length > 0 && (
-            <div className="rounded-[14px] grid grid-cols-2 xl:grid-cols-5 overflow-hidden" style={{ background: "var(--card)", boxShadow: "var(--ombra-sm)" }}>
+            <div className="rounded-[var(--r-md)] grid grid-cols-2 xl:grid-cols-5 overflow-hidden" style={{ background: "var(--card)", boxShadow: "var(--ombra-sm)" }}>
               {schede.map(([e, v], i) => (
-                <div key={e} className="px-6 py-5" style={{ borderLeft: i > 0 ? "1px solid var(--hairline)" : "none" }}>
+                <div key={e} className="px-6 py-5" style={{ borderLeft: i > 0 ? ".5px solid var(--hairline)" : "none" }}>
                   <Micro>{e}</Micro>
                   <p className="f-mono text-[22px] mt-2 leading-none" style={{ color: "var(--txt)" }}>{v}</p>
                 </div>
@@ -1395,7 +1397,7 @@ function VistaAdmin() {
             <StatoVuoto icona={Building2} titolo="Nessuna azienda registrata" testo="Non appena qualcuno si registrerà, comparirà qui." />
           ) : (
             <div className="overflow-hidden" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
-              <div className="px-6 py-4 flex items-center justify-between gap-3" style={{ borderBottom: "1px solid var(--hairline)" }}>
+              <div className="px-6 py-4 flex items-center justify-between gap-3" style={{ borderBottom: ".5px solid var(--hairline)" }}>
                 <p className="t-piccolo f-mono" style={{ color: "var(--muted)" }}>{righe.length} aziende</p>
               </div>
               <div className="overflow-x-auto">
@@ -1412,12 +1414,12 @@ function VistaAdmin() {
                   </thead>
                   <tbody>
                     {righe.map((a) => (
-                      <tr key={a.id} style={{ borderTop: "1px solid var(--hairline)" }}>
+                      <tr key={a.id} style={{ borderTop: ".5px solid var(--hairline)" }}>
                         <td className="px-6 py-4 font-medium">{a.nome}</td>
                         <td className="px-6 py-4 hidden sm:table-cell" style={{ color: "var(--muted)" }}>{a.email}</td>
                         <td className="px-6 py-4 f-mono text-right">{fmtData(String(a.registratoIl).slice(0, 10))}</td>
                         <td className="px-6 py-4 text-right">
-                          <span className="t-piccolo font-medium px-2 py-1 rounded-md" style={{ color: COLORI_STATO_ADMIN[a.stato] || "var(--txt)", background: "var(--velo)" }}>
+                          <span className="t-piccolo font-medium px-2 py-1 rounded-[var(--r-xs)]" style={{ color: COLORI_STATO_ADMIN[a.stato] || "var(--txt)", background: "var(--velo)" }}>
                             {ETICHETTE_STATO_ADMIN[a.stato] || a.stato}
                           </span>
                         </td>
@@ -2095,7 +2097,7 @@ export default function App() {
                 style={{
                   borderRadius: "var(--r-sm)",
                   background: urgente ? "rgba(196,162,101,.1)" : "var(--scuro-velo)",
-                  boxShadow: urgente ? "inset 0 0 0 1px rgba(196,162,101,.28)" : "none",
+                  boxShadow: urgente ? "inset 0 0 0 .5px var(--accento-bordo)" : "none",
                 }}
               >
                 <div className="flex items-center gap-2 t-piccolo" style={{ fontWeight: 500, color: urgente ? "var(--accent-chiaro)" : "var(--scuro-muted)" }}>
@@ -2113,7 +2115,7 @@ export default function App() {
             <LogOut size={16} strokeWidth={1.75} /> Esci
           </button>
         </div>
-        <div className="px-6 pb-6 t-piccolo" style={{ color: "#6E6A62" }}>
+        <div className="px-6 pb-6 t-piccolo" style={{ color: "var(--txt-fioco)" }}>
           Costo del lavoro per commessa.<br />Calcoli in piena precisione.
         </div>
       </aside>
@@ -2128,7 +2130,7 @@ export default function App() {
              schiarirsi fino a diventare un altro colore. Comandi e numeri sono
              rimasti dove erano. */}
         <header className="sticky top-0 z-30 noprint"
-          style={{ background: "rgba(251,250,247,.86)", backdropFilter: "blur(12px)", borderBottom: "1px solid var(--hairline)" }}>
+          style={{ background: "rgba(8,8,10,.82)", backdropFilter: "blur(14px)", borderBottom: ".5px solid var(--bordo)" }}>
           <div className="px-5 md:px-10 py-4 flex flex-wrap items-center gap-x-8 gap-y-4">
             <div className="flex items-center gap-1.5">
               <button onClick={() => scorriMese(-1)} aria-label="Mese precedente" className="p-2 btn"
@@ -2140,7 +2142,7 @@ export default function App() {
               <span style={{ color: "var(--tenue)" }}>–</span>
               <input type="date" value={al} onChange={(e) => setAl(e.target.value)} aria-label="Fine intervallo"
                 className="f-mono t-piccolo px-2.5 py-1.5 outline-none campo"
-                style={erroreIntervallo ? { boxShadow: "0 0 0 1px var(--errore)" } : undefined} />
+                style={erroreIntervallo ? { boxShadow: "0 0 0 .5px var(--errore)" } : undefined} />
               <button onClick={() => scorriMese(1)} aria-label="Mese successivo" className="p-2 btn"
                 style={{ borderRadius: "var(--r-sm)", color: "var(--muted)", boxShadow: "var(--ombra-md)", background: "var(--card)" }}>
                 <ChevronRight size={15} strokeWidth={1.75} />
@@ -2171,7 +2173,7 @@ export default function App() {
                   {riep ? euro(costoLive) : "—"}
                 </p>
               </div>
-              <div className="text-right hidden sm:block pl-7" style={{ borderLeft: "1px solid var(--hairline)" }}>
+              <div className="text-right hidden sm:block pl-7" style={{ borderLeft: ".5px solid var(--hairline)" }}>
                 <Micro>Ore</Micro>
                 <p className="cifra-grande mt-1.5" style={{ fontSize: 27, lineHeight: 1, fontWeight: 500, color: "var(--txt)" }}>
                   {riep ? fmtOre.format(riep.totOre) : "—"}
@@ -2209,9 +2211,9 @@ export default function App() {
           )}
 
           {riep && riep.avvisi.length > 0 && (
-            <div className="mb-9 px-4 py-3 space-y-1.5" style={{ background: "var(--velo-accento)", boxShadow: "0 0 0 1px rgba(154,120,58,.2)", borderRadius: "var(--r-sm)" }} role="alert">
+            <div className="mb-9 px-4 py-3 space-y-1.5" style={{ background: "var(--velo-accento)", boxShadow: "0 0 0 .5px var(--accento-bordo)", borderRadius: "var(--r-sm)" }} role="alert">
               {riep.avvisi.map((a, i) => (
-                <p key={i} className="t-piccolo flex items-start gap-2.5" style={{ color: "#7C6027" }}><AlertTriangle size={14} strokeWidth={1.75} className="mt-0.5 shrink-0" /> {a}</p>
+                <p key={i} className="t-piccolo flex items-start gap-2.5" style={{ color: "var(--accento-chiaro)" }}><AlertTriangle size={14} strokeWidth={1.75} className="mt-0.5 shrink-0" /> {a}</p>
               ))}
             </div>
           )}
@@ -2240,7 +2242,7 @@ export default function App() {
 
       {/* ---- navigazione mobile ---- */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 grid noprint superficie-scura"
-        style={{ borderTop: "1px solid var(--scuro-linea)", gridTemplateColumns: `repeat(${NAV.length}, minmax(0, 1fr))` }} aria-label="Navigazione">
+        style={{ borderTop: ".5px solid var(--scuro-linea)", gridTemplateColumns: `repeat(${NAV.length}, minmax(0, 1fr))` }} aria-label="Navigazione">
         {NAV.map(({ id, nome, icona: Icona }) => (
           <button key={id} onClick={() => setVista(id)} className="flex flex-col items-center gap-1.5 py-3 btn"
             style={{ color: vista === id ? "var(--accent-chiaro)" : "var(--scuro-muted)" }}>
@@ -2294,7 +2296,7 @@ export default function App() {
 
       {mostraBenvenuto && (
         <Modale titolo="Benvenuto in Costi Commessa" onChiudi={() => setMostraBenvenuto(false)}>
-          <div className="w-10 h-10 rounded-[9px] flex items-center justify-center mb-4" style={{ background: "var(--velo-accento)" }}>
+          <div className="w-10 h-10 rounded-[var(--r-sm)] flex items-center justify-center mb-4" style={{ background: "var(--velo-accento)" }}>
             <PartyPopper size={18} strokeWidth={1.75} style={{ color: "var(--accent)" }} />
           </div>
           <p className="text-sm leading-relaxed mb-3" style={{ color: "var(--txt)" }}>
@@ -2317,10 +2319,10 @@ export default function App() {
       <div className="fixed bottom-20 lg:bottom-6 right-6 z-50 space-y-2.5 noprint" aria-live="polite">
         {toasts.map((t) => (
           <div key={t.id} className="flex items-start gap-3 px-4 py-3.5 t-piccolo anim-pop"
-            style={{ maxWidth: 380, background: "var(--ink)", color: "#EDEAE3", borderRadius: "var(--r-sm)", boxShadow: "var(--ombra-lg)" }}>
-            {t.tipo === "errore" ? <AlertTriangle size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: "#E5A9A2" }} />
+            style={{ maxWidth: 380, background: "var(--ink)", color: "var(--txt-chiaro)", borderRadius: "var(--r-sm)", boxShadow: "var(--ombra-lg)" }}>
+            {t.tipo === "errore" ? <AlertTriangle size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: "var(--rosso)" }} />
               : t.tipo === "avviso" ? <AlertTriangle size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: "var(--accent-chiaro)" }} />
-              : <CheckCircle2 size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: "#7FCBA4" }} />}
+              : <CheckCircle2 size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: "var(--verde)" }} />}
             {t.testo}
           </div>
         ))}
@@ -2396,12 +2398,12 @@ function AndamentoMensile({ serieMensile }) {
               <div className="mt-3" style={{ height: 190 }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={datiMesi} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-                    <CartesianGrid stroke="var(--hairline)" vertical={false} />
+                    <CartesianGrid stroke="var(--bordo)" vertical={false} />
                     <XAxis dataKey="mese" tick={STILE_ASSE} minTickGap={4} axisLine={false} tickLine={false} />
                     <YAxis tick={STILE_ASSE} tickFormatter={(v) => fmtOre.format(v)} width={54} axisLine={false} tickLine={false} />
                     <Tooltip formatter={(v) => [euro(v), "Costo del mese"]}
                       contentStyle={STILE_TOOLTIP}
-                      cursor={{ fill: "rgba(26,26,24,.035)" }} />
+                      cursor={{ fill: "rgba(255,255,255,.03)" }} />
                     <Bar dataKey="costo" radius={[2, 2, 0, 0]} maxBarSize={38}>
                       {datiMesi.map((_, i) => <Cell key={i} fill={i === datiMesi.length - 1 ? "var(--accent)" : BARRA_ALTRE} />)}
                     </Bar>
@@ -2415,13 +2417,13 @@ function AndamentoMensile({ serieMensile }) {
               <div className="mt-3" style={{ height: 190 }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={datiMesi} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-                    <CartesianGrid stroke="var(--hairline)" vertical={false} />
+                    <CartesianGrid stroke="var(--bordo)" vertical={false} />
                     <XAxis dataKey="mese" tick={STILE_ASSE} minTickGap={4} axisLine={false} tickLine={false} />
                     <YAxis tick={STILE_ASSE} tickFormatter={(v) => fmtOre.format(v)} width={46} axisLine={false} tickLine={false} />
                     <Tooltip formatter={(v) => [fmtOre.format(v) + " h", "Ore del mese"]}
                       contentStyle={STILE_TOOLTIP}
-                      cursor={{ fill: "rgba(26,26,24,.035)" }} />
-                    <Bar dataKey="ore" radius={[2, 2, 0, 0]} maxBarSize={38} fill="#C7C3B8" />
+                      cursor={{ fill: "rgba(255,255,255,.03)" }} />
+                    <Bar dataKey="ore" radius={[2, 2, 0, 0]} maxBarSize={38} fill="#26262C" />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -2451,7 +2453,7 @@ function FasciaCosti({ costi, titolo = "Costo del periodo" }) {
       <div className="grid grid-cols-1 sm:grid-cols-3 mt-2">
         {voci.map((k, i) => (
           <div key={k.e} className="px-7 py-6"
-            style={{ borderLeft: i > 0 ? "1px solid var(--hairline)" : "none", background: k.forte ? "var(--tela-alt)" : "transparent" }}>
+            style={{ borderLeft: i > 0 ? ".5px solid var(--hairline)" : "none", background: k.forte ? "var(--tela-alt)" : "transparent" }}>
             <Micro>{k.e}</Micro>
             <p className="cifra-grande mt-2.5" style={{ fontSize: k.forte ? 29 : 24, lineHeight: 1, color: k.c }}>{k.v}</p>
             {k.forte && <p className="t-piccolo mt-2.5" style={{ color: "var(--tenue)" }}>manodopera + materiali</p>}
@@ -2532,7 +2534,7 @@ function Dashboard({ riep, costi, dal, al, dipendenti, serieMensile, vaiCommesse
       {/* KPI: una fascia unica, separatori a filo */}
       <div className="grid grid-cols-2 xl:grid-cols-4 overflow-hidden" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
         {kpi.map((k, i) => (
-          <div key={k.e} className="px-7 py-6" style={{ borderLeft: i > 0 ? "1px solid var(--hairline)" : "none" }}>
+          <div key={k.e} className="px-7 py-6" style={{ borderLeft: i > 0 ? ".5px solid var(--hairline)" : "none" }}>
             <Micro>{k.e}</Micro>
             <p className="cifra-grande mt-2.5" style={{ fontSize: 23, lineHeight: 1, color: k.muto ? "var(--muted)" : "var(--txt)" }}>
               {k.v}{k.u && <span className="t-piccolo ml-1" style={{ fontWeight: 400, color: "var(--tenue)" }}>{k.u}</span>}
@@ -2554,12 +2556,12 @@ function Dashboard({ riep, costi, dal, al, dipendenti, serieMensile, vaiCommesse
           <div style={{ height: Math.max(200, datiBarre.length * 26 + 24) }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={datiBarre} layout="vertical" margin={{ top: 0, right: 12, left: 0, bottom: 0 }} onClick={(e) => e && e.activePayload && apri(e.activePayload[0].payload.riga)}>
-                <CartesianGrid stroke="var(--hairline)" horizontal={false} />
+                <CartesianGrid stroke="var(--bordo)" horizontal={false} />
                 <XAxis type="number" tick={STILE_ASSE} tickFormatter={(v) => fmtOre.format(v)} axisLine={false} tickLine={false} />
                 <YAxis type="category" dataKey="nome" width={46} tick={STILE_ASSE_FORTE} interval={0} axisLine={false} tickLine={false} />
                 <Tooltip formatter={(v) => [euro(v), "Costo totale"]} labelFormatter={(l) => "Commessa " + l}
                   contentStyle={STILE_TOOLTIP}
-                  cursor={{ fill: "rgba(26,26,24,.035)" }} />
+                  cursor={{ fill: "rgba(255,255,255,.03)" }} />
                 <Bar dataKey="costo" radius={[0, 3, 3, 0]} maxBarSize={10} className="cursor-pointer">
                   {datiBarre.map((_, i) => <Cell key={i} fill={i === 0 ? BARRA_PRIMA : BARRA_ALTRE} />)}
                 </Bar>
@@ -2580,7 +2582,7 @@ function Dashboard({ riep, costi, dal, al, dipendenti, serieMensile, vaiCommesse
                     <p className="text-sm font-medium truncate">{d.dip.nome} {d.dip.cognome}</p>
                     <p className="f-mono text-sm shrink-0" style={{ color: "var(--euro)", fontWeight: 500 }}>{euro(d.costo)}</p>
                   </div>
-                  <BarraQuota quota={totCosto > 0 ? d.costo / totCosto : 0} colore="#B4B0A6" />
+                  <BarraQuota quota={totCosto > 0 ? d.costo / totCosto : 0} colore="#2E2E36" />
                   <p className="f-mono t-piccolo mt-2" style={{ color: "var(--tenue)" }}>{fmtOre.format(d.ore)} h · {fmtPerc.format(totCosto > 0 ? (d.costo / totCosto) * 100 : 0)}%</p>
                 </div>
               ))}
@@ -2600,7 +2602,7 @@ function Dashboard({ riep, costi, dal, al, dipendenti, serieMensile, vaiCommesse
                         <stop offset="100%" stopColor="var(--accent)" stopOpacity={0.02} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid stroke="var(--hairline)" vertical={false} />
+                    <CartesianGrid stroke="var(--bordo)" vertical={false} />
                     <XAxis dataKey="giorno" tick={STILE_ASSE} minTickGap={28} axisLine={false} tickLine={false} />
                     <YAxis tick={STILE_ASSE} tickFormatter={(v) => fmtOre.format(v)} width={46} axisLine={false} tickLine={false} />
                     <Tooltip formatter={(v) => [euro(v), "Costo del giorno"]} contentStyle={STILE_TOOLTIP} />
@@ -2668,7 +2670,7 @@ function VistaCommesse({ riep, costi, dal, al, apri, esportaCsv, esportaXlsx, es
           azione={<Bottone onClick={vaiDati}><Plus size={14} strokeWidth={1.75} /> Registra ore</Bottone>} />
       ) : (
         <div className="overflow-hidden" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
-          <div className="px-7 py-5 flex items-center justify-between gap-4" style={{ borderBottom: "1px solid var(--hairline)" }}>
+          <div className="px-7 py-5 flex items-center justify-between gap-4" style={{ borderBottom: ".5px solid var(--hairline)" }}>
             <p className="t-piccolo f-mono" style={{ color: "var(--muted)" }}>{fmtData(dal)} – {fmtData(al)} · {righe.length} commesse</p>
             <div className="relative">
               <Search size={14} strokeWidth={1.75} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--tenue)" }} />
@@ -2700,7 +2702,7 @@ function VistaCommesse({ riep, costi, dal, al, apri, esportaCsv, esportaXlsx, es
                     <td className="f-mono text-right">{fmtOre.format(r.ore)}</td>
                     <td className="hidden xl:table-cell">
                       <div className="flex items-center gap-3">
-                        <div className="flex-1"><BarraQuota quota={maxCosto > 0 ? r.costoTotale / maxCosto : 0} colore="#B4B0A6" /></div>
+                        <div className="flex-1"><BarraQuota quota={maxCosto > 0 ? r.costoTotale / maxCosto : 0} colore="#2E2E36" /></div>
                         <span className="f-mono t-piccolo w-11 text-right" style={{ color: "var(--tenue)" }}>{fmtPerc.format(costi.totTotale > 0 ? (r.costoTotale / costi.totTotale) * 100 : 0)}%</span>
                       </div>
                     </td>
@@ -2712,7 +2714,7 @@ function VistaCommesse({ riep, costi, dal, al, apri, esportaCsv, esportaXlsx, es
                 ))}
               </tbody>
               <tfoot>
-                <tr style={{ borderTop: "1px solid var(--hairline-forte)", background: "var(--tela-alt)" }}>
+                <tr style={{ borderTop: ".5px solid var(--hairline-forte)", background: "var(--tela-alt)" }}>
                   <td className="font-medium">Totale</td>
                   <td className="hidden lg:table-cell" />
                   <td className="f-mono text-right font-medium">{fmtOre.format(riep.totOre)}</td>
@@ -2751,14 +2753,14 @@ function PannelloDettaglio({ riga, riep, costi, dal, al, serieMensile, allegati,
   }));
   return (
     <div className="fixed inset-0 z-40 noprint" role="dialog" aria-modal="true" aria-label={"Dettaglio commessa " + riga.commessa.codice}>
-      <div className="absolute inset-0 anim-velo" style={{ background: "rgba(26,26,24,.32)", backdropFilter: "blur(3px)" }} onClick={onChiudi} />
+      <div className="absolute inset-0 anim-velo" style={{ background: "rgba(0,0,0,.66)", backdropFilter: "blur(4px)" }} onClick={onChiudi} />
       <div className="absolute right-0 top-0 bottom-0 w-full flex flex-col anim-slide"
         style={{ maxWidth: 460, background: "var(--card)", boxShadow: "var(--ombra-lg)" }}>
         {/* La testata del pannello era scura come la barra laterale. Qui però
             siamo dentro il lavoro, non nella cornice: fondo avorio, il codice
             della commessa alla scala grande, un filo sotto. */}
         <div className="px-7 py-6 flex items-start justify-between gap-4"
-          style={{ background: "var(--tela-alt)", borderBottom: "1px solid var(--hairline)" }}>
+          style={{ background: "var(--tela-alt)", borderBottom: ".5px solid var(--hairline)" }}>
           <div className="min-w-0">
             <Micro>Dettaglio commessa</Micro>
             <h3 className="cifra-grande mt-2" style={{ fontSize: 30, lineHeight: 1 }}>{riga.commessa.codice}</h3>
@@ -2773,13 +2775,13 @@ function PannelloDettaglio({ riga, riep, costi, dal, al, serieMensile, allegati,
           <div className="overflow-hidden" style={{ borderRadius: "var(--r-sm)", boxShadow: "var(--ombra-sm)" }}>
             <div className="grid grid-cols-3">
               {[["Ore", fmtOre.format(riga.ore), null], ["Manodopera", euro(riga.costoManodopera), "var(--euro)"], ["Materiali", euro(riga.costoMateriali), riga.costoMateriali > 0 ? "var(--euro)" : "var(--tenue)"]].map(([e, v, col], i) => (
-                <div key={e} className="px-4 py-4" style={{ borderLeft: i > 0 ? "1px solid var(--hairline)" : "none" }}>
+                <div key={e} className="px-4 py-4" style={{ borderLeft: i > 0 ? ".5px solid var(--hairline)" : "none" }}>
                   <Micro>{e}</Micro>
                   <p className="f-mono mt-2" style={{ fontSize: 15, fontWeight: 500, color: col || "var(--txt)" }}>{v}</p>
                 </div>
               ))}
             </div>
-            <div className="px-4 py-4 flex items-end justify-between gap-3" style={{ borderTop: "1px solid var(--hairline)", background: "var(--tela-alt)" }}>
+            <div className="px-4 py-4 flex items-end justify-between gap-3" style={{ borderTop: ".5px solid var(--hairline)", background: "var(--tela-alt)" }}>
               <div>
                 <Micro>Costo totale</Micro>
                 <p className="t-piccolo mt-1.5" style={{ color: "var(--tenue)" }}>manodopera + materiali · {fmtPerc.format(quota * 100)}% del periodo</p>
@@ -2797,7 +2799,7 @@ function PannelloDettaglio({ riga, riep, costi, dal, al, serieMensile, allegati,
                     <p className="text-sm font-medium">{d.dip.nome} {d.dip.cognome}</p>
                     <p className="f-mono text-sm" style={{ color: "var(--euro)", fontWeight: 500 }}>{euro(d.costo)}</p>
                   </div>
-                  <BarraQuota quota={maxDip > 0 ? d.costo / maxDip : 0} colore="#B4B0A6" />
+                  <BarraQuota quota={maxDip > 0 ? d.costo / maxDip : 0} colore="#2E2E36" />
                   <p className="t-piccolo f-mono mt-2" style={{ color: "var(--tenue)" }}>{fmtOre.format(d.ore)} h · tariffa media {fmtNum4.format(d.tariffaMedia)} €/h</p>
                 </div>
               ))}
@@ -2822,7 +2824,7 @@ function PannelloDettaglio({ riga, riep, costi, dal, al, serieMensile, allegati,
               Costo mese per mese da quando ha ore registrate, indipendente dall'intervallo scelto.
             </p>
             {datiCommessa.length < 2 ? (
-              <p className="text-sm leading-relaxed rounded-[9px] px-4 py-3.5" style={{ background: "var(--tela-alt)", color: "var(--muted)" }}>
+              <p className="text-sm leading-relaxed rounded-[var(--r-sm)] px-4 py-3.5" style={{ background: "var(--tela-alt)", color: "var(--muted)" }}>
                 {datiCommessa.length === 1
                   ? `Questa commessa ha ore in un solo mese (${fmtMese(serieCommessa[0].mese)}): non c'è ancora un andamento da confrontare.`
                   : "Nessuna ora registrata su questa commessa nello storico disponibile."}
@@ -2837,7 +2839,7 @@ function PannelloDettaglio({ riga, riep, costi, dal, al, serieMensile, allegati,
                         <stop offset="100%" stopColor="var(--accent)" stopOpacity={0.02} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid stroke="var(--hairline)" vertical={false} />
+                    <CartesianGrid stroke="var(--bordo)" vertical={false} />
                     <XAxis dataKey="mese" tick={STILE_ASSE} minTickGap={4} axisLine={false} tickLine={false} />
                     <YAxis tick={STILE_ASSE} tickFormatter={(v) => fmtOre.format(v)} width={54} axisLine={false} tickLine={false} />
                     <Tooltip formatter={(v) => [euro(v), "Costo del mese"]}
@@ -2911,7 +2913,7 @@ function SezioneMateriali({ commessa, voci, totale, dal, al, onAggiungi, onAggio
         Voci di spesa inserite a mano, nell'intervallo scelto. Il costo della riga è quantità × prezzo unitario e si somma alla manodopera solo nel costo totale.
       </p>
 
-      <div className="rounded-[9px] p-4 space-y-3" style={{ background: "var(--tela-alt)", borderRadius: "var(--r-sm)", boxShadow: "var(--ombra-xs)" }}
+      <div className="rounded-[var(--r-sm)] p-4 space-y-3" style={{ background: "var(--tela-alt)", borderRadius: "var(--r-sm)", boxShadow: "var(--ombra-xs)" }}
         onKeyDown={(e) => e.key === "Enter" && invia()}>
         <div className="grid grid-cols-2 gap-3">
           <Campo etichetta="Data" errore={err.data}>
@@ -2954,8 +2956,8 @@ function SezioneMateriali({ commessa, voci, totale, dal, al, onAggiungi, onAggio
       ) : (
         <ul className="mt-4 space-y-2">
           {voci.map((m) => (
-            <li key={m.id} className="rounded-[9px] px-3.5 py-3 flex items-start justify-between gap-3"
-              style={{ border: "1px solid var(--hairline)", background: inModifica === m.id ? "var(--velo-accento)" : "transparent" }}>
+            <li key={m.id} className="rounded-[var(--r-sm)] px-3.5 py-3 flex items-start justify-between gap-3"
+              style={{ border: ".5px solid var(--hairline)", background: inModifica === m.id ? "var(--velo-accento)" : "transparent" }}>
               <div className="min-w-0">
                 <p className="text-sm font-medium truncate">{m.descrizione}</p>
                 <p className="f-mono t-piccolo mt-1" style={{ color: "var(--muted)" }}>
@@ -2968,11 +2970,11 @@ function SezioneMateriali({ commessa, voci, totale, dal, al, onAggiungi, onAggio
               <div className="flex items-center gap-1.5 shrink-0">
                 <p className="f-mono text-sm" style={{ color: "var(--euro)" }}>{euro(m.costo)}</p>
                 <button onClick={() => { setInModifica(m.id); setErr({}); setF({ data: m.data, fornitore: m.fornitore, descrizione: m.descrizione, quantita: String(m.quantita).replace(".", ","), prezzoUnitario: String(m.prezzoUnitario).replace(".", ",") }); }}
-                  aria-label={"Modifica materiale " + m.descrizione} className="p-1.5 rounded-[9px] btn" style={{ boxShadow: "var(--ombra-sm)" }}>
+                  aria-label={"Modifica materiale " + m.descrizione} className="p-1.5 rounded-[var(--r-sm)] btn" style={{ boxShadow: "var(--ombra-sm)" }}>
                   <Pencil size={12} strokeWidth={1.75} />
                 </button>
                 <button onClick={async () => { if (inModifica === m.id) annulla(); await onElimina(m); }}
-                  aria-label={"Elimina materiale " + m.descrizione} className="p-1.5 rounded-[9px] btn" style={{ border: "1px solid rgba(166,58,50,.22)", color: "var(--errore)" }}>
+                  aria-label={"Elimina materiale " + m.descrizione} className="p-1.5 rounded-[var(--r-sm)] btn" style={{ border: ".5px solid var(--rosso-bordo)", color: "var(--errore)" }}>
                   <Trash2 size={12} strokeWidth={1.75} />
                 </button>
               </div>
@@ -3085,7 +3087,7 @@ function SezioneDocumenti({ commessa, allegati, spazio, fornitoriNoti = [], onCa
         onChange={(e) => { const f = e.target.files[0]; e.target.value = ""; scegli(f); }} />
 
       {inCaricamento ? (
-        <div className="rounded-[9px] px-4 py-3.5" style={{ background: "var(--tela-alt)", borderRadius: "var(--r-sm)", boxShadow: "var(--ombra-xs)" }}>
+        <div className="rounded-[var(--r-sm)] px-4 py-3.5" style={{ background: "var(--tela-alt)", borderRadius: "var(--r-sm)", boxShadow: "var(--ombra-xs)" }}>
           <div className="flex items-center gap-2.5">
             <Loader2 size={14} strokeWidth={1.75} className="animate-spin" style={{ color: "var(--accent)" }} />
             <p className="text-sm truncate">Caricamento di {inCaricamento}…</p>
@@ -3097,7 +3099,7 @@ function SezioneDocumenti({ commessa, allegati, spazio, fornitoriNoti = [], onCa
       ) : form ? (
         /* I tre campi del DDT, prima di scegliere il file. Si può premere
            "Scegli il file" con tutti i campi vuoti: sono facoltativi davvero. */
-        <div className="rounded-[9px] px-4 py-4" style={{ background: "var(--tela-alt)", borderRadius: "var(--r-sm)", boxShadow: "var(--ombra-xs)" }}>
+        <div className="rounded-[var(--r-sm)] px-4 py-4" style={{ background: "var(--tela-alt)", borderRadius: "var(--r-sm)", boxShadow: "var(--ombra-xs)" }}>
           <p className="t-piccolo mb-3" style={{ color: "var(--muted)" }}>
             Se scrivi <strong style={{ color: "var(--txt)" }}>numero, data e fornitore</strong> del DDT, quando arriverà la fattura che lo cita
             questa commessa verrà proposta da sola. Non è obbligatorio: puoi lasciarli vuoti e archiviare il documento come sempre.
@@ -3124,10 +3126,10 @@ function SezioneDocumenti({ commessa, allegati, spazio, fornitoriNoti = [], onCa
       ) : (
         <ul className="mt-4 space-y-2">
           {allegati.map((a) => (
-            <li key={a.id} className="rounded-[9px] px-3.5 py-3" style={{ boxShadow: "var(--ombra-sm)" }}>
+            <li key={a.id} className="rounded-[var(--r-sm)] px-3.5 py-3" style={{ boxShadow: "var(--ombra-sm)" }}>
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-9 h-9 rounded-[9px] flex items-center justify-center shrink-0" style={{ background: "var(--velo-accento)" }}>
+                  <div className="w-9 h-9 rounded-[var(--r-sm)] flex items-center justify-center shrink-0" style={{ background: "var(--velo-accento)" }}>
                     {a.tipo === "application/pdf"
                       ? <FileText size={16} strokeWidth={1.75} style={{ color: "var(--accent)" }} />
                       : <FileImage size={16} strokeWidth={1.75} style={{ color: "var(--accent)" }} />}
@@ -3147,17 +3149,17 @@ function SezioneDocumenti({ commessa, allegati, spazio, fornitoriNoti = [], onCa
                 <div className="flex items-center gap-1.5 shrink-0">
                   <button onClick={() => setInModifica(inModifica?.id === a.id ? null : { id: a.id, ddtNumero: a.ddtNumero || "", ddtData: a.ddtData || "", fornitore: a.fornitore || "" })}
                     aria-label={"Dati del DDT per " + a.nomeFile} title="Dati del DDT (numero, data, fornitore)"
-                    className="p-1.5 rounded-[9px] btn" style={{ boxShadow: "var(--ombra-sm)" }}>
+                    className="p-1.5 rounded-[var(--r-sm)] btn" style={{ boxShadow: "var(--ombra-sm)" }}>
                     <Pencil size={12} strokeWidth={1.75} />
                   </button>
                   <button onClick={() => apri(a)} disabled={inApertura === a.id}
-                    aria-label={"Apri documento " + a.nomeFile} className="p-1.5 rounded-[9px] btn" style={{ boxShadow: "var(--ombra-sm)" }}>
+                    aria-label={"Apri documento " + a.nomeFile} className="p-1.5 rounded-[var(--r-sm)] btn" style={{ boxShadow: "var(--ombra-sm)" }}>
                     {inApertura === a.id
                       ? <Loader2 size={12} strokeWidth={1.75} className="animate-spin" />
                       : <Download size={12} strokeWidth={1.75} />}
                   </button>
                   <button onClick={() => onElimina(a)} aria-label={"Elimina documento " + a.nomeFile}
-                    className="p-1.5 rounded-[9px] btn" style={{ border: "1px solid rgba(166,58,50,.22)", color: "var(--errore)" }}>
+                    className="p-1.5 rounded-[var(--r-sm)] btn" style={{ border: ".5px solid var(--rosso-bordo)", color: "var(--errore)" }}>
                     <Trash2 size={12} strokeWidth={1.75} />
                   </button>
                 </div>
@@ -3167,7 +3169,7 @@ function SezioneDocumenti({ commessa, allegati, spazio, fornitoriNoti = [], onCa
                   si tocca. È la strada per rendere riconoscibili i DDT caricati
                   prima che questi campi esistessero. */}
               {inModifica?.id === a.id && (
-                <div className="mt-3 pt-3" style={{ borderTop: "1px solid var(--hairline)" }}>
+                <div className="mt-3 pt-3" style={{ borderTop: ".5px solid var(--hairline)" }}>
                   <CampiDDT valori={inModifica} onCambia={(patch) => setInModifica((m) => ({ ...m, ...patch }))}
                     fornitoriNoti={fornitoriNoti} idElenco={`fornitori-${a.id}`} />
                   <div className="flex flex-wrap justify-end gap-2 mt-3">
@@ -3230,10 +3232,10 @@ const chiaveGruppoDi = (riga) => (riga.ddtNumero ? `ddt:${riga.ddtNumero}` : "se
  * A colpo d'occhio si deve capire dove serve attenzione senza leggere niente.
  */
 const STILI_STATO = {
-  auto:      { icona: CheckCircle2,  colore: "var(--euro)",  velo: "var(--velo-euro)",     bordo: "rgba(30,115,80,.2)" },
-  possibile: { icona: HelpCircle,    colore: "#7C6027",      velo: "var(--velo-accento)",  bordo: "rgba(154,120,58,.2)" },
-  manuale:   { icona: Check,         colore: "var(--euro)",  velo: "rgba(30,115,80,.05)",  bordo: "rgba(30,115,80,.14)" },
-  misto:     { icona: CircleDot,     colore: "#7C6027",      velo: "var(--velo-accento)",  bordo: "rgba(154,120,58,.2)" },
+  auto:      { icona: CheckCircle2,  colore: "var(--euro)",  velo: "var(--velo-euro)",     bordo: "var(--verde-bordo)" },
+  possibile: { icona: HelpCircle,    colore: "var(--accento-chiaro)",      velo: "var(--velo-accento)",  bordo: "var(--accento-bordo)" },
+  manuale:   { icona: Check,         colore: "var(--euro)",  velo: "var(--verde-bg)",  bordo: "var(--verde-bordo)" },
+  misto:     { icona: CircleDot,     colore: "var(--accento-chiaro)",      velo: "var(--velo-accento)",  bordo: "var(--accento-bordo)" },
   vuoto:     { icona: CircleDot,     colore: "var(--tenue)", velo: "var(--velo)",          bordo: "var(--hairline)" },
 };
 
@@ -3259,8 +3261,8 @@ function StatoAbbinamento({ stato, commessa }) {
   }[tipo];
 
   return (
-    <div className="rounded-[9px] px-3 py-2 mt-2 inline-flex flex-col gap-1"
-      style={{ background: s.velo, border: `1px solid ${s.bordo}` }}>
+    <div className="rounded-[var(--r-sm)] px-3 py-2 mt-2 inline-flex flex-col gap-1"
+      style={{ background: s.velo, border: `.5px solid ${s.bordo}` }}>
       <p className="t-piccolo flex items-start gap-1.5" style={{ color: s.colore }}>
         <Icona size={13} strokeWidth={1.75} className="mt-0.5 shrink-0" /> <span>{testo}</span>
       </p>
@@ -3456,7 +3458,7 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
           <h1 className="t-titolo mt-2">{lettura.fattura.nomeFile}</h1>
         </div>
         <section className="p-7" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
-          <div className="w-10 h-10 rounded-[9px] flex items-center justify-center mb-4" style={{ background: "var(--velo-accento)" }}>
+          <div className="w-10 h-10 rounded-[var(--r-sm)] flex items-center justify-center mb-4" style={{ background: "var(--velo-accento)" }}>
             <AlertTriangle size={18} strokeWidth={1.75} style={{ color: "var(--accent)" }} />
           </div>
           <h2 className="t-sezione mb-3">Questo PDF è una scansione</h2>
@@ -3504,9 +3506,9 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
       </div>
 
       {lettura.avvisi.length > 0 && (
-        <div className="rounded-[9px] px-4 py-3 space-y-1" style={{ background: "var(--velo-accento)", border: "1px solid rgba(154,120,58,.18)" }} role="alert">
+        <div className="rounded-[var(--r-sm)] px-4 py-3 space-y-1" style={{ background: "var(--velo-accento)", border: ".5px solid var(--accento-bordo)" }} role="alert">
           {lettura.avvisi.map((a, i) => (
-            <p key={i} className="text-sm flex items-start gap-2" style={{ color: "#7C6027" }}>
+            <p key={i} className="text-sm flex items-start gap-2" style={{ color: "var(--accento-chiaro)" }}>
               <AlertTriangle size={14} strokeWidth={1.75} className="mt-0.5 shrink-0" /> {a}
             </p>
           ))}
@@ -3514,7 +3516,7 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
       )}
 
       {commesse.length === 0 && (
-        <div className="rounded-[9px] px-4 py-3 text-sm flex items-start gap-2" style={{ background: "var(--velo-errore)", border: "1px solid rgba(166,58,50,.2)", color: "var(--errore)" }}>
+        <div className="rounded-[var(--r-sm)] px-4 py-3 text-sm flex items-start gap-2" style={{ background: "var(--velo-errore)", border: ".5px solid var(--rosso-bordo)", color: "var(--errore)" }}>
           <Info size={14} strokeWidth={1.75} className="mt-0.5 shrink-0" />
           Non ci sono commesse a cui assegnare le righe: creane una nella sezione Dati, poi torna qui.
         </div>
@@ -3532,7 +3534,7 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
             /* Il filetto sul bordo: rende leggibile a colpo d'occhio, scorrendo
                la pagina, quali gruppi sono a posto e quali chiedono qualcosa. */
             borderLeft: `3px solid ${stato.tipo === "vuoto" ? "var(--hairline)" : stile.colore}` }}>
-            <div className="px-7 py-5 flex flex-wrap items-end justify-between gap-5" style={{ borderBottom: "1px solid var(--hairline)", background: "var(--tela-alt)" }}>
+            <div className="px-7 py-5 flex flex-wrap items-end justify-between gap-5" style={{ borderBottom: ".5px solid var(--hairline)", background: "var(--tela-alt)" }}>
               <div>
                 <Micro>{g.ddtNumero ? "Documento di trasporto" : "Righe senza DDT"}</Micro>
                 <p className="t-sotto mt-1.5">
@@ -3567,7 +3569,7 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
                       si cambia, ed è questo che tiene la proposta una proposta. */}
                   <select value={commessaGruppo} onChange={(e) => assegnaGruppo(g.chiave, e.target.value)}
                     className={inputCls} style={{ width: 230, background: "var(--card)",
-                      ...(stato.tipo === "auto" ? { borderColor: "rgba(30,115,80,.45)" } : {}) }}>
+                      ...(stato.tipo === "auto" ? { borderColor: "var(--verde-bordo-forte)" } : {}) }}>
                     <option value={NON_IMPORTARE}>— non importare —</option>
                     {commesse.map((c) => <option key={c.id} value={c.id}>{c.codice} — {c.descrizione}</option>)}
                   </select>
@@ -3589,12 +3591,12 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
                     const tot = totaleRiga(r);
                     const daControllare = r.daControllare.length > 0;
                     return (
-                      <tr key={r.id} style={{ borderTop: "1px solid var(--hairline)", background: daControllare ? "var(--velo-accento)" : "transparent" }}>
+                      <tr key={r.id} style={{ borderTop: ".5px solid var(--hairline)", background: daControllare ? "var(--velo-accento)" : "transparent" }}>
                         <td  style={{ minWidth: 280 }}>
                           <input value={r.descrizione} onChange={(e) => modificaRiga(r.id, { descrizione: e.target.value })}
                             className={inputCls + " py-1.5"} style={{ background: "var(--tela-alt)" }} aria-label="Descrizione della riga" />
                           {daControllare && (
-                            <p className="t-piccolo mt-1 flex items-center gap-1" style={{ color: "#7C6027" }}>
+                            <p className="t-piccolo mt-1 flex items-center gap-1" style={{ color: "var(--accento-chiaro)" }}>
                               <AlertTriangle size={11} strokeWidth={1.75} /> da controllare: {r.daControllare.join(", ")}
                             </p>
                           )}
@@ -3637,9 +3639,9 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
           {[
             { e: "Righe da importare", v: `${daImportare.length} di ${righe.length}` },
             { e: "Totale materiali", v: euro(totaleDaImportare), c: "var(--euro)" },
-            { e: "Righe escluse", v: String(righe.length - daImportare.length), c: righe.length - daImportare.length > 0 ? "#7C6027" : "var(--muted)" },
+            { e: "Righe escluse", v: String(righe.length - daImportare.length), c: righe.length - daImportare.length > 0 ? "var(--accento-chiaro)" : "var(--muted)" },
           ].map((k) => (
-            <div key={k.e} className="rounded-[9px] px-4 py-3" style={{ boxShadow: "var(--ombra-sm)" }}>
+            <div key={k.e} className="rounded-[var(--r-sm)] px-4 py-3" style={{ boxShadow: "var(--ombra-sm)" }}>
               <Micro>{k.e}</Micro>
               <p className="f-mono text-[17px] mt-1.5" style={{ color: k.c || "var(--txt)" }}>{k.v}</p>
             </div>
@@ -3660,8 +3662,8 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
               const s = STILI_STATO[v.tipo];
               const Icona = s.icona;
               return (
-                <div key={v.tipo} className="rounded-[9px] px-3 py-2 flex items-center gap-2 t-piccolo"
-                  style={{ background: s.velo, border: `1px solid ${s.bordo}`, color: s.colore }}>
+                <div key={v.tipo} className="rounded-[var(--r-sm)] px-3 py-2 flex items-center gap-2 t-piccolo"
+                  style={{ background: s.velo, border: `.5px solid ${s.bordo}`, color: s.colore }}>
                   <Icona size={13} strokeWidth={1.75} />
                   <span className="f-mono font-medium">{v.n}</span> {v.testo}
                 </div>
@@ -3674,7 +3676,7 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
             qualcosa è finito sulla commessa sbagliata, si vede qui prima di
             premere Conferma — che è l'unico momento in cui i costi entrano. */}
         {gruppiAutomatici.length > 0 && (
-          <div className="rounded-[9px] px-4 py-3.5 mb-5" style={{ background: "rgba(30,115,80,.06)", border: "1px solid rgba(30,115,80,.18)" }}>
+          <div className="rounded-[var(--r-sm)] px-4 py-3.5 mb-5" style={{ background: "var(--verde-bg)", border: ".5px solid var(--verde-bordo)" }}>
             <p className="t-piccolo font-semibold mb-2" style={{ color: "var(--euro)" }}>
               Abbinati in automatico, da controllare:
             </p>
@@ -3772,14 +3774,14 @@ function VistaDipendenti({ dipendenti, setDipendenti, riep, elimina, notifica })
             return (
               <div key={dip.id} className="p-7" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
                 <div className="flex items-center gap-3.5 mb-5">
-                  <div className="w-10 h-10 rounded-[9px] flex items-center justify-center f-mono t-piccolo shrink-0" style={{ background: "var(--velo)", color: "var(--txt)" }}>{iniziali}</div>
+                  <div className="w-10 h-10 rounded-[var(--r-sm)] flex items-center justify-center f-mono t-piccolo shrink-0" style={{ background: "var(--velo)", color: "var(--txt)" }}>{iniziali}</div>
                   <div className="min-w-0">
                     <p className="t-sotto truncate">{dip.nome} {dip.cognome}</p>
                     <p className="t-piccolo f-mono mt-1.5" style={{ color: "var(--muted)" }}>Ore nell'intervallo: {fmtOre.format(oreIntervallo.get(dip.id) || 0)} h</p>
                   </div>
                   <div className="ml-auto flex gap-1 shrink-0">
-                    <button onClick={() => setEditor({ dip })} aria-label="Modifica dipendente" className="p-2 rounded-[9px] btn" style={{ boxShadow: "var(--ombra-sm)" }}><Pencil size={13} strokeWidth={1.75} /></button>
-                    <button onClick={() => elimina(dip)} aria-label="Elimina dipendente" className="p-2 rounded-[9px] btn" style={{ border: "1px solid rgba(166,58,50,.22)", color: "var(--errore)" }}><Trash2 size={13} strokeWidth={1.75} /></button>
+                    <button onClick={() => setEditor({ dip })} aria-label="Modifica dipendente" className="p-2 rounded-[var(--r-sm)] btn" style={{ boxShadow: "var(--ombra-sm)" }}><Pencil size={13} strokeWidth={1.75} /></button>
+                    <button onClick={() => elimina(dip)} aria-label="Elimina dipendente" className="p-2 rounded-[var(--r-sm)] btn" style={{ border: ".5px solid var(--rosso-bordo)", color: "var(--errore)" }}><Trash2 size={13} strokeWidth={1.75} /></button>
                   </div>
                 </div>
                 {elenco.length === 0 ? (
@@ -3799,7 +3801,7 @@ function VistaDipendenti({ dipendenti, setDipendenti, riep, elimina, notifica })
                         const lordo = dip.lordoMensile?.[m];
                         const tar = lordo != null && ore > 0 ? lordo / ore : null;
                         return (
-                          <tr key={m} style={{ borderTop: "1px solid var(--hairline)" }}>
+                          <tr key={m} style={{ borderTop: ".5px solid var(--hairline)" }}>
                             <td className="py-3">{fmtMese(m)}</td>
                             <td className="py-3 text-right">{lordo != null ? euro(lordo) : <span className="font-sans" style={{ color: "var(--errore)" }}>manca</span>}</td>
                             <td className="py-3 text-right">{fmtOre.format(ore)}</td>
@@ -3865,7 +3867,7 @@ function EditorDipendente({ iniziale, onSalva, onChiudi }) {
           <div key={i} className="flex gap-2 items-center">
             <input type="month" value={riga.mese} onChange={(e) => setLordi((l) => l.map((x, j) => (j === i ? { ...x, mese: e.target.value } : x)))} className={inputCls + " f-mono"} style={{ width: 170 }} aria-label="Mese" />
             <input value={riga.importo} onChange={(e) => setLordi((l) => l.map((x, j) => (j === i ? { ...x, importo: e.target.value } : x)))} placeholder="es. 2.500,00" className={inputCls + " f-mono text-right"} aria-label="Lordo del mese in euro" />
-            <button onClick={() => setLordi((l) => l.filter((_, j) => j !== i))} aria-label="Rimuovi mese" className="p-2 rounded-[9px] shrink-0 btn" style={{ boxShadow: "var(--ombra-sm)" }}><X size={13} strokeWidth={1.75} /></button>
+            <button onClick={() => setLordi((l) => l.filter((_, j) => j !== i))} aria-label="Rimuovi mese" className="p-2 rounded-[var(--r-sm)] shrink-0 btn" style={{ boxShadow: "var(--ombra-sm)" }}><X size={13} strokeWidth={1.75} /></button>
           </div>
         ))}
       </div>
@@ -3976,7 +3978,7 @@ function VistaDati({ dipendenti, commesse, registrazioni, setCommesse, aggiungi,
         {commesse.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {commesse.map((c) => (
-              <span key={c.id} className="inline-flex items-center gap-1.5 t-piccolo rounded-[9px] pl-2.5 pr-1 py-1" style={{ border: "1px solid var(--hairline)", background: "var(--tela-alt)" }} title={c.descrizione}>
+              <span key={c.id} className="inline-flex items-center gap-1.5 t-piccolo rounded-[var(--r-sm)] pl-2.5 pr-1 py-1" style={{ border: ".5px solid var(--hairline)", background: "var(--tela-alt)" }} title={c.descrizione}>
                 <span className="f-mono font-medium">{c.codice}</span>
                 <button onClick={() => setRinomina(c)} aria-label={"Rinomina commessa " + c.codice} title="Rinomina" className="p-0.5 rounded btn" style={{ color: "var(--muted)" }}><Pencil size={10} strokeWidth={1.75} /></button>
                 <button onClick={() => eliminaCommessa(c)} aria-label={"Elimina commessa " + c.codice} className="p-0.5 rounded btn" style={{ color: "var(--muted)" }}><X size={11} strokeWidth={1.75} /></button>
@@ -4009,14 +4011,14 @@ function VistaDati({ dipendenti, commesse, registrazioni, setCommesse, aggiungi,
                 {elenco.map((r) => {
                   const d = dipById.get(r.dipendenteId), c = comById.get(r.commessaId);
                   return (
-                    <tr key={r.id} className="riga" style={{ borderTop: "1px solid var(--hairline)" }}>
+                    <tr key={r.id} className="riga" style={{ borderTop: ".5px solid var(--hairline)" }}>
                       <td className="px-6 py-3 f-mono">{fmtData(r.data)}</td>
                       <td className="px-6 py-3">{d ? d.nome + " " + d.cognome : "—"}</td>
                       <td className="px-6 py-3 f-mono">{c ? c.codice : "—"}</td>
                       <td className="px-6 py-3 f-mono text-right">{fmtOre.format(r.ore)}</td>
                       <td className="px-6 py-3 text-right whitespace-nowrap">
-                        <button onClick={() => setModifica(r)} aria-label="Modifica registrazione" className="p-1.5 rounded-[9px] mr-1 btn" style={{ boxShadow: "var(--ombra-sm)" }}><Pencil size={12} strokeWidth={1.75} /></button>
-                        <button onClick={() => { eliminaReg(r.id); notifica("Registrazione eliminata."); }} aria-label="Elimina registrazione" className="p-1.5 rounded-[9px] btn" style={{ border: "1px solid rgba(166,58,50,.22)", color: "var(--errore)" }}><Trash2 size={12} strokeWidth={1.75} /></button>
+                        <button onClick={() => setModifica(r)} aria-label="Modifica registrazione" className="p-1.5 rounded-[var(--r-sm)] mr-1 btn" style={{ boxShadow: "var(--ombra-sm)" }}><Pencil size={12} strokeWidth={1.75} /></button>
+                        <button onClick={() => { eliminaReg(r.id); notifica("Registrazione eliminata."); }} aria-label="Elimina registrazione" className="p-1.5 rounded-[var(--r-sm)] btn" style={{ border: ".5px solid var(--rosso-bordo)", color: "var(--errore)" }}><Trash2 size={12} strokeWidth={1.75} /></button>
                       </td>
                     </tr>
                   );
@@ -4253,117 +4255,170 @@ function StileGlobale() {
     <style>{`
       @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400..600&display=swap');
       :root{
-        /* --- superfici: avorio caldo per la pagina, bianco puro per le card,
-               così il contenuto stacca senza bisogno di ombre --- */
-        --tela:#FBFAF7; --card:#FFFFFF; --tela-alt:#F6F4EF;
-        --ink:#1A1A18;
+        /* ============ TEMA SCURO — la tavolozza approvata ============
+           Sei livelli di fondo, dal più profondo al più rialzato. In un tema
+           scuro la profondità non si fa con le ombre (che su nero non si
+           vedono) ma con la LUMINOSITÀ del fondo e un filo di bordo. */
+        --bg-app:#08080A;         /* l'area dei contenuti */
+        --bg-sidebar:#0A0A0D;     /* la barra laterale */
+        --bg-card:#0D0D10;        /* card, riquadri, tabelle */
+        --bg-elevato:#131317;     /* box icone, campi, elementi rialzati */
+        --bg-hover:#16161A;       /* voce attiva, passaggio del mouse */
+        --bg-pill:#18181C;        /* badge grigi, contatori */
 
-        /* --- testo: tre livelli, non uno di più --- */
-        --txt:#1A1A18; --muted:#6B6B66; --tenue:#9C9A93;
+        /* --- bordi: sottilissimi. Sono loro a disegnare la struttura --- */
+        --bordo:#1A1A1F;          /* bordo card e divisori principali */
+        --bordo-tenue:#131316;    /* divisori dentro le liste */
+        --bordo-input:#1F1F24;    /* bordo campi e box */
 
-        /* --- linee: il filo che sostituisce l'ombra --- */
-        --hairline:rgba(26,26,24,.09); --hairline-forte:rgba(26,26,24,.15);
-        --velo:rgba(26,26,24,.04);
+        /* --- testo: sette gradini, dal numero-eroe alla nota appena
+               accennata. Sono molti, ma in un tema scuro servono: la
+               gerarchia si legge quasi solo dal grigio. --- */
+        --txt:#FAFAFA;            /* numeri e titoli principali */
+        --txt-chiaro:#F4F4F5;     /* testo forte */
+        --txt-medio:#E4E4E7;      /* testo normale nelle righe */
+        --txt-attenuato:#A1A1AA;  /* testo secondario */
+        --txt-tenue:#71717A;      /* etichette, didascalie */
+        --txt-debole:#52525B;     /* segnaposto, decimali, note */
+        --txt-fioco:#4A4A50;      /* numerazione, elementi minimi */
 
-        /* --- accento bronzo: con parsimonia --- */
-        --accent:#9A783A; --accent-chiaro:#C4A265;
-        --velo-accento:rgba(154,120,58,.07);
+        /* --- accento bronzo spento: logo, voce attiva, link, badge. E basta.
+               Se comincia a comparire su ogni riga non è più un accento. --- */
+        --accento:#8A6D4B; --accento-chiaro:#A88B66;
+        --accento-testo:#F0E7DA; --accento-bg:#211B12; --accento-bordo:#3A2E1E;
 
-        /* --- semantici: verde solo per gli euro, rosso solo per gli errori --- */
-        --euro:#1E7350; --velo-euro:rgba(30,115,80,.07);
-        --errore:#A63A32; --velo-errore:rgba(166,58,50,.06);
+        /* --- significato, mai decorazione --- */
+        --verde:#4ADE80; --verde-bg:#0D2318; --verde-bordo:#16432A;
+        /* Un verde di bordo più marcato: serve solo dove il verde è un
+           SEGNALE da notare (la commessa proposta in automatico), non una
+           cornice qualsiasi. */
+        --verde-bordo-forte:#215C3B;
+        --rosso:#F09595; --rosso-bg:#2A1315; --rosso-bordo:#4A2226;
 
-        /* --- superficie scura (sidebar, testata): calda, non bluastra --- */
-        --scuro:#191917; --scuro-txt:#EDEAE3; --scuro-muted:#A8A49B;
-        --scuro-velo:rgba(255,255,255,.055); --scuro-linea:rgba(255,255,255,.07);
-
-        /* --- raggi: card 14, controlli 9. Sempre questi --- */
-        --r-xs:6px; --r-sm:9px; --r-md:14px; --r-lg:18px;
-
-        /* --- elevazioni: anelli di 1px, non ombre --- */
-        --ombra-xs:0 0 0 1px rgba(26,26,24,.06);
-        --ombra-sm:0 0 0 1px rgba(26,26,24,.075);
-        --ombra-md:0 0 0 1px rgba(26,26,24,.085), 0 1px 2px rgba(26,26,24,.035);
-        --ombra-lg:0 0 0 1px rgba(26,26,24,.08), 0 32px 64px -20px rgba(26,26,24,.28);
-        --ombra-hover:0 0 0 1px rgba(26,26,24,.11), 0 2px 10px -2px rgba(26,26,24,.07);
+        /* --- raggi: card 14, box e campi 8, pillole 6 --- */
+        --r-xs:6px; --r-sm:8px; --r-md:14px; --r-lg:16px;
 
         /* --- moto: un tempo solo per tutta l'applicazione --- */
-        --moto:180ms cubic-bezier(.2,.7,.3,1);
+        --moto:170ms cubic-bezier(.2,.7,.3,1);
+
+        /* ============ PONTE COL NOME PRECEDENTE ============
+           Il resto dell'applicazione parla ancora con i nomi del tema chiaro
+           (--card, --txt, --muted, --hairline, --ombra-*…). Invece di
+           riscrivere settecento punti a mano — e sbagliarne qualcuno — quei
+           nomi vengono ridefiniti QUI sopra la tavolozza nuova. È il motivo
+           per cui esistevano: cambiare tema in un punto solo.
+
+           Le --ombra-* diventano anelli di bordo. In un tema scuro l'ombra
+           non ha nulla da scurire: la struttura la disegna il filo. */
+        --tela:var(--bg-app); --card:var(--bg-card); --tela-alt:var(--bg-elevato);
+        --ink:var(--bg-pill);
+        --muted:var(--txt-attenuato); --tenue:var(--txt-tenue);
+        --hairline:var(--bordo); --hairline-forte:var(--bordo-input);
+        --velo:rgba(255,255,255,.028);
+        --accent:var(--accento); --accent-chiaro:var(--accento-chiaro);
+        --velo-accento:var(--accento-bg);
+        --euro:var(--verde); --velo-euro:var(--verde-bg);
+        --errore:var(--rosso); --velo-errore:var(--rosso-bg);
+        --scuro:var(--bg-sidebar); --scuro-txt:var(--txt-chiaro);
+        --scuro-muted:var(--txt-attenuato);
+        --scuro-velo:var(--bg-hover); --scuro-linea:var(--bordo);
+        --ombra-xs:0 0 0 .5px var(--bordo-tenue);
+        --ombra-sm:0 0 0 .5px var(--bordo);
+        --ombra-md:0 0 0 .5px var(--bordo-input);
+        --ombra-lg:0 0 0 .5px var(--bordo-input), 0 24px 64px -12px rgba(0,0,0,.7);
+        --ombra-hover:0 0 0 .5px #26262C;
       }
+      html{ background:var(--bg-app); }
       body{
         font-family:'Inter',-apple-system,system-ui,sans-serif;
-        font-size:15px; line-height:1.6; color:var(--txt);
+        font-size:13px; line-height:1.55; color:var(--txt-medio);
+        background:var(--bg-app);
         -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
         font-feature-settings:'cv05' 1,'cv11' 1;   /* l/1 più distinguibili */
       }
-      ::selection{ background:rgba(154,120,58,.18); }
+      /* Su fondo scuro i selettori nativi di data e i menù a tendina vanno
+         detti al browser, altrimenti disegna i suoi in tema chiaro. */
+      :root{ color-scheme:dark; }
+      ::selection{ background:rgba(138,109,75,.32); color:var(--txt); }
 
-      /* --- SCALA TIPOGRAFICA: usare queste classi, non misure a caso ------- */
-      .t-titolo{ font-size:33px; line-height:1.15; font-weight:600; letter-spacing:-.023em; }
-      .t-sezione{ font-size:21px; line-height:1.28; font-weight:600; letter-spacing:-.016em; }
-      .t-sotto{ font-size:17px; line-height:1.4; font-weight:500; letter-spacing:-.009em; }
-      .t-corpo{ font-size:15px; line-height:1.62; }
-      .t-piccolo{ font-size:13.5px; line-height:1.55; }
-      .t-micro{ font-size:11px; font-weight:500; letter-spacing:.09em; text-transform:uppercase; }
-      /* Le misure di lettura: nessuna riga di testo deve diventare un nastro. */
-      .t-leggibile{ max-width:64ch; }
-      @media (max-width:640px){ .t-titolo{ font-size:27px; } .t-sezione{ font-size:19px; } }
+      /* --- SCALA TIPOGRAFICA: densa, come si aspetta un tema scuro -------- */
+      .t-eroe{ font-size:45px; line-height:1.02; font-weight:600; letter-spacing:-.045em; color:var(--txt); }
+      .t-titolo{ font-size:21px; line-height:1.25; font-weight:600; letter-spacing:-.02em; color:var(--txt); }
+      .t-sezione{ font-size:17px; line-height:1.3; font-weight:600; letter-spacing:-.015em; color:var(--txt-chiaro); }
+      .t-sotto{ font-size:13.5px; line-height:1.4; font-weight:500; letter-spacing:-.005em; color:var(--txt-chiaro); }
+      .t-corpo{ font-size:13px; line-height:1.6; }
+      .t-piccolo{ font-size:12px; line-height:1.5; }
+      .t-micro{ font-size:11px; font-weight:500; letter-spacing:.06em; text-transform:uppercase; color:var(--txt-fioco); }
+      .t-leggibile{ max-width:66ch; }
+      @media (max-width:640px){ .t-eroe{ font-size:34px; } .t-titolo{ font-size:19px; } }
 
-      .f-display{ font-weight:600; letter-spacing:-.019em; }
-      /* Non più un carattere monospaziato: cifre a larghezza fissa dentro Inter.
-         Si incolonnano come in una tabella, ma restano nella stessa voce. */
-      .f-mono{ font-variant-numeric:tabular-nums; font-feature-settings:'tnum' 1; letter-spacing:-.006em; }
-      .cifra-grande{ font-variant-numeric:tabular-nums; font-weight:600; letter-spacing:-.028em; }
+      .f-display{ font-weight:600; letter-spacing:-.018em; }
+      /* Cifre a larghezza fissa: si incolonnano come in una tabella. */
+      .f-mono{ font-variant-numeric:tabular-nums; font-feature-settings:'tnum' 1; letter-spacing:-.004em; }
+      .cifra-grande{ font-variant-numeric:tabular-nums; font-weight:600; letter-spacing:-.032em; color:var(--txt); }
 
-      .superficie-scura{ background:var(--scuro); }
+      .superficie-scura{ background:var(--bg-sidebar); }
 
-      /* --- CAMPI: anello di messa a fuoco sobrio, niente alone --- */
+      /* --- CAMPI: fondo rialzato, bordo appena visibile --- */
       .campo{
-        background:var(--card); border:1px solid var(--hairline);
-        border-radius:var(--r-sm); color:var(--txt);
-        transition:border-color var(--moto), box-shadow var(--moto);
+        background:var(--bg-elevato); border:.5px solid var(--bordo-input);
+        border-radius:var(--r-sm); color:var(--txt-chiaro);
+        transition:border-color var(--moto), background var(--moto);
       }
-      .campo:hover{ border-color:var(--hairline-forte); }
-      .campo:focus{ box-shadow:0 0 0 3px rgba(154,120,58,.14); border-color:var(--accent); outline:none; }
-      .campo::placeholder{ color:var(--tenue); }
+      .campo:hover{ border-color:#26262C; }
+      .campo:focus{ border-color:var(--accento); background:var(--bg-hover); outline:none; }
+      .campo::placeholder{ color:var(--txt-debole); }
 
       /* --- BOTTONI: nessun cambio di dimensione al passaggio del mouse ----- */
-      .btn{ transition:background var(--moto), color var(--moto), box-shadow var(--moto), opacity var(--moto); }
-      .btn:focus-visible{ box-shadow:0 0 0 3px rgba(154,120,58,.28); outline:none; }
-      .btn:active{ opacity:.9; }
-      .btn:disabled{ opacity:.45; cursor:not-allowed; }
+      .btn{ transition:background var(--moto), color var(--moto), border-color var(--moto), opacity var(--moto); }
+      .btn:focus-visible{ box-shadow:0 0 0 2px var(--bg-app), 0 0 0 4px var(--accento); outline:none; }
+      .btn:active{ opacity:.85; }
+      .btn:disabled{ opacity:.4; cursor:not-allowed; }
 
-      /* --- CARD: appoggiata, delimitata da un filo. L'ombra solo in hover --- */
-      .card{ background:var(--card); border-radius:var(--r-md); box-shadow:var(--ombra-sm); }
-      .card-viva{ transition:box-shadow var(--moto); }
-      .card-viva:hover{ box-shadow:var(--ombra-hover); }
+      /* --- CARD: in un tema scuro la profondità è il fondo più chiaro
+             più un filo di bordo. Le ombre non hanno niente da scurire. --- */
+      .card{ background:var(--bg-card); border:.5px solid var(--bordo); border-radius:var(--r-md); }
+      .card-viva{ transition:border-color var(--moto); }
+      .card-viva:hover{ border-color:var(--bordo-input); }
 
-      /* --- TABELLE: righe alte, sole linee fini, nessuna zebra --- */
+      /* --- BOX: il contenitore rialzato di icone, campi, contatori --- */
+      .box{ background:var(--bg-elevato); border:.5px solid var(--bordo-input); border-radius:var(--r-sm); }
+
+      /* --- TABELLE: dense, divisori tenui, nessuna zebra --- */
       .tabella{ width:100%; border-collapse:collapse; }
       .tabella th{
-        font-size:11px; font-weight:500; letter-spacing:.09em; text-transform:uppercase;
-        color:var(--tenue); text-align:left; padding:11px 16px; white-space:nowrap;
-        border-bottom:1px solid var(--hairline);
+        font-size:11px; font-weight:500; letter-spacing:.06em; text-transform:uppercase;
+        color:var(--txt-fioco); text-align:left; padding:10px 16px; white-space:nowrap;
+        border-bottom:.5px solid var(--bordo);
       }
-      .tabella td{ padding:14px 16px; border-top:1px solid var(--hairline); }
+      .tabella td{ padding:13px 16px; border-top:.5px solid var(--bordo-tenue); color:var(--txt-medio); }
       .tabella tbody tr:first-child td{ border-top:none; }
       .riga{ transition:background var(--moto); }
-      .riga:hover{ background:var(--velo); }
-      tr.riga:focus-visible{ outline:2px solid rgba(154,120,58,.45); outline-offset:-2px; }
+      .riga:hover{ background:var(--bg-hover); }
+      tr.riga:focus-visible{ outline:1px solid var(--accento); outline-offset:-1px; }
 
-      /* --- PILLOLE --- */
+      /* --- PILLOLE E BADGE --- */
       .pill{
         display:inline-flex; align-items:center; gap:6px;
-        font-size:11px; font-weight:500; letter-spacing:.06em; text-transform:uppercase;
-        padding:4px 9px; border-radius:var(--r-xs); white-space:nowrap;
+        font-size:11px; font-weight:500; letter-spacing:.05em; text-transform:uppercase;
+        padding:4px 8px; border-radius:var(--r-xs); white-space:nowrap;
       }
+      /* Il codice di una commessa: bronzo pieno per il primo, grigio per gli
+         altri. È il modo di dire "questo conta più degli altri" senza scriverlo. */
+      .badge-codice{
+        display:inline-flex; align-items:center; justify-content:center;
+        font-size:11.5px; font-weight:500; font-variant-numeric:tabular-nums;
+        padding:3px 8px; border-radius:var(--r-xs); white-space:nowrap;
+        background:var(--bg-pill); color:var(--txt-attenuato);
+      }
+      .badge-codice-primo{ background:var(--accento); color:var(--accento-testo); }
 
       /* --- BARRE DI SCORRIMENTO: presenti ma discrete --- */
-      *{ scrollbar-width:thin; scrollbar-color:rgba(26,26,24,.18) transparent; }
+      *{ scrollbar-width:thin; scrollbar-color:#26262C transparent; }
       *::-webkit-scrollbar{ width:10px; height:10px; }
       *::-webkit-scrollbar-track{ background:transparent; }
-      *::-webkit-scrollbar-thumb{ background:rgba(26,26,24,.16); border:3px solid transparent; background-clip:content-box; border-radius:99px; }
-      *::-webkit-scrollbar-thumb:hover{ background:rgba(26,26,24,.28); background-clip:content-box; }
+      *::-webkit-scrollbar-thumb{ background:#26262C; border:3px solid transparent; background-clip:content-box; border-radius:99px; }
+      *::-webkit-scrollbar-thumb:hover{ background:#34343C; background-clip:content-box; }
       /* --- MOTO: sobrio. Nessun rimbalzo, nessun lampeggio: solo un accenno
              di movimento che accompagna, e sempre in uscita (ease-out). --- */
       @keyframes pop{ from{opacity:0; transform:translateY(6px) scale(.99);} to{opacity:1; transform:none;} }
