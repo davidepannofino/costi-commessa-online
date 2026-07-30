@@ -2356,9 +2356,9 @@ function AndamentoMensile({ serieMensile }) {
     : null;
 
   return (
-    <section className="rounded-2xl p-6" style={{ background: "var(--card)", boxShadow: "var(--ombra-sm)" }}>
+    <section className="p-7" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-5">
-        <h2 className="f-display text-lg">Andamento mensile</h2>
+        <h2 className="t-sotto">Andamento mensile</h2>
         <p className="text-xs" style={{ color: "var(--muted)" }}>
           {datiMesi.length >= 2
             ? `Ultimi ${datiMesi.length} mesi con ore registrate · indipendente dall'intervallo scelto`
@@ -2367,12 +2367,12 @@ function AndamentoMensile({ serieMensile }) {
       </div>
 
       {datiMesi.length < 2 ? (
-        <div className="flex flex-col items-center justify-center text-center py-12 px-6 rounded-xl" style={{ background: "var(--tela)" }}>
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3.5" style={{ background: "var(--velo-accento)" }}>
-            <Clock size={18} strokeWidth={1.75} style={{ color: "var(--accent)" }} />
+        <div className="flex flex-col items-center justify-center text-center py-14 px-6" style={{ background: "var(--tela-alt)", borderRadius: "var(--r-sm)" }}>
+          <div className="flex items-center justify-center mb-4" style={{ width: 40, height: 40, borderRadius: "var(--r-md)", background: "var(--velo)" }}>
+            <Clock size={18} strokeWidth={1.5} style={{ color: "var(--muted)" }} />
           </div>
-          <p className="f-display text-base mb-1.5" style={{ color: "var(--txt)" }}>Servono almeno due mesi di dati per vedere l'andamento</p>
-          <p className="text-sm max-w-sm leading-relaxed" style={{ color: "var(--muted)" }}>
+          <p className="t-sotto mb-2" style={{ color: "var(--txt)" }}>Servono almeno due mesi di dati per vedere l'andamento</p>
+          <p className="t-piccolo" style={{ color: "var(--muted)", maxWidth: "48ch" }}>
             {datiMesi.length === 1
               ? `Al momento c'è un solo mese con ore registrate (${fmtMese(mesiSerie[0].mese)}). Appena ne arriverà un altro, qui comparirà il confronto nel tempo.`
               : "Registra o importa le ore di almeno due mesi diversi per confrontare come cambia il costo del lavoro."}
@@ -2402,9 +2402,9 @@ function AndamentoMensile({ serieMensile }) {
                     <YAxis tick={STILE_ASSE} tickFormatter={(v) => fmtOre.format(v)} width={54} axisLine={false} tickLine={false} />
                     <Tooltip formatter={(v) => [euro(v), "Costo del mese"]}
                       contentStyle={STILE_TOOLTIP}
-                      cursor={{ fill: "rgba(23,27,34,.04)" }} />
+                      cursor={{ fill: "rgba(26,26,24,.035)" }} />
                     <Bar dataKey="costo" radius={[2, 2, 0, 0]} maxBarSize={38}>
-                      {datiMesi.map((_, i) => <Cell key={i} fill={i === datiMesi.length - 1 ? "var(--accent)" : "#454C57"} />)}
+                      {datiMesi.map((_, i) => <Cell key={i} fill={i === datiMesi.length - 1 ? "var(--accent)" : BARRA_ALTRE} />)}
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
@@ -2421,8 +2421,8 @@ function AndamentoMensile({ serieMensile }) {
                     <YAxis tick={STILE_ASSE} tickFormatter={(v) => fmtOre.format(v)} width={46} axisLine={false} tickLine={false} />
                     <Tooltip formatter={(v) => [fmtOre.format(v) + " h", "Ore del mese"]}
                       contentStyle={STILE_TOOLTIP}
-                      cursor={{ fill: "rgba(23,27,34,.04)" }} />
-                    <Bar dataKey="ore" radius={[2, 2, 0, 0]} maxBarSize={38} fill="#8A9099" />
+                      cursor={{ fill: "rgba(26,26,24,.035)" }} />
+                    <Bar dataKey="ore" radius={[2, 2, 0, 0]} maxBarSize={38} fill="#C7C3B8" />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -2647,16 +2647,18 @@ function VistaCommesse({ riep, costi, dal, al, apri, esportaCsv, esportaXlsx, es
   const maxCosto = costi.righe.length ? Math.max(...costi.righe.map((r) => r.costoTotale)) : 0;
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-wrap items-end justify-between gap-4">
+    <div className="space-y-9">
+      <div className="flex flex-wrap items-end justify-between gap-5">
         <div>
           <Micro>Riepilogo</Micro>
-          <h1 className="f-display text-[26px] mt-1" style={{ letterSpacing: "-0.01em" }}>Commesse</h1>
+          <h1 className="t-titolo mt-2">Commesse</h1>
         </div>
+        {/* Una sola azione piena — il PDF, che è quella che si usa davvero — e
+            le altre in tono minore: così si capisce cosa premere. */}
         <div className="flex gap-2 flex-wrap">
           <Bottone variante="fantasma" onClick={esportaCsv}><FileText size={14} strokeWidth={1.75} /> CSV</Bottone>
           <Bottone variante="fantasma" onClick={esportaXlsx}><FileSpreadsheet size={14} strokeWidth={1.75} /> Excel</Bottone>
-          <Bottone variante="fantasma" onClick={esportaTutto}><FileDown size={14} strokeWidth={1.75} /> Esporta tutto in Excel</Bottone>
+          <Bottone variante="fantasma" onClick={esportaTutto}><FileDown size={14} strokeWidth={1.75} /> Esporta tutto</Bottone>
           <Bottone onClick={stampa}><Download size={14} strokeWidth={1.75} /> PDF</Bottone>
         </div>
       </div>
@@ -2666,59 +2668,59 @@ function VistaCommesse({ riep, costi, dal, al, apri, esportaCsv, esportaXlsx, es
           testo="Nessuna ora né materiale registrati in queste date. Allarga l'intervallo o registra nuove ore."
           azione={<Bottone onClick={vaiDati}><Plus size={14} strokeWidth={1.75} /> Registra ore</Bottone>} />
       ) : (
-        <div className="rounded-2xl overflow-hidden" style={{ background: "var(--card)", boxShadow: "var(--ombra-sm)" }}>
-          <div className="px-6 py-4 flex items-center justify-between gap-3" style={{ borderBottom: "1px solid var(--hairline)" }}>
-            <p className="text-[13px] f-mono" style={{ color: "var(--muted)" }}>{fmtData(dal)} – {fmtData(al)} · {righe.length} commesse</p>
+        <div className="overflow-hidden" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
+          <div className="px-7 py-5 flex items-center justify-between gap-4" style={{ borderBottom: "1px solid var(--hairline)" }}>
+            <p className="t-piccolo f-mono" style={{ color: "var(--muted)" }}>{fmtData(dal)} – {fmtData(al)} · {righe.length} commesse</p>
             <div className="relative">
-              <Search size={13} strokeWidth={1.75} className="absolute left-3 top-2.5" style={{ color: "var(--muted)" }} />
+              <Search size={14} strokeWidth={1.75} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--tenue)" }} />
               <input value={cerca} onChange={(e) => setCerca(e.target.value)} placeholder="Cerca…"
-                className={inputCls + " pl-8 py-1.5"} style={{ width: 180, background: "var(--tela)" }} aria-label="Cerca commessa" />
+                className="pl-9 pr-3 py-2 text-sm outline-none campo" style={{ width: 190, background: "var(--tela)" }} aria-label="Cerca commessa" />
             </div>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="tabella text-sm">
               <thead>
-                <tr className="text-left">
+                <tr>
                   {[["codice", "Codice", ""], [null, "Descrizione", "hidden lg:table-cell"], ["ore", "Ore", "text-right"],
-                    [null, "Quota", "w-32 hidden xl:table-cell"],
+                    [null, "Quota", "w-36 hidden xl:table-cell"],
                     ["manodopera", "Manodopera", "text-right"], ["materiali", "Materiali", "text-right"], ["totale", "Totale", "text-right"]].map(([campo, nome, cls]) => (
-                    <th key={nome} className={`px-6 py-3.5 text-[11px] font-semibold uppercase ${cls} ${campo ? "cursor-pointer select-none" : ""}`}
-                      style={{ letterSpacing: ".1em", color: "var(--muted)" }} onClick={campo ? () => clic(campo) : undefined}>
+                    <th key={nome} className={`${cls} ${campo ? "cursor-pointer select-none" : ""}`}
+                      onClick={campo ? () => clic(campo) : undefined}>
                       {nome}{campo ? freccia(campo) : ""}
                     </th>
                   ))}
-                  <th className="w-8" />
+                  <th className="w-10" />
                 </tr>
               </thead>
               <tbody>
                 {righe.map((r) => (
                   <tr key={r.commessa.id} onClick={() => apri(r)} tabIndex={0} onKeyDown={(e) => e.key === "Enter" && apri(r)}
-                    className="cursor-pointer transition-colors riga" style={{ borderTop: "1px solid var(--hairline)" }}>
-                    <td className="px-6 py-4 f-mono font-medium">{r.commessa.codice}</td>
-                    <td className="px-6 py-4 hidden lg:table-cell" style={{ color: "var(--muted)" }}>{r.commessa.descrizione}</td>
-                    <td className="px-6 py-4 f-mono text-right">{fmtOre.format(r.ore)}</td>
-                    <td className="px-6 py-4 hidden xl:table-cell">
-                      <div className="flex items-center gap-2.5">
-                        <div className="flex-1"><BarraQuota quota={maxCosto > 0 ? r.costoTotale / maxCosto : 0} colore="#454C57" /></div>
-                        <span className="f-mono text-xs w-11 text-right" style={{ color: "var(--muted)" }}>{fmtPerc.format(costi.totTotale > 0 ? (r.costoTotale / costi.totTotale) * 100 : 0)}%</span>
+                    className="cursor-pointer riga">
+                    <td className="f-mono font-medium">{r.commessa.codice}</td>
+                    <td className="hidden lg:table-cell" style={{ color: "var(--muted)" }}>{r.commessa.descrizione}</td>
+                    <td className="f-mono text-right">{fmtOre.format(r.ore)}</td>
+                    <td className="hidden xl:table-cell">
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1"><BarraQuota quota={maxCosto > 0 ? r.costoTotale / maxCosto : 0} colore="#B4B0A6" /></div>
+                        <span className="f-mono t-piccolo w-11 text-right" style={{ color: "var(--tenue)" }}>{fmtPerc.format(costi.totTotale > 0 ? (r.costoTotale / costi.totTotale) * 100 : 0)}%</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 f-mono text-right" style={{ color: "var(--euro)" }}>{euro(r.costoManodopera)}</td>
-                    <td className="px-6 py-4 f-mono text-right" style={{ color: r.costoMateriali > 0 ? "var(--euro)" : "var(--muted)" }}>{euro(r.costoMateriali)}</td>
-                    <td className="px-6 py-4 f-mono text-right font-medium" style={{ color: "var(--accent)" }}>{euro(r.costoTotale)}</td>
-                    <td className="pr-4 text-right"><ChevronRight size={14} strokeWidth={1.75} style={{ color: "var(--muted)" }} /></td>
+                    <td className="f-mono text-right" style={{ color: "var(--euro)" }}>{euro(r.costoManodopera)}</td>
+                    <td className="f-mono text-right" style={{ color: r.costoMateriali > 0 ? "var(--euro)" : "var(--tenue)" }}>{euro(r.costoMateriali)}</td>
+                    <td className="f-mono text-right font-medium">{euro(r.costoTotale)}</td>
+                    <td className="text-right pr-5"><ChevronRight size={14} strokeWidth={1.75} style={{ color: "var(--tenue)" }} /></td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
-                <tr style={{ borderTop: "1px solid var(--txt)", background: "var(--tela)" }}>
-                  <td className="px-6 py-4 f-display">Totale</td>
+                <tr style={{ borderTop: "1px solid var(--hairline-forte)", background: "var(--tela-alt)" }}>
+                  <td className="font-medium">Totale</td>
                   <td className="hidden lg:table-cell" />
-                  <td className="px-6 py-4 f-mono text-right font-medium">{fmtOre.format(riep.totOre)}</td>
+                  <td className="f-mono text-right font-medium">{fmtOre.format(riep.totOre)}</td>
                   <td className="hidden xl:table-cell" />
-                  <td className="px-6 py-4 f-mono text-right font-medium" style={{ color: "var(--euro)" }}>{euro(costi.totManodopera)}</td>
-                  <td className="px-6 py-4 f-mono text-right font-medium" style={{ color: "var(--euro)" }}>{euro(costi.totMateriali)}</td>
-                  <td className="px-6 py-4 f-mono text-right font-medium" style={{ color: "var(--accent)" }}>{euro(costi.totTotale)}</td>
+                  <td className="f-mono text-right font-medium" style={{ color: "var(--euro)" }}>{euro(costi.totManodopera)}</td>
+                  <td className="f-mono text-right font-medium" style={{ color: "var(--euro)" }}>{euro(costi.totMateriali)}</td>
+                  <td className="f-mono text-right font-medium" style={{ fontSize: 15 }}>{euro(costi.totTotale)}</td>
                   <td />
                 </tr>
               </tfoot>
@@ -3186,7 +3188,7 @@ function SezioneDocumenti({ commessa, allegati, spazio, fornitoriNoti = [], onCa
               {fmtDimensione(usato)} di {fmtDimensione(quota)}
             </p>
           </div>
-          <div className="mt-2"><BarraQuota quota={quotaPiena} colore={quotaPiena > 0.9 ? "#A63A32" : "#454C57"} /></div>
+          <div className="mt-2"><BarraQuota quota={quotaPiena} colore={quotaPiena > 0.9 ? "#A63A32" : BARRA_ALTRE} /></div>
         </div>
       )}
     </div>
@@ -3448,7 +3450,7 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
           <Micro>Importazione fattura</Micro>
           <h1 className="f-display text-[26px] mt-1" style={{ letterSpacing: "-0.01em" }}>{lettura.fattura.nomeFile}</h1>
         </div>
-        <section className="rounded-2xl p-6" style={{ background: "var(--card)", boxShadow: "var(--ombra-sm)" }}>
+        <section className="p-7" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
           <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-4" style={{ background: "var(--velo-accento)" }}>
             <AlertTriangle size={18} strokeWidth={1.75} style={{ color: "var(--accent)" }} />
           </div>
@@ -3627,7 +3629,7 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
       })}
 
       {/* riepilogo e conferma */}
-      <section className="rounded-2xl p-6" style={{ background: "var(--card)", boxShadow: "var(--ombra-sm)" }}>
+      <section className="p-7" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
         <h2 className="f-display text-lg mb-4">Riepilogo prima di importare</h2>
         <div className="grid sm:grid-cols-3 gap-4 mb-5">
           {[
@@ -3766,7 +3768,7 @@ function VistaDipendenti({ dipendenti, setDipendenti, riep, elimina, notifica })
             const elenco = [...mesi].sort().reverse();
             const iniziali = ((dip.nome[0] || "") + (dip.cognome[0] || "")).toUpperCase();
             return (
-              <div key={dip.id} className="rounded-2xl p-6" style={{ background: "var(--card)", boxShadow: "var(--ombra-sm)" }}>
+              <div key={dip.id} className="p-7" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
                 <div className="flex items-center gap-3.5 mb-5">
                   <div className="w-10 h-10 rounded-xl flex items-center justify-center f-mono text-[13px] shrink-0" style={{ background: "var(--velo)", color: "var(--txt)" }}>{iniziali}</div>
                   <div className="min-w-0">
