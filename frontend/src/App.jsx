@@ -3797,16 +3797,20 @@ function StatoAbbinamento({ stato, commessa }) {
     vuoto: <>Da assegnare</>,
   }[tipo];
 
+  /* Niente riquadro. Lo stato era dentro un box con fondo e bordo colorati,
+     appoggiato dentro la testata del gruppo, che a sua volta sta dentro la card
+     — e la card ha già un filo di TRE pixel dello stesso colore sul fianco.
+     Lo stesso fatto detto due volte con lo stesso colore: il filo fa la
+     scansione da lontano, queste parole la spiegano da vicino. */
   return (
-    <div className="rounded-[var(--r-sm)] px-3 py-2 mt-2 inline-flex flex-col gap-1"
-      style={{ background: s.velo, border: `.5px solid ${s.bordo}` }}>
+    <div className="mt-2.5">
       <p className="t-piccolo flex items-start gap-1.5" style={{ color: s.colore }}>
         <Icona size={13} strokeWidth={1.75} className="mt-0.5 shrink-0" /> <span>{testo}</span>
       </p>
-      {/* Il perché: sul giallo è l'informazione che permette di decidere in due
+      {/* Il perché: sull'ambra è l'informazione che permette di decidere in due
           secondi invece di andare a riaprire l'archivio. */}
       {abbinamento?.motivo && tipo !== "manuale" && tipo !== "vuoto" && (
-        <p className="t-piccolo pl-[19px]" style={{ color: "var(--muted)" }}>{abbinamento.motivo}</p>
+        <p className="t-piccolo pl-[19px] mt-0.5" style={{ color: "var(--txt-tenue)" }}>{abbinamento.motivo}</p>
       )}
     </div>
   );
@@ -4044,13 +4048,13 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
           <div className="space-y-3">
             {[
               {
-                filo: "var(--bordo-input)", velo: "var(--bg-elevato)", tono: "var(--txt-chiaro)", icona: CheckCircle2,
+                filo: "var(--bordo-input)", tono: "var(--txt-chiaro)", icona: CheckCircle2,
                 ddt: "DDT 4711", data: "06/07/2026", righe: "3 righe", totale: "652,00 €",
                 codice: "P19", stato: <>Abbinato in automatico a <strong>P19</strong></>,
                 motivo: "numero, data e fornitore combaciano col documento archiviato",
               },
               {
-                filo: "var(--ambra)", velo: "var(--ambra-bg)", tono: "var(--ambra)", icona: HelpCircle,
+                filo: "var(--ambra)", tono: "var(--ambra)", icona: HelpCircle,
                 ddt: "DDT 4738", data: "14/07/2026", righe: "2 righe", totale: "744,80 €",
                 codice: null, stato: <>Possibile abbinamento a <strong>P13</strong> — da confermare</>,
                 motivo: "il fornitore non combacia: i numeri di DDT non sono unici fra fornitori diversi",
@@ -4061,13 +4065,18 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
                   <p className="t-sotto">
                     {g.ddt} <span className="t-piccolo" style={{ fontWeight: 400, color: "var(--txt-tenue)" }}>del {g.data}</span>
                   </p>
-                  <p className="f-mono t-piccolo" style={{ color: "var(--txt-tenue)" }}>{g.righe} · {g.totale}</p>
+                  <p className="f-mono t-piccolo" style={{ color: "var(--txt-tenue)" }}>
+                    {g.righe} · <span style={{ color: "var(--verde)" }}>{g.totale}</span>
+                  </p>
                 </div>
-                <div className="mt-3 inline-flex flex-col gap-1 px-3 py-2" style={{ background: g.velo, border: `.5px solid ${g.filo === "var(--ambra)" ? "var(--ambra-bordo)" : "var(--bordo-input)"}`, borderRadius: "var(--r-sm)" }}>
+                {/* Stessa forma esatta di StatoAbbinamento: se una cambia,
+                    cambiano tutte e due, altrimenti l'anteprima promette una
+                    cosa e la schermata ne consegna un'altra. */}
+                <div className="mt-2.5">
                   <p className="t-piccolo flex items-start gap-1.5" style={{ color: g.tono }}>
                     <g.icona size={13} strokeWidth={1.75} className="mt-0.5 shrink-0" /> <span>{g.stato}</span>
                   </p>
-                  <p className="t-piccolo pl-[19px]" style={{ color: "var(--txt-tenue)" }}>{g.motivo}</p>
+                  <p className="t-piccolo pl-[19px] mt-0.5" style={{ color: "var(--txt-tenue)" }}>{g.motivo}</p>
                 </div>
               </div>
             ))}
@@ -4179,23 +4188,32 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
                la pagina, quali gruppi sono a posto e quali chiedono qualcosa.
                È l'unico bordo spesso dell'applicazione, e se lo merita. */
             borderLeft: `3px solid ${stile.filo}` }}>
-            <div className="px-7 py-5 flex flex-wrap items-end justify-between gap-5" style={{ borderBottom: ".5px solid var(--hairline)", background: "var(--tela-alt)" }}>
-              <div>
-                <Micro>{g.ddtNumero ? "Documento di trasporto" : "Righe senza DDT"}</Micro>
-                <p className="t-sotto mt-1.5">
-                  {g.ddtNumero ? `DDT ${g.ddtNumero}` : "Nessun riferimento a un DDT"}
-                  {g.ddtData && <span className="text-sm font-normal" style={{ color: "var(--muted)" }}> del {fmtData(g.ddtData)}</span>}
-                </p>
-                <p className="f-mono t-piccolo mt-1" style={{ color: "var(--muted)" }}>
-                  {righeGruppo.length} {righeGruppo.length === 1 ? "riga" : "righe"} · {euro(totaleGruppo)}
-                </p>
+            {/* La testata del gruppo. Prima aveva un fondo rialzato (un
+                contenitore dentro un contenitore) e le misure vecchie px-7/py-5,
+                che nel resto dell'applicazione sono diventate px-6/py-4. Ora sta
+                sul fondo della card, separata da un filo come tutte le altre.
+                Il totale del gruppo è passato da una riga di didascalia a un
+                numero vero, allineato a destra: assegnare un gruppo vuol dire
+                spostare QUELLA cifra su una commessa, ed è l'informazione con
+                cui si decide. */}
+            <div className="px-6 py-5 flex flex-wrap items-start justify-between gap-x-6 gap-y-5" style={{ borderBottom: ".5px solid var(--bordo)" }}>
+              <div className="min-w-0">
+                <div className="flex items-baseline gap-x-4 gap-y-1 flex-wrap">
+                  <p className="t-sotto">
+                    {g.ddtNumero ? `DDT ${g.ddtNumero}` : "Righe senza DDT"}
+                    {g.ddtData && <span className="t-piccolo" style={{ fontWeight: 400, color: "var(--txt-tenue)" }}> del {fmtData(g.ddtData)}</span>}
+                  </p>
+                  <p className="f-mono t-piccolo" style={{ color: "var(--txt-tenue)" }}>
+                    {righeGruppo.length} {righeGruppo.length === 1 ? "riga" : "righe"} · <span style={{ color: "var(--verde)" }}>{euro(totaleGruppo)}</span>
+                  </p>
+                </div>
 
                 <StatoAbbinamento stato={stato} commessa={comById.get(commessaGruppo)} />
 
                 {/* Quale documento in archivio ha fatto scattare la proposta:
                     serve a poter andare a controllare la carta, se si vuole. */}
                 {abbinamento?.allegato?.nomeFile && (
-                  <p className="t-piccolo mt-1.5 flex items-start gap-1.5" style={{ color: "var(--muted)" }}>
+                  <p className="t-piccolo mt-2 flex items-start gap-1.5" style={{ color: "var(--txt-tenue)" }}>
                     <Link2 size={11} strokeWidth={1.75} className="mt-0.5 shrink-0" />
                     dal documento archiviato "{abbinamento.allegato.nomeFile}"
                     {abbinamento.allegato.fornitore && ` · ${abbinamento.allegato.fornitore}`}
@@ -4351,24 +4369,50 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
         );
       })}
 
-      {/* riepilogo e conferma */}
-      <section className="card p-7">
-        <h2 className="t-sotto mb-5">Riepilogo prima di importare</h2>
-        <div className="grid sm:grid-cols-3 gap-4 mb-5">
-          {[
-            { e: "Righe da importare", v: `${daImportare.length} di ${righe.length}` },
-            { e: "Totale materiali", v: euro(totaleDaImportare), c: "var(--euro)" },
-            /* Escludere una riga è una scelta, non un problema: si nota, ma
-               non chiede niente. Quindi bianco pieno, non ambra. */
-            { e: "Righe escluse", v: String(righe.length - daImportare.length), c: righe.length - daImportare.length > 0 ? "var(--txt-chiaro)" : "var(--muted)" },
-          ].map((k) => (
-            <div key={k.e} className="rounded-[var(--r-sm)] px-4 py-3" style={{ boxShadow: "var(--ombra-sm)" }}>
-              <Micro>{k.e}</Micro>
-              <p className="f-mono text-[17px] mt-1.5" style={{ color: k.c || "var(--txt)" }}>{k.v}</p>
-            </div>
-          ))}
+      {/* ================= LA FASCIA DI CONFERMA =================
+          Qui il denaro entra nei costi. Prima questo momento si presentava con
+          TRE RIQUADRI IN COLONNE UGUALI — righe da importare, totale, righe
+          escluse — cioè lo stesso schema che la Dashboard ha smontato al primo
+          commit di questo redesign, e con l'ombra usata come bordo, tolta da
+          tutte le altre schermate. Il totale che stavi per confermare era a
+          17px, alla pari con "righe escluse".
+          Adesso è la grammatica della banda-eroe, alla scala di questa
+          schermata: la cifra che si muove è la cifra grande, i conteggi le
+          stanno accanto più piccoli, e nessuno dei due è dentro un riquadro. */}
+      <section className="card overflow-hidden">
+        <div className="px-6 py-7 sm:px-8 grid gap-x-10 gap-y-7 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] items-start">
+          <div>
+            <h2 className="t-micro">Stai per importare</h2>
+            <p className="cifra-grande mt-3" style={{ fontSize: 36, lineHeight: 1, color: "var(--verde)" }}>
+              {euro(totaleDaImportare)}
+            </p>
+            <p className="t-piccolo mt-3" style={{ color: "var(--txt-tenue)" }}>
+              {perCommessa.length > 0
+                ? <>in <span className="f-mono" style={{ color: "var(--txt-medio)" }}>{perCommessa.length}</span> {perCommessa.length === 1 ? "commessa" : "commesse"} · <span className="f-mono">{daImportare.length}</span> righe di <span className="f-mono">{righe.length}</span></>
+                : "nessuna riga assegnata a una commessa"}
+            </p>
+          </div>
+
+          {/* I conteggi come libro mastro: etichetta a sinistra, numero a
+              destra, un filo a dividerli. Le righe da controllare compaiono
+              solo se ce ne sono — un contatore fermo a zero è rumore. */}
+          <dl className="w-full">
+            {[
+              { e: "Righe escluse", v: righe.length - daImportare.length, mostra: true,
+                tono: righe.length - daImportare.length > 0 ? "var(--txt)" : "var(--txt-tenue)" },
+              { e: "Righe da controllare", v: daImportare.filter((r) => r.daControllare.length > 0).length,
+                mostra: daImportare.some((r) => r.daControllare.length > 0), tono: "var(--ambra)" },
+            ].filter((m) => m.mostra).map((m, i) => (
+              <div key={m.e} className="flex items-baseline justify-between gap-5 py-2.5"
+                style={{ borderTop: i > 0 ? ".5px solid var(--bordo-tenue)" : "none" }}>
+                <dt className="t-micro">{m.e}</dt>
+                <dd className="f-mono shrink-0" style={{ fontSize: 15, fontWeight: 500, color: m.tono }}>{m.v}</dd>
+              </div>
+            ))}
+          </dl>
         </div>
 
+        <div className="px-6 py-6 sm:px-8" style={{ borderTop: ".5px solid var(--bordo)" }}>
         {/* Come stanno i GRUPPI. È il conto che dice quanto lavoro resta e —
             soprattutto — quanto di questa importazione l'ha proposto il
             software e va guardato. */}
@@ -4397,14 +4441,19 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
             qualcosa è finito sulla commessa sbagliata, si vede qui prima di
             premere Conferma — che è l'unico momento in cui i costi entrano. */}
         {gruppiAutomatici.length > 0 && (
-          <div className="rounded-[var(--r-sm)] px-4 py-3.5 mb-5" style={{ background: "var(--verde-bg)", border: ".5px solid var(--verde-bordo)" }}>
-            <p className="t-piccolo font-semibold mb-2" style={{ color: "var(--euro)" }}>
+          /* Era verde, con l'intestazione "Abbinati in automatico, da
+             controllare" in verde acceso: il colore del denaro usato per dire
+             "l'ha fatto il software". Questo blocco chiede un controllo, e
+             adesso lo chiede in ambra come ogni altra richiesta di attenzione
+             della schermata. */
+          <div className="rounded-[var(--r-sm)] px-4 py-3.5 mb-5" style={{ background: "var(--ambra-bg)", border: ".5px solid var(--ambra-bordo)" }}>
+            <p className="t-piccolo mb-2" style={{ color: "var(--ambra)", fontWeight: 500 }}>
               Abbinati in automatico, da controllare:
             </p>
             <div className="space-y-1">
               {gruppiAutomatici.map((v) => (
                 <p key={v.chiave} className="text-sm flex items-start gap-2">
-                  <Check size={13} strokeWidth={1.75} className="mt-1 shrink-0" style={{ color: "var(--euro)" }} />
+                  <Check size={13} strokeWidth={1.75} className="mt-1 shrink-0" style={{ color: "var(--ambra)" }} />
                   <span>
                     <span className="f-mono">DDT {v.ddtNumero}</span> ({v.righe} {v.righe === 1 ? "riga" : "righe"}) →{" "}
                     <span className="f-mono font-medium">{v.commessa?.codice ?? "?"}</span>{" "}
@@ -4441,10 +4490,11 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
 
         <div className="flex justify-end gap-2">
           <Bottone variante="fantasma" onClick={vaiCommesse}>Vai alle commesse</Bottone>
-          <Bottone variante="accento" onClick={confermaImporta} disabled={inImportazione || daImportare.length === 0}>
+          <Bottone onClick={confermaImporta} disabled={inImportazione || daImportare.length === 0}>
             {inImportazione ? <Loader2 size={14} strokeWidth={1.75} className="animate-spin" /> : <CheckCircle size={14} strokeWidth={1.75} />}
             {inImportazione ? "Importazione…" : `Conferma e importa ${daImportare.length ? `(${daImportare.length})` : ""}`}
           </Bottone>
+        </div>
         </div>
       </section>
     </div>
