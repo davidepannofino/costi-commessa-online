@@ -777,16 +777,17 @@ function CampoPassword({ value, onChange, placeholder, minLength, required, auto
  * si gonfiano sotto il puntatore fanno sembrare l'interfaccia un giocattolo.
  */
 function Bottone({ variante = "primario", className = "", ...p }) {
-  const stile = {
-    primario: { background: "var(--accento)", color: "var(--accento-testo)" },
-    accento: { background: "var(--accento)", color: "var(--accento-testo)" },
-    fantasma: { background: "var(--card)", color: "var(--txt)", boxShadow: "var(--ombra-md)" },
-    pericolo: { background: "transparent", color: "var(--errore)", boxShadow: "0 0 0 .5px var(--rosso-bordo)" },
-  }[variante];
+  /* "primario" e "accento" sono lo stesso bottone: entrambi vogliono dire
+     "questa è l'azione della schermata", e di azioni così ce n'è una per
+     schermata. Restano due nomi perché sono chiamati per nome in venti punti;
+     il colore però è uno, altrimenti due bottoni identici nell'aspetto
+     sembrerebbero due cose diverse. Lo stile vive nel CSS (.btn-*) e non qui,
+     così l'effetto del passaggio del mouse è dichiarato una volta sola. */
+  const classe = { primario: "btn-pieno", accento: "btn-pieno", fantasma: "btn-fantasma", pericolo: "btn-pericolo" }[variante] || "btn-pieno";
   return (
     <button
-      className={"inline-flex items-center justify-center gap-2 text-sm font-medium btn " + className}
-      style={{ padding: "9px 15px", borderRadius: "var(--r-sm)", letterSpacing: "-.005em", ...stile }}
+      className={`inline-flex items-center justify-center gap-2 t-corpo font-medium btn ${classe} ${className}`}
+      style={{ padding: "9px 15px", borderRadius: "var(--r-sm)", letterSpacing: "-.005em" }}
       {...p}
     />
   );
@@ -826,14 +827,13 @@ function Modale({ titolo, children, onChiudi, largo, bloccante }) {
  */
 function StatoVuoto({ icona: Icona, titolo, testo, azione }) {
   return (
-    <div className="flex flex-col items-center justify-center text-center px-6"
-      style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)", paddingTop: 88, paddingBottom: 88 }}>
-      <div className="flex items-center justify-center mb-5"
-        style={{ width: 44, height: 44, borderRadius: "var(--r-md)", background: "var(--velo)" }}>
-        <Icona size={19} strokeWidth={1.5} style={{ color: "var(--muted)" }} />
+    <div className="card flex flex-col items-center justify-center text-center px-6"
+      style={{ paddingTop: 88, paddingBottom: 88 }}>
+      <div className="flex items-center justify-center mb-5 box" style={{ width: 44, height: 44, borderRadius: "var(--r-md)" }}>
+        <Icona size={19} strokeWidth={1.5} style={{ color: "var(--txt-tenue)" }} />
       </div>
-      <p className="t-sotto mb-2" style={{ color: "var(--txt)" }}>{titolo}</p>
-      <p className="t-piccolo mb-7" style={{ color: "var(--muted)", maxWidth: "46ch" }}>{testo}</p>
+      <p className="t-sotto mb-2">{titolo}</p>
+      <p className="t-piccolo mb-7" style={{ color: "var(--txt-attenuato)", maxWidth: "46ch" }}>{testo}</p>
       {azione}
     </div>
   );
@@ -848,7 +848,7 @@ const BarraQuota = ({ quota, colore }) => (
 
 /** Riquadro con intestazione (titolo + azione opzionale). */
 const Sezione = ({ titolo, extra, children }) => (
-  <section style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
+  <section className="card">
     <div className="px-7 py-5 flex flex-wrap items-center justify-between gap-3" style={{ borderBottom: ".5px solid var(--hairline)" }}>
       <h2 className="t-sotto">{titolo}</h2>
       {extra}
@@ -1186,7 +1186,7 @@ function PaginaAbbonamento({ onUscire }) {
             Hai usato liberamente Costi Commessa per 14 giorni. Per continuare ad accedere ai tuoi dati, attiva l'abbonamento mensile.
           </p>
 
-          <div className="px-6 py-7 mb-8" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
+          <div className="card px-6 py-7 mb-8">
             <p className="cifra-grande" style={{ fontSize: 44, lineHeight: 1, letterSpacing: "-.035em" }}>
               29 €<span className="t-corpo" style={{ fontWeight: 400, color: "var(--tenue)", letterSpacing: 0 }}> / mese</span>
             </p>
@@ -1387,7 +1387,7 @@ function VistaAdmin() {
           {aziende.length === 0 ? (
             <StatoVuoto icona={Building2} titolo="Nessuna azienda registrata" testo="Non appena qualcuno si registrerà, comparirà qui." />
           ) : (
-            <div className="overflow-hidden" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
+            <div className="card overflow-hidden">
               <div className="px-6 py-4 flex items-center justify-between gap-3" style={{ borderBottom: ".5px solid var(--hairline)" }}>
                 <p className="t-piccolo f-mono" style={{ color: "var(--muted)" }}>{righe.length} aziende</p>
               </div>
@@ -2419,7 +2419,7 @@ function AndamentoMensile({ serieMensile }) {
     : null;
 
   return (
-    <section className="p-7" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
+    <section className="card p-7">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-5">
         <h2 className="t-sotto">Andamento mensile</h2>
         <p className="t-piccolo" style={{ color: "var(--muted)" }}>
@@ -2623,7 +2623,7 @@ function Dashboard({ riep, costi, dal, al, dipendenti, serieMensile, vaiCommesse
 
       <div className="grid xl:grid-cols-5 gap-7 items-start">
         {/* costo per commessa */}
-        <section className="xl:col-span-3 p-7" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
+        <section className="card xl:col-span-3 p-7">
           <div className="flex items-baseline justify-between gap-4 mb-6">
             <h2 className="t-sotto">Costo per commessa</h2>
             <button onClick={vaiCommesse} className="t-piccolo font-medium flex items-center gap-1 btn shrink-0" style={{ color: "var(--accento-chiaro)" }}>
@@ -2650,7 +2650,7 @@ function Dashboard({ riep, costi, dal, al, dipendenti, serieMensile, vaiCommesse
 
         <div className="xl:col-span-2 space-y-7">
           {/* per dipendente */}
-          <section className="p-7" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
+          <section className="card p-7">
             <h2 className="t-sotto mb-6">Costo per dipendente</h2>
             <div className="space-y-6">
               {perDip.map((d) => (
@@ -2668,7 +2668,7 @@ function Dashboard({ riep, costi, dal, al, dipendenti, serieMensile, vaiCommesse
 
           {/* andamento */}
           {datiGiorni.length > 1 && (
-            <section className="p-7" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
+            <section className="card p-7">
               <h2 className="t-sotto mb-5">Andamento giornaliero</h2>
               <div style={{ height: 170 }}>
                 <ResponsiveContainer width="100%" height="100%">
@@ -2749,7 +2749,7 @@ function VistaCommesse({ riep, costi, dal, al, apri, esportaCsv, esportaXlsx, es
           testo="Nessuna ora né materiale registrati in queste date. Allarga l'intervallo o registra nuove ore."
           azione={<Bottone onClick={vaiDati}><Plus size={14} strokeWidth={1.75} /> Registra ore</Bottone>} />
       ) : (
-        <div className="overflow-hidden" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
+        <div className="card overflow-hidden">
           <div className="px-7 py-5 flex items-center justify-between gap-4" style={{ borderBottom: ".5px solid var(--hairline)" }}>
             <p className="t-piccolo f-mono" style={{ color: "var(--muted)" }}>{fmtData(dal)} – {fmtData(al)} · {righe.length} commesse</p>
             <div className="relative">
@@ -3550,7 +3550,7 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
           <Micro>Importazione fattura</Micro>
           <h1 className="t-titolo mt-2">{lettura.fattura.nomeFile}</h1>
         </div>
-        <section className="p-7" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
+        <section className="card p-7">
           <div className="w-10 h-10 rounded-[var(--r-sm)] flex items-center justify-center mb-4" style={{ background: "var(--velo-accento)" }}>
             <AlertTriangle size={18} strokeWidth={1.75} style={{ color: "var(--accento-chiaro)" }} />
           </div>
@@ -3623,10 +3623,11 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
         const stile = STILI_STATO[stato.tipo];
 
         return (
-          <section key={g.chiave} className="overflow-hidden" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)",
+          <section key={g.chiave} className="card overflow-hidden" style={{
             /* Il filetto sul bordo: rende leggibile a colpo d'occhio, scorrendo
-               la pagina, quali gruppi sono a posto e quali chiedono qualcosa. */
-            borderLeft: `3px solid ${stato.tipo === "vuoto" ? "var(--hairline)" : stile.colore}` }}>
+               la pagina, quali gruppi sono a posto e quali chiedono qualcosa.
+               È l'unico bordo spesso dell'applicazione, e se lo merita. */
+            borderLeft: `3px solid ${stato.tipo === "vuoto" ? "var(--bordo-input)" : stile.colore}` }}>
             <div className="px-7 py-5 flex flex-wrap items-end justify-between gap-5" style={{ borderBottom: ".5px solid var(--hairline)", background: "var(--tela-alt)" }}>
               <div>
                 <Micro>{g.ddtNumero ? "Documento di trasporto" : "Righe senza DDT"}</Micro>
@@ -3726,7 +3727,7 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
       })}
 
       {/* riepilogo e conferma */}
-      <section className="p-7" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
+      <section className="card p-7">
         <h2 className="t-sotto mb-5">Riepilogo prima di importare</h2>
         <div className="grid sm:grid-cols-3 gap-4 mb-5">
           {[
@@ -3865,7 +3866,7 @@ function VistaDipendenti({ dipendenti, setDipendenti, riep, elimina, notifica })
             const elenco = [...mesi].sort().reverse();
             const iniziali = ((dip.nome[0] || "") + (dip.cognome[0] || "")).toUpperCase();
             return (
-              <div key={dip.id} className="p-7" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
+              <div key={dip.id} className="card p-7">
                 <div className="flex items-center gap-3.5 mb-5">
                   <div className="w-10 h-10 rounded-[var(--r-sm)] flex items-center justify-center f-mono t-piccolo shrink-0" style={{ background: "var(--velo)", color: "var(--txt)" }}>{iniziali}</div>
                   <div className="min-w-0">
@@ -4475,6 +4476,17 @@ function StileGlobale() {
       .btn:focus-visible{ box-shadow:0 0 0 2px var(--bg-app), 0 0 0 4px var(--accento); outline:none; }
       .btn:active{ opacity:.85; }
       .btn:disabled{ opacity:.4; cursor:not-allowed; }
+
+      /* Le tre forme di bottone. Il pieno bronzo è l'azione della schermata;
+         il fantasma è un box rialzato come tutti gli altri box; il pericolo
+         non si riempie mai di rosso — resta un contorno, perché un bottone
+         rosso pieno chiede di essere premuto. */
+      .btn-pieno{ background:var(--accento); color:var(--accento-testo); }
+      .btn-pieno:hover:not(:disabled){ background:var(--accento-chiaro); }
+      .btn-fantasma{ background:var(--bg-elevato); color:var(--txt-chiaro); border:.5px solid var(--bordo-input); }
+      .btn-fantasma:hover:not(:disabled){ background:var(--bg-hover); border-color:#2E2E36; }
+      .btn-pericolo{ background:transparent; color:var(--rosso); border:.5px solid var(--rosso-bordo); }
+      .btn-pericolo:hover:not(:disabled){ background:var(--rosso-bg); }
 
       /* --- CARD: in un tema scuro la profondità è il fondo più chiaro
              più un filo di bordo. Le ombre non hanno niente da scurire. --- */
