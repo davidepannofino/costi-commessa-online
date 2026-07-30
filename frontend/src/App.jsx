@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useRef, useEffect, useCallback, useId } from "react";
 import * as XLSX from "xlsx";
 import {
   BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
@@ -652,16 +652,40 @@ function useContatore(valore, durata = 700) {
 
 /** Sovratitolo: la parolina in maiuscoletto sopra un titolo o un valore. */
 const Micro = ({ children, tono }) => (
-  <p className="t-micro" style={{ color: tono || "var(--tenue)" }}>{children}</p>
+  <p className="t-micro" style={tono ? { color: tono } : undefined}>{children}</p>
 );
 
-const Campo = ({ etichetta, children, errore }) => (
-  <label className="block">
-    <span className="block t-micro mb-2" style={{ color: "var(--tenue)" }}>{etichetta}</span>
-    {children}
-    {errore && <span className="block t-piccolo mt-2" style={{ color: "var(--errore)" }}>{errore}</span>}
-  </label>
-);
+/**
+ * Campo di modulo: etichetta, controllo, eventuale errore.
+ *
+ * L'errore stava DENTRO la <label>. Sembra un dettaglio e non lo è: tutto ciò
+ * che sta dentro la label diventa parte del NOME del campo per un lettore di
+ * schermo, quindi "Ore" diventava per sempre "Ore Le ore devono essere
+ * maggiori di zero", riletto a ogni singolo passaggio col Tab — e per di più
+ * non veniva annunciato nel momento in cui compariva, che è l'unico momento
+ * in cui serviva. Ora l'errore sta fuori dalla label, è collegato al controllo
+ * con aria-describedby, ha role="alert" perché venga letto quando appare, e il
+ * controllo si dichiara aria-invalid.
+ */
+const Campo = ({ etichetta, children, errore }) => {
+  const idErrore = useId();
+  const controllo = errore && React.isValidElement(children)
+    ? React.cloneElement(children, { "aria-invalid": true, "aria-describedby": idErrore })
+    : children;
+  return (
+    <div>
+      <label className="block">
+        <span className="block t-micro mb-2">{etichetta}</span>
+        {controllo}
+      </label>
+      {errore && (
+        <span id={idErrore} role="alert" className="block t-piccolo mt-2" style={{ color: "var(--errore)" }}>
+          {errore}
+        </span>
+      )}
+    </div>
+  );
+};
 const inputCls = "w-full px-3.5 py-2.5 text-sm outline-none campo";
 
 /**
@@ -795,13 +819,60 @@ function Bottone({ variante = "primario", className = "", ...p }) {
   );
 }
 
+/**
+ * Fuoco prigioniero, per tutto ciò che dichiara aria-modal.
+ *
+ * Un contenitore che si annuncia come modale e poi lascia uscire il Tab dietro
+ * di sé sta mentendo al lettore di schermo: chi naviga da tastiera si ritrova
+ * a passeggiare nella pagina sotto, credendo di essere ancora nel riquadro.
+ * Questo aggancio fa tre cose che mancavano tutte: porta il fuoco dentro
+ * all'apertura, lo tiene dentro girando in tondo col Tab, e — la più
+ * dimenticata — lo RIMETTE dove stava alla chiusura, così chi chiude un
+ * pannello non perde il posto in un elenco di otto righe.
+ */
+const SELETTORE_FUOCO =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function useTrappolaFuoco(riferimento, attiva = true) {
+  useEffect(() => {
+    if (!attiva) return;
+    const contenitore = riferimento.current;
+    if (!contenitore) return;
+    const precedente = document.activeElement;
+
+    const fuocabili = () => [...contenitore.querySelectorAll(SELETTORE_FUOCO)]
+      .filter((n) => n.offsetParent !== null || n === document.activeElement);
+
+    // Il primo campo, se c'è: chi apre un modulo vuole scrivere, non cercare.
+    const elenco = fuocabili();
+    const primoCampo = elenco.find((n) => /^(INPUT|SELECT|TEXTAREA)$/.test(n.tagName));
+    (primoCampo || elenco[0] || contenitore).focus?.();
+
+    const suTab = (e) => {
+      if (e.key !== "Tab") return;
+      const nodi = fuocabili();
+      if (nodi.length === 0) return;
+      const primo = nodi[0], ultimo = nodi[nodi.length - 1];
+      if (e.shiftKey && document.activeElement === primo) { e.preventDefault(); ultimo.focus(); }
+      else if (!e.shiftKey && document.activeElement === ultimo) { e.preventDefault(); primo.focus(); }
+    };
+    contenitore.addEventListener("keydown", suTab);
+    return () => {
+      contenitore.removeEventListener("keydown", suTab);
+      if (precedente && document.contains(precedente)) precedente.focus?.();
+    };
+  }, [riferimento, attiva]);
+}
+
 function Modale({ titolo, children, onChiudi, largo, bloccante }) {
+  const riquadro = useRef(null);
+  useTrappolaFuoco(riquadro);
   useEffect(() => {
     const h = (e) => e.key === "Escape" && !bloccante && onChiudi();
     window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h);
   }, [onChiudi, bloccante]);
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 noprint" role="dialog" aria-modal="true" aria-label={titolo}>
+    <div ref={riquadro} className="fixed inset-0 z-50 flex items-center justify-center p-4 noprint" role="dialog" aria-modal="true" aria-label={titolo}>
       <div className="absolute inset-0 anim-velo" style={{ background: "rgba(0,0,0,.66)", backdropFilter: "blur(4px)" }} onClick={() => !bloccante && onChiudi()} />
       {/* È il caso in cui un'ombra vera serve: il modale sta davvero sopra il
           resto, e deve leggersi come un piano staccato. */}
@@ -2124,6 +2195,7 @@ export default function App() {
                     const conteggio = CONTEGGI[id];
                     return (
                       <button key={id} onClick={() => setVista(id)}
+                        aria-current={attiva ? "page" : undefined}
                         className="relative w-full flex items-center gap-2.5 pl-3.5 pr-3 py-2 t-corpo btn voce-nav"
                         style={{
                           borderRadius: "var(--r-sm)",
@@ -2346,7 +2418,8 @@ export default function App() {
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 grid noprint superficie-scura"
         style={{ borderTop: ".5px solid var(--scuro-linea)", gridTemplateColumns: `repeat(${NAV.length}, minmax(0, 1fr))` }} aria-label="Navigazione">
         {NAV.map(({ id, nome, icona: Icona }) => (
-          <button key={id} onClick={() => setVista(id)} className="flex flex-col items-center gap-1.5 py-3 btn"
+          <button key={id} onClick={() => setVista(id)} aria-current={vista === id ? "page" : undefined}
+            className="flex flex-col items-center gap-1.5 py-3 btn"
             style={{ color: vista === id ? "var(--accent-chiaro)" : "var(--scuro-muted)" }}>
             <Icona size={18} strokeWidth={1.75} />
             <span style={{ fontSize: 10.5, fontWeight: 500, letterSpacing: ".02em" }}>{nome}</span>
@@ -2623,18 +2696,23 @@ function BandaEroe({ costi, dal, al, titolo = "Costo del periodo", metriche = []
 }
 
 function Dashboard({ riep, costi, dal, al, dipendenti, serieMensile, vaiCommesse, vaiDati, haDati, apri }) {
-  if (!riep) return null;
-  const { righe, totCosto, totOre } = riep;
-  const top = righe[0];
-
+  /* Questo useMemo stava DOPO il `return null` qui sotto: un hook dentro un
+     ramo condizionale. Finché `riep` è già valorizzato al primo montaggio non
+     si vede niente, ma se passasse da null a valorizzato con la Dashboard già
+     montata il numero di hook cambierebbe fra due render e React lancerebbe.
+     Ora sta sopra l'uscita anticipata e si difende da solo. */
   const perDip = useMemo(() => {
     const m = new Map();
-    for (const r of righe) for (const d of r.dipendenti) {
+    for (const r of riep?.righe ?? []) for (const d of r.dipendenti) {
       if (!m.has(d.dip.id)) m.set(d.dip.id, { dip: d.dip, ore: 0, costo: 0 });
       const x = m.get(d.dip.id); x.ore += d.ore; x.costo += d.costo;
     }
     return [...m.values()].sort((a, b) => b.costo - a.costo);
-  }, [righe]);
+  }, [riep]);
+
+  if (!riep) return null;
+  const { righe, totCosto, totOre } = riep;
+  const top = righe[0];
 
   if (righe.length === 0) {
     // L'intervallo scelto non ha ore, ma lo storico può comunque esistere (in
@@ -2914,6 +2992,8 @@ function VistaCommesse({ riep, costi, dal, al, apri, esportaCsv, esportaXlsx, es
 function PannelloDettaglio({ riga, riep, costi, dal, al, serieMensile, allegati, spazioAllegati, fornitoriNoti,
   onAggiungiMateriale, onAggiornaMateriale, onEliminaMateriale,
   onCaricaAllegato, onApriAllegato, onEliminaAllegato, onAggiornaDatiAllegato, onChiudi }) {
+  const pannello = useRef(null);
+  useTrappolaFuoco(pannello);
   useEffect(() => {
     const h = (e) => e.key === "Escape" && onChiudi();
     window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h);
@@ -2930,7 +3010,7 @@ function PannelloDettaglio({ riga, riep, costi, dal, al, serieMensile, allegati,
     ore: Math.round(m.ore * 100) / 100,
   }));
   return (
-    <div className="fixed inset-0 z-40 noprint" role="dialog" aria-modal="true" aria-label={"Dettaglio commessa " + riga.commessa.codice}>
+    <div ref={pannello} className="fixed inset-0 z-40 noprint" role="dialog" aria-modal="true" aria-label={"Dettaglio commessa " + riga.commessa.codice}>
       <div className="absolute inset-0 anim-velo" style={{ background: "rgba(0,0,0,.66)", backdropFilter: "blur(4px)" }} onClick={onChiudi} />
       <div className="absolute right-0 top-0 bottom-0 w-full flex flex-col anim-slide"
         style={{ maxWidth: 460, background: "var(--card)", boxShadow: "var(--ombra-lg)" }}>
@@ -4566,14 +4646,31 @@ function StileGlobale() {
         --txt-chiaro:#F4F4F5;     /* testo forte */
         --txt-medio:#E4E4E7;      /* testo normale nelle righe */
         --txt-attenuato:#A1A1AA;  /* testo secondario */
-        --txt-tenue:#71717A;      /* etichette, didascalie */
-        --txt-debole:#52525B;     /* segnaposto, decimali, note */
-        --txt-fioco:#4A4A50;      /* numerazione, elementi minimi */
+        /* I tre gradini bassi hanno un pavimento, e il pavimento è WCAG AA
+           (4,5:1) sul fondo dell'app, non il gusto. PRODUCT.md lo dice fuori
+           dai denti: utenti non giovani, non tecnici, su un telefono in
+           cattiva luce — contrasto e corpo del testo non sono materia di
+           gusto. I rapporti sono calcolati su --bg-app #08080A:
+             --txt-etichetta  5,85:1   maiuscoletto e intestazioni di tabella
+             --txt-tenue      4,98:1   didascalie, segnaposto, note
+             --txt-debole     2,59:1   SOLO decorativo, mai testo da leggere
+             --txt-fioco      2,27:1   SOLO la numerazione delle righe
+           Prima --txt-fioco era il colore di ogni etichetta in maiuscoletto e
+           di ogni intestazione di tabella: 2,27:1, cioè illeggibile proprio
+           dove diceva in che colonna sei. */
+        --txt-etichetta:#8A8A93;  /* etichette e intestazioni: il gradino leggibile */
+        --txt-tenue:#7E7E88;      /* didascalie e segnaposto */
+        --txt-debole:#52525B;     /* decorativo: separatori, cifre spente */
+        --txt-fioco:#4A4A50;      /* numerazione di riga, non è testo */
 
         /* --- accento bronzo spento: logo, voce attiva, link, badge. E basta.
                Se comincia a comparire su ogni riga non è più un accento. --- */
         --accento:#8A6D4B; --accento-chiaro:#A88B66;
-        --accento-testo:#F0E7DA; --accento-bg:#211B12; --accento-bordo:#3A2E1E;
+        /* Il testo sul bronzo pieno era #F0E7DA: 3,92:1 sul bronzo, sotto
+           soglia — ed è il testo del bottone "Registra", quello che
+           l'impiegata preme cento volte. #FFFBF5 porta a 4,66:1 senza
+           toccare il bronzo, che resta il colore fissato. */
+        --accento-testo:#FFFBF5; --accento-bg:#211B12; --accento-bordo:#3A2E1E;
 
         /* --- significato, mai decorazione --- */
         --verde:#4ADE80; --verde-bg:#0D2318; --verde-bordo:#16432A;
@@ -4637,7 +4734,7 @@ function StileGlobale() {
       .t-sotto{ font-size:13.5px; line-height:1.4; font-weight:500; letter-spacing:-.005em; color:var(--txt-chiaro); }
       .t-corpo{ font-size:13px; line-height:1.6; }
       .t-piccolo{ font-size:12px; line-height:1.5; }
-      .t-micro{ font-size:11px; font-weight:500; letter-spacing:.06em; text-transform:uppercase; color:var(--txt-fioco); }
+      .t-micro{ font-size:11px; font-weight:500; letter-spacing:.06em; text-transform:uppercase; color:var(--txt-etichetta); }
       .t-leggibile{ max-width:66ch; }
       @media (max-width:640px){ .t-eroe-xl{ font-size:37px; letter-spacing:-.04em; } .t-eroe{ font-size:34px; } .t-titolo{ font-size:19px; } }
 
@@ -4663,8 +4760,15 @@ function StileGlobale() {
       .campo-nudo:hover{ background:var(--bg-hover); }
       .campo-nudo:focus{ background:var(--bg-hover); outline:none; }
       .campo:hover{ border-color:#26262C; }
+      /* Il fuoco su un campo non può essere solo un cambio di bordo: chi
+         naviga da tastiera deve vedere DOVE si trova, e un bordo che passa da
+         un grigio a un bronzo è una differenza che si perde. L'anello è lo
+         stesso dei bottoni, così il fuoco ha una forma sola in tutta l'app. */
       .campo:focus{ border-color:var(--accento); background:var(--bg-hover); outline:none; }
-      .campo::placeholder{ color:var(--txt-debole); }
+      .campo:focus-visible, .campo-nudo:focus-visible{
+        outline:none; box-shadow:0 0 0 2px var(--bg-app), 0 0 0 4px var(--accento);
+      }
+      .campo::placeholder{ color:var(--txt-tenue); }
 
       /* --- BOTTONI: nessun cambio di dimensione al passaggio del mouse ----- */
       .btn{ transition:background var(--moto), color var(--moto), border-color var(--moto), opacity var(--moto); }
@@ -4700,7 +4804,7 @@ function StileGlobale() {
       .tabella{ width:100%; border-collapse:collapse; }
       .tabella th{
         font-size:11px; font-weight:500; letter-spacing:.06em; text-transform:uppercase;
-        color:var(--txt-fioco); text-align:left; padding:10px 16px; white-space:nowrap;
+        color:var(--txt-etichetta); text-align:left; padding:10px 16px; white-space:nowrap;
         border-bottom:.5px solid var(--bordo);
       }
       .tabella td{ padding:13px 16px; border-top:.5px solid var(--bordo-tenue); color:var(--txt-medio); }
