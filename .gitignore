@@ -3,6 +3,10 @@ dist/
 .env
 .claude/
 
+# Impeccable: la configurazione condivisa (.impeccable/config.json) sta nel
+# repository; questa è la parte per singola macchina e non riguarda nessun altro.
+.impeccable/config.local.json
+
 # Chiavi e credenziali: non devono MAI finire nel repository.
 # Le chiavi vere stanno fuori dal progetto (vedi backend/.env.example);
 # queste regole sono la rete di sicurezza, non il pavimento.

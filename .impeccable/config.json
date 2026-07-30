@@ -1,0 +1,14 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "arial",
+        "createdAt": "2026-07-30T11:08:02.497Z",
+        "reason": "Arial è voluto: font di sistema per l'HTML delle email"
+      }
+    ]
+  }
+}

@@ -231,7 +231,7 @@ app.post("/api/abbonamento/checkout", richiedeAuth, async (req, res) => {
         {
           price_data: {
             currency: "eur",
-            product_data: { name: "Abbonamento Costi Commessa" },
+            product_data: { name: "Abbonamento Commexa" },
             unit_amount: PREZZO_MENSILE_CENTESIMI,
             recurring: { interval: "month" },
           },
@@ -627,7 +627,12 @@ app.delete("/api/materiali/:id", richiedeAuth, richiedeAbbonamentoAttivo, async 
 // tetto complessivo arrivano invece da archivio.js, perché dipendono da dove
 // finiscono i file (molto più larghi con l'archivio esterno).
 const MAX_FILE_BYTE = 5 * 1024 * 1024;
-const inMB = (b) => Math.round((b / (1024 * 1024)) * 10) / 10;
+/* Megabyte da mostrare all'utente, con il punto delle migliaia come nel resto
+   dell'applicazione: la quota su R2 è di 3000 MB, e "3000 MB" senza separatore
+   stonava dentro un messaggio d'errore. Serve solo per i testi (mai per un
+   numero che il frontend debba ricalcolare). */
+const fmtMBServer = new Intl.NumberFormat("it-IT", { maximumFractionDigits: 1, useGrouping: "always" });
+const inMB = (b) => fmtMBServer.format(Math.round((b / (1024 * 1024)) * 10) / 10);
 
 // Colonne dei metadati: mai "contenuto", che pesa e serve solo allo scaricamento.
 const COLONNE_ALLEGATO =

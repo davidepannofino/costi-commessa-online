@@ -23,14 +23,18 @@ import { leggiToken, salvaToken, cancellaToken } from "./auth.js";
 /* ---------------------------------------------------------------------------
    UTILITÀ — formati italiani, date, id
 --------------------------------------------------------------------------- */
-const fmtNum = new Intl.NumberFormat("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const fmtNum4 = new Intl.NumberFormat("it-IT", { minimumFractionDigits: 4, maximumFractionDigits: 4 });
-const fmtOre = new Intl.NumberFormat("it-IT", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+/* useGrouping "always" perché in italiano Intl da solo non separa le migliaia
+   sotto le cinque cifre: "8574,00" ma "12.574,00". In un conto di spese quella
+   soglia invisibile è un'incoerenza, quindi il punto si mette sempre.
+   fmtPerc resta fuori: una percentuale non arriva a quattro cifre. */
+const fmtNum = new Intl.NumberFormat("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: "always" });
+const fmtNum4 = new Intl.NumberFormat("it-IT", { minimumFractionDigits: 4, maximumFractionDigits: 4, useGrouping: "always" });
+const fmtOre = new Intl.NumberFormat("it-IT", { minimumFractionDigits: 0, maximumFractionDigits: 2, useGrouping: "always" });
 const fmtPerc = new Intl.NumberFormat("it-IT", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const euro = (v) => fmtNum.format(v) + " €";
 /** Dimensione di un file in unità leggibili (kB sotto il megabyte).
  *  Una cifra decimale al massimo: "1,7 MB" e "100 MB", non "100,00 MB". */
-const fmtMB = new Intl.NumberFormat("it-IT", { minimumFractionDigits: 0, maximumFractionDigits: 1 });
+const fmtMB = new Intl.NumberFormat("it-IT", { minimumFractionDigits: 0, maximumFractionDigits: 1, useGrouping: "always" });
 const fmtDimensione = (byte) => (byte >= 1024 * 1024
   ? fmtMB.format(byte / (1024 * 1024)) + " MB"
   : Math.max(1, Math.round(byte / 1024)) + " kB");
@@ -683,7 +687,7 @@ const Marchio = ({ centrato }) => (
         width: 28, height: 28, borderRadius: "var(--r-sm)", fontSize: 13,
         background: "var(--accento)", color: "var(--accento-testo)",
       }}>C</div>
-    <div className="t-piccolo" style={{ fontWeight: 500, color: "var(--txt-chiaro)" }}>Costi Commessa</div>
+    <div className="t-piccolo" style={{ fontWeight: 500, color: "var(--txt-chiaro)" }}>Commexa</div>
   </div>
 );
 
@@ -1183,7 +1187,7 @@ function PaginaAbbonamento({ onUscire }) {
         <div className="text-center">
           <h2 className="t-sezione mb-3">Il periodo di prova è terminato</h2>
           <p className="t-corpo mb-9 mx-auto" style={{ color: "var(--muted)", maxWidth: "44ch" }}>
-            Hai usato liberamente Costi Commessa per 14 giorni. Per continuare ad accedere ai tuoi dati, attiva l'abbonamento mensile.
+            Hai usato liberamente Commexa per 14 giorni. Per continuare ad accedere ai tuoi dati, attiva l'abbonamento mensile.
           </p>
 
           <div className="card px-6 py-7 mb-8">
@@ -2357,7 +2361,7 @@ export default function App() {
       )}
 
       {mostraBenvenuto && (
-        <Modale titolo="Benvenuto in Costi Commessa" onChiudi={() => setMostraBenvenuto(false)}>
+        <Modale titolo="Benvenuto in Commexa" onChiudi={() => setMostraBenvenuto(false)}>
           <div className="w-10 h-10 rounded-[var(--r-sm)] flex items-center justify-center mb-4" style={{ background: "var(--velo-accento)" }}>
             <PartyPopper size={18} strokeWidth={1.75} style={{ color: "var(--accento-chiaro)" }} />
           </div>
