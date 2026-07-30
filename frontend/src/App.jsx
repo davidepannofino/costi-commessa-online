@@ -6,7 +6,7 @@ import {
 import {
   LayoutDashboard, FolderKanban, Users, Database, Plus, Trash2, Pencil, Upload, Download,
   FileSpreadsheet, FileText, AlertTriangle, CheckCircle2, X, ChevronRight, ChevronLeft,
-  Search, RotateCcw, Save, Eraser, Info, FileDown, LogOut, Mail, Lock, Building2, ArrowRight, Loader2,
+  Search, RotateCcw, Save, Eraser, Info, FileDown, LogOut, Mail, Lock, Building2, ArrowRight, Loader2, ChevronDown,
   Clock, Sparkles, Eye, EyeOff, CreditCard, Gift, PartyPopper, ShieldCheck, FileImage,
   ReceiptText, Link2, CheckCircle, Check, HelpCircle, CircleDot, CalendarDays,
 } from "lucide-react";
@@ -848,6 +848,40 @@ const BarraQuota = ({ quota, colore }) => (
   </div>
 );
 
+/**
+ * Intestazione di colonna ordinabile.
+ *
+ * Tre cose che prima non andavano, in due tabelle che si copiavano a vicenda:
+ * la freccia era il glifo di testo "↓", che non appartiene a nessun sistema di
+ * icone e su ogni piattaforma ha un peso diverso; l'ordinamento viveva su un
+ * onClick del <th>, che con il tasto Tab non si raggiunge; e lo stato non era
+ * annunciato a chi usa un lettore di schermo. Ora la freccia è disegnata come
+ * ogni altra icona, il bersaglio è un vero bottone, e c'è aria-sort.
+ *
+ * La freccia della colonna inattiva resta in pagina invisibile: se comparisse
+ * dal nulla, le intestazioni si sposterebbero a ogni clic.
+ */
+function ThOrdinabile({ campo, nome, cls = "", stile, ordina, onOrdina }) {
+  if (!campo) return <th className={cls} style={stile}>{nome}</th>;
+  const attivo = ordina.campo === campo;
+  return (
+    <th className={cls} style={stile} aria-sort={attivo ? (ordina.disc ? "descending" : "ascending") : "none"}>
+      <button type="button" onClick={() => onOrdina(campo)}
+        className="inline-flex items-center gap-1.5 select-none btn"
+        style={{ font: "inherit", letterSpacing: "inherit", textTransform: "inherit", color: attivo ? "var(--txt-attenuato)" : "inherit" }}
+        title={`Ordina per ${nome.toLowerCase()}`}>
+        {nome}
+        <ChevronDown size={12} strokeWidth={2} aria-hidden="true" className="shrink-0"
+          style={{
+            opacity: attivo ? 1 : 0, color: "var(--accento-chiaro)",
+            transform: attivo && !ordina.disc ? "rotate(180deg)" : "none",
+            transition: "transform var(--moto)",
+          }} />
+      </button>
+    </th>
+  );
+}
+
 /** Riquadro con intestazione (titolo + azione opzionale). */
 const Sezione = ({ titolo, extra, children }) => (
   <section className="card">
@@ -1336,7 +1370,6 @@ function VistaAdmin() {
   }, []);
 
   const clic = (campo) => setOrdina((o) => ({ campo, disc: o.campo === campo ? !o.disc : true }));
-  const freccia = (campo) => (ordina.campo === campo ? (ordina.disc ? " ↓" : " ↑") : "");
 
   const righe = useMemo(() => {
     const valore = (a) => (ordina.campo === "nome" ? a.nome.toLowerCase()
@@ -1398,10 +1431,9 @@ function VistaAdmin() {
                   <thead>
                     <tr className="text-left">
                       {[["nome", "Azienda", ""], ["email", "Email", "hidden sm:table-cell"], ["registratoIl", "Registrata il", "text-right"], ["stato", "Stato", "text-right"], [null, "Prova", "text-right hidden md:table-cell"]].map(([campo, nome, cls]) => (
-                        <th key={nome} className={`px-6 py-3.5 t-micro ${cls} ${campo ? "cursor-pointer select-none" : ""}`}
-                          style={{ letterSpacing: ".1em", color: "var(--muted)" }} onClick={campo ? () => clic(campo) : undefined}>
-                          {nome}{campo ? freccia(campo) : ""}
-                        </th>
+                        <ThOrdinabile key={nome} campo={campo} nome={nome} cls={`px-6 py-3.5 t-micro ${cls}`}
+                          stile={{ letterSpacing: ".1em", color: "var(--txt-tenue)" }}
+                          ordina={ordina} onOrdina={clic} />
                       ))}
                     </tr>
                   </thead>
@@ -2778,7 +2810,6 @@ function VistaCommesse({ riep, costi, dal, al, apri, esportaCsv, esportaXlsx, es
       return ordina.disc ? -c : c;
     });
   const clic = (campo) => setOrdina((o) => ({ campo, disc: o.campo === campo ? !o.disc : true }));
-  const freccia = (campo) => (ordina.campo === campo ? (ordina.disc ? " ↓" : " ↑") : "");
   const maxCosto = costi.righe.length ? Math.max(...costi.righe.map((r) => r.costoTotale)) : 0;
   // costi.righe arriva già ordinato per costo decrescente dal calcolo: la
   // prima è la più costosa, e resta lei anche se l'utente riordina la tabella.
@@ -2825,10 +2856,7 @@ function VistaCommesse({ riep, costi, dal, al, apri, esportaCsv, esportaXlsx, es
                   {[["codice", "Codice", ""], [null, "Descrizione", "hidden lg:table-cell"], ["ore", "Ore", "text-right"],
                     [null, "Quota", "w-36 hidden xl:table-cell"],
                     ["manodopera", "Manodopera", "text-right"], ["materiali", "Materiali", "text-right"], ["totale", "Totale", "text-right"]].map(([campo, nome, cls]) => (
-                    <th key={nome} className={`${cls} ${campo ? "cursor-pointer select-none" : ""}`}
-                      onClick={campo ? () => clic(campo) : undefined}>
-                      {nome}{campo ? freccia(campo) : ""}
-                    </th>
+                    <ThOrdinabile key={nome} campo={campo} nome={nome} cls={cls} ordina={ordina} onOrdina={clic} />
                   ))}
                   <th className="w-10" />
                 </tr>
@@ -2908,51 +2936,65 @@ function PannelloDettaglio({ riga, riep, costi, dal, al, serieMensile, allegati,
       <div className="absolute inset-0 anim-velo" style={{ background: "rgba(0,0,0,.66)", backdropFilter: "blur(4px)" }} onClick={onChiudi} />
       <div className="absolute right-0 top-0 bottom-0 w-full flex flex-col anim-slide"
         style={{ maxWidth: 460, background: "var(--card)", boxShadow: "var(--ombra-lg)" }}>
-        {/* La testata del pannello era scura come la barra laterale. Qui però
-            siamo dentro il lavoro, non nella cornice: fondo avorio, il codice
-            della commessa alla scala grande, un filo sotto. */}
-        <div className="px-7 py-6 flex items-start justify-between gap-4"
-          style={{ background: "var(--tela-alt)", borderBottom: ".5px solid var(--hairline)" }}>
-          <div className="min-w-0">
-            <Micro>Dettaglio commessa</Micro>
-            <h3 className="cifra-grande mt-2" style={{ fontSize: 30, lineHeight: 1 }}>{riga.commessa.codice}</h3>
-            <p className="t-piccolo mt-2.5" style={{ color: "var(--muted)" }}>{riga.commessa.descrizione}</p>
+        {/* La testata risponde subito alla domanda per cui si apre un
+            dettaglio: quanto è costata. Prima il protagonista era il CODICE a
+            30px e il costo stava sotto a 22, in fondo a un riquadro di tre
+            colonne uguali: la gerarchia diceva che conta più il nome della
+            commessa del suo costo, e in un'applicazione di costi non è vero.
+            Ora il codice è un badge — la stessa forma con cui la commessa
+            compare nella classifica e nella tabella — e il numero è il numero.
+            La grammatica è quella della Dashboard: cifra sul fondo, barra di
+            ripartizione, le due voci che la spiegano. */}
+        <div className="px-7 pt-6 pb-7" style={{ borderBottom: ".5px solid var(--bordo)" }}>
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <span className="badge-codice badge-codice-primo">{riga.commessa.codice}</span>
+              {riga.commessa.descrizione && (
+                <h3 className="t-sotto mt-3">{riga.commessa.descrizione}</h3>
+              )}
+            </div>
+            <button onClick={onChiudi} aria-label="Chiudi dettaglio" className="p-1.5 btn shrink-0 -mr-1.5"
+              style={{ borderRadius: "var(--r-xs)", color: "var(--txt-tenue)" }}><X size={17} strokeWidth={1.75} /></button>
           </div>
-          <button onClick={onChiudi} aria-label="Chiudi dettaglio" className="p-1.5 btn shrink-0 -mr-1.5"
-            style={{ borderRadius: "var(--r-xs)", color: "var(--tenue)" }}><X size={17} strokeWidth={1.75} /></button>
+
+          <p className="t-micro mt-7">Costo della commessa</p>
+          <p className="cifra-grande mt-2.5" style={{ fontSize: 36, lineHeight: 1, color: "var(--verde)" }}>
+            {euro(riga.costoTotale)}
+          </p>
+
+          <div className="mt-6 flex overflow-hidden" style={{ height: 3, borderRadius: 99, background: "var(--bg-pill)" }}>
+            <div style={{ width: `${(riga.costoTotale > 0 ? riga.costoManodopera / riga.costoTotale : 1) * 100}%`, background: TONO_MANODOPERA }} />
+            <div style={{ width: `${(riga.costoTotale > 0 ? riga.costoMateriali / riga.costoTotale : 0) * 100}%`, background: TONO_MATERIALI }} />
+          </div>
+          <div className="mt-3.5 flex flex-wrap items-baseline gap-x-6 gap-y-2 t-piccolo">
+            {[
+              { e: "manodopera", v: riga.costoManodopera, tono: TONO_MANODOPERA },
+              { e: "materiali", v: riga.costoMateriali, tono: TONO_MATERIALI },
+            ].map((v) => (
+              <span key={v.e} className="flex items-baseline gap-2">
+                <span aria-hidden="true" className="shrink-0" style={{ width: 6, height: 6, borderRadius: 2, background: v.tono, transform: "translateY(-1px)" }} />
+                <span style={{ color: "var(--txt-tenue)" }}>{v.e}</span>
+                <span className="f-mono" style={{ color: v.v > 0 ? "var(--verde)" : "var(--txt-debole)" }}>{euro(v.v)}</span>
+              </span>
+            ))}
+          </div>
+          <p className="t-piccolo f-mono mt-4" style={{ color: "var(--txt-fioco)" }}>
+            {fmtOre.format(riga.ore)} h · {fmtPerc.format(quota * 100)}% del periodo · {fmtData(dal)} – {fmtData(al)}
+          </p>
         </div>
-        <div className="p-7 space-y-8 overflow-y-auto">
-          {/* I tre numeri, sempre distinti: ore e manodopera, materiali, e la
-              loro somma. Non si mescolano mai in un unico "costo". */}
-          <div className="overflow-hidden" style={{ borderRadius: "var(--r-sm)", boxShadow: "var(--ombra-sm)" }}>
-            <div className="grid grid-cols-3">
-              {[["Ore", fmtOre.format(riga.ore), null], ["Manodopera", euro(riga.costoManodopera), "var(--euro)"], ["Materiali", euro(riga.costoMateriali), riga.costoMateriali > 0 ? "var(--euro)" : "var(--tenue)"]].map(([e, v, col], i) => (
-                <div key={e} className="px-4 py-4" style={{ borderLeft: i > 0 ? ".5px solid var(--hairline)" : "none" }}>
-                  <Micro>{e}</Micro>
-                  <p className="f-mono mt-2" style={{ fontSize: 15, fontWeight: 500, color: col || "var(--txt)" }}>{v}</p>
-                </div>
-              ))}
-            </div>
-            <div className="px-4 py-4 flex items-end justify-between gap-3" style={{ borderTop: ".5px solid var(--hairline)", background: "var(--tela-alt)" }}>
-              <div>
-                <Micro>Costo totale</Micro>
-                <p className="t-piccolo mt-1.5" style={{ color: "var(--tenue)" }}>manodopera + materiali · {fmtPerc.format(quota * 100)}% del periodo</p>
-              </div>
-              <p className="cifra-grande shrink-0" style={{ fontSize: 22, lineHeight: 1 }}>{euro(riga.costoTotale)}</p>
-            </div>
-          </div>
-          <p className="t-piccolo f-mono" style={{ color: "var(--tenue)" }}>Intervallo {fmtData(dal)} – {fmtData(al)}</p>
+
+        <div className="p-7 space-y-9 overflow-y-auto">
           <div>
-            <h4 className="t-sotto mb-5">Dipendenti sulla commessa</h4>
-            <div className="space-y-6">
+            <h4 className="t-sotto mb-5">Chi ha lavorato qui</h4>
+            <div className="space-y-5">
               {riga.dipendenti.map((d, i) => (
                 <div key={i}>
                   <div className="flex items-baseline justify-between gap-3 mb-2">
-                    <p className="text-sm font-medium">{d.dip.nome} {d.dip.cognome}</p>
-                    <p className="f-mono text-sm" style={{ color: "var(--euro)", fontWeight: 500 }}>{euro(d.costo)}</p>
+                    <p className="t-corpo truncate" style={{ fontWeight: 500, color: "var(--txt-chiaro)" }}>{d.dip.nome} {d.dip.cognome}</p>
+                    <p className="f-mono t-corpo shrink-0" style={{ color: "var(--euro)", fontWeight: 500 }}>{euro(d.costo)}</p>
                   </div>
-                  <BarraQuota quota={maxDip > 0 ? d.costo / maxDip : 0} colore="#2E2E36" />
-                  <p className="t-piccolo f-mono mt-2" style={{ color: "var(--tenue)" }}>{fmtOre.format(d.ore)} h · tariffa media {fmtNum4.format(d.tariffaMedia)} €/h</p>
+                  <BarraQuota quota={maxDip > 0 ? d.costo / maxDip : 0} colore={TONO_MANODOPERA} />
+                  <p className="t-piccolo f-mono mt-2" style={{ color: "var(--txt-fioco)" }}>{fmtOre.format(d.ore)} h · tariffa media {fmtNum4.format(d.tariffaMedia)} €/h</p>
                 </div>
               ))}
             </div>
