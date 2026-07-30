@@ -2381,7 +2381,7 @@ export default function App() {
       <div className="fixed bottom-20 lg:bottom-6 right-6 z-50 space-y-2.5 noprint" aria-live="polite">
         {toasts.map((t) => (
           <div key={t.id} className="flex items-start gap-3 px-4 py-3.5 t-piccolo anim-pop"
-            style={{ maxWidth: 380, background: "var(--ink)", color: "var(--txt-chiaro)", borderRadius: "var(--r-sm)", boxShadow: "var(--ombra-lg)" }}>
+            style={{ maxWidth: 380, background: "var(--bg-pill)", color: "var(--txt-chiaro)", borderRadius: "var(--r-sm)", boxShadow: "var(--ombra-lg)" }}>
             {t.tipo === "errore" ? <AlertTriangle size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: "var(--rosso)" }} />
               : t.tipo === "avviso" ? <AlertTriangle size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: "var(--accent-chiaro)" }} />
               : <CheckCircle2 size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: "var(--verde)" }} />}
@@ -4405,22 +4405,19 @@ function StileGlobale() {
            Le --ombra-* diventano anelli di bordo. In un tema scuro l'ombra
            non ha nulla da scurire: la struttura la disegna il filo. */
         --tela:var(--bg-app); --card:var(--bg-card); --tela-alt:var(--bg-elevato);
-        --ink:var(--bg-pill);
         --muted:var(--txt-attenuato); --tenue:var(--txt-tenue);
-        --hairline:var(--bordo); --hairline-forte:var(--bordo-input);
+        --hairline:var(--bordo);
         --velo:rgba(255,255,255,.028);
         --accent:var(--accento); --accent-chiaro:var(--accento-chiaro);
         --velo-accento:var(--accento-bg);
         --euro:var(--verde); --velo-euro:var(--verde-bg);
         --errore:var(--rosso); --velo-errore:var(--rosso-bg);
-        --scuro:var(--bg-sidebar); --scuro-txt:var(--txt-chiaro);
         --scuro-muted:var(--txt-attenuato);
         --scuro-velo:var(--bg-hover); --scuro-linea:var(--bordo);
         --ombra-xs:0 0 0 .5px var(--bordo-tenue);
         --ombra-sm:0 0 0 .5px var(--bordo);
         --ombra-md:0 0 0 .5px var(--bordo-input);
         --ombra-lg:0 0 0 .5px var(--bordo-input), 0 24px 64px -12px rgba(0,0,0,.7);
-        --ombra-hover:0 0 0 .5px #26262C;
       }
       html{ background:var(--bg-app); }
       body{
