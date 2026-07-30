@@ -2008,14 +2008,52 @@ export default function App() {
       return { ok: false, errore: e.message };
     }
   };
+  /**
+   * Elimina una voce di materiale — con la stessa rete che hanno le ore.
+   *
+   * Questa è l'unica cifra dell'applicazione che qualcuno ha COPIATO A MANO
+   * dalla fattura di un fornitore: ricostruirla vuol dire ritrovare quel foglio.
+   * Una riga di ore si riscrive a memoria; questa no. Eppure le ore avevano
+   * nove secondi di annulla e questa niente.
+   *
+   * Non è ottimistica e non lo diventa: si aspetta il server, e la riga sparisce
+   * dallo schermo solo quando è sparita davvero. Quindi ci sono due esiti da
+   * raccontare, e sono opposti.
+   *  - Riuscita: la voce è andata, e per nove secondi si può riportare indietro.
+   *  - Fallita: la voce È ANCORA AL SUO POSTO. È la cosa che l'utente deve
+   *    leggere per prima, prima ancora del motivo: senza, riprova, o peggio la
+   *    riscrive e si ritrova un doppione.
+   */
   const eliminaMateriale = async (voce) => {
     try {
       await datiAPI.eliminaMateriale(voce.id);
       setMateriali((m) => m.filter((x) => x.id !== voce.id));
-      notifica("Voce di materiale eliminata.");
+      notifica(`Eliminato: ${voce.descrizione} · ${euro(costoVoceMateriale(voce))}.`, "ok", {
+        etichetta: "Annulla",
+        onAzione: async () => {
+          try {
+            /* Il ripristino ricrea la voce: torna con un id nuovo, perché
+               l'id lo fa il database. I valori sono quelli di prima, ed è
+               l'unica cosa che conta a chi guarda. */
+            const ricreata = await datiAPI.aggiungiMateriale({
+              commessaId: voce.commessaId, data: voce.data, fornitore: voce.fornitore,
+              descrizione: voce.descrizione, quantita: voce.quantita, prezzoUnitario: voce.prezzoUnitario,
+            });
+            setMateriali((m) => (m.some((x) => x.id === ricreata.id) ? m : [ricreata, ...m]));
+            notifica("Voce ripristinata.");
+          } catch (e) {
+            /* Fallito il ripristino, l'unica cosa utile sono i valori: così si
+               riscrivono senza andare a cercare la fattura. */
+            notifica(
+              `Non sono riuscito a rimetterla: ${e.message} Erano ${fmtNum.format(voce.quantita)} × ${euro(voce.prezzoUnitario)} il ${fmtData(voce.data)}${voce.fornitore ? `, ${voce.fornitore}` : ""}.`,
+              "errore"
+            );
+          }
+        },
+      });
       return { ok: true };
     } catch (e) {
-      notifica(e.message, "errore");
+      notifica(`La voce è ancora al suo posto: non sono riuscito a eliminarla. ${e.message}`, "errore");
       return { ok: false, errore: e.message };
     }
   };
@@ -3485,12 +3523,16 @@ function SezioneMateriali({ commessa, voci, totale, dal, al, onAggiungi, onAggio
               <div className="flex items-center gap-1.5 shrink-0">
                 <p className="f-mono text-sm" style={{ color: "var(--euro)" }}>{euro(m.costo)}</p>
                 <button onClick={() => { setInModifica(m.id); setErr({}); setF({ data: m.data, fornitore: m.fornitore, descrizione: m.descrizione, quantita: String(m.quantita).replace(".", ","), prezzoUnitario: String(m.prezzoUnitario).replace(".", ",") }); }}
-                  aria-label={"Modifica materiale " + m.descrizione} className="p-1.5 rounded-[var(--r-sm)] btn" style={{ boxShadow: "var(--ombra-sm)" }}>
-                  <Pencil size={12} strokeWidth={1.75} />
+                  aria-label={"Modifica materiale " + m.descrizione}
+                  className="inline-flex items-center justify-center btn btn-fantasma"
+                  style={{ width: 32, height: 32, borderRadius: "var(--r-sm)" }}>
+                  <Pencil size={13} strokeWidth={1.75} />
                 </button>
                 <button onClick={async () => { if (inModifica === m.id) annulla(); await onElimina(m); }}
-                  aria-label={"Elimina materiale " + m.descrizione} className="p-1.5 rounded-[var(--r-sm)] btn" style={{ border: ".5px solid var(--rosso-bordo)", color: "var(--errore)" }}>
-                  <Trash2 size={12} strokeWidth={1.75} />
+                  aria-label={"Elimina materiale " + m.descrizione}
+                  className="inline-flex items-center justify-center btn btn-riga-elimina"
+                  style={{ width: 32, height: 32, borderRadius: "var(--r-sm)" }}>
+                  <Trash2 size={13} strokeWidth={1.75} />
                 </button>
               </div>
             </li>
@@ -3679,8 +3721,9 @@ function SezioneDocumenti({ commessa, allegati, spazio, fornitoriNoti = [], onCa
                       : <Download size={12} strokeWidth={1.75} />}
                   </button>
                   <button onClick={() => onElimina(a)} aria-label={"Elimina documento " + a.nomeFile}
-                    className="p-1.5 rounded-[var(--r-sm)] btn" style={{ border: ".5px solid var(--rosso-bordo)", color: "var(--errore)" }}>
-                    <Trash2 size={12} strokeWidth={1.75} />
+                    className="inline-flex items-center justify-center btn btn-riga-elimina"
+                    style={{ width: 32, height: 32, borderRadius: "var(--r-sm)" }}>
+                    <Trash2 size={13} strokeWidth={1.75} />
                   </button>
                 </div>
               </div>
