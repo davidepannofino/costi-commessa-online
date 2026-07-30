@@ -2319,7 +2319,7 @@ export default function App() {
           <div key={t.id} className="flex items-start gap-3 px-4 py-3.5 t-piccolo anim-pop"
             style={{ maxWidth: 380, background: "var(--ink)", color: "#EDEAE3", borderRadius: "var(--r-sm)", boxShadow: "var(--ombra-lg)" }}>
             {t.tipo === "errore" ? <AlertTriangle size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: "#E5A9A2" }} />
-              : t.tipo === "avviso" ? <AlertTriangle size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: "#D9B36A" }} />
+              : t.tipo === "avviso" ? <AlertTriangle size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: "var(--accent-chiaro)" }} />
               : <CheckCircle2 size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: "#7FCBA4" }} />}
             {t.testo}
           </div>
@@ -4326,15 +4326,6 @@ function StileGlobale() {
       .campo:hover{ border-color:var(--hairline-forte); }
       .campo:focus{ box-shadow:0 0 0 3px rgba(154,120,58,.14); border-color:var(--accent); outline:none; }
       .campo::placeholder{ color:var(--tenue); }
-      .campo-scuro{
-        background:var(--scuro-velo); border:1px solid var(--scuro-linea);
-        border-radius:var(--r-sm); color:var(--scuro-txt); color-scheme:dark;
-        transition:border-color var(--moto), box-shadow var(--moto);
-      }
-      .campo-scuro:focus{ box-shadow:0 0 0 3px rgba(196,162,101,.18); border-color:rgba(196,162,101,.55); outline:none; }
-      .campo-scuro::placeholder{ color:var(--scuro-muted); }
-      .tasto-scuro{ background:var(--scuro-velo); color:var(--scuro-muted); }
-      .tasto-scuro:hover{ background:rgba(255,255,255,.1); color:var(--scuro-txt); }
 
       /* --- BOTTONI: nessun cambio di dimensione al passaggio del mouse ----- */
       .btn{ transition:background var(--moto), color var(--moto), box-shadow var(--moto), opacity var(--moto); }
