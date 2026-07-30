@@ -1371,7 +1371,7 @@ function VistaAdmin() {
       </div>
 
       {errore && (
-        <div className="flex items-start gap-2.5 rounded-xl px-4 py-3 text-sm" style={{ background: "var(--velo-errore)", border: "1px solid rgba(166,58,50,.2)", color: "var(--errore)" }}>
+        <div className="flex items-start gap-2.5 rounded-[9px] px-4 py-3 text-sm" style={{ background: "var(--velo-errore)", border: "1px solid rgba(166,58,50,.2)", color: "var(--errore)" }}>
           <AlertTriangle size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" /> {errore}
         </div>
       )}
@@ -1381,7 +1381,7 @@ function VistaAdmin() {
       ) : (
         <>
           {schede.length > 0 && (
-            <div className="rounded-2xl grid grid-cols-2 xl:grid-cols-5 overflow-hidden" style={{ background: "var(--card)", boxShadow: "var(--ombra-sm)" }}>
+            <div className="rounded-[14px] grid grid-cols-2 xl:grid-cols-5 overflow-hidden" style={{ background: "var(--card)", boxShadow: "var(--ombra-sm)" }}>
               {schede.map(([e, v], i) => (
                 <div key={e} className="px-6 py-5" style={{ borderLeft: i > 0 ? "1px solid var(--hairline)" : "none" }}>
                   <Micro>{e}</Micro>
@@ -2294,7 +2294,7 @@ export default function App() {
 
       {mostraBenvenuto && (
         <Modale titolo="Benvenuto in Costi Commessa" onChiudi={() => setMostraBenvenuto(false)}>
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-4" style={{ background: "var(--velo-accento)" }}>
+          <div className="w-10 h-10 rounded-[9px] flex items-center justify-center mb-4" style={{ background: "var(--velo-accento)" }}>
             <PartyPopper size={18} strokeWidth={1.75} style={{ color: "var(--accent)" }} />
           </div>
           <p className="text-sm leading-relaxed mb-3" style={{ color: "var(--txt)" }}>
@@ -2673,7 +2673,7 @@ function VistaCommesse({ riep, costi, dal, al, apri, esportaCsv, esportaXlsx, es
             <div className="relative">
               <Search size={14} strokeWidth={1.75} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--tenue)" }} />
               <input value={cerca} onChange={(e) => setCerca(e.target.value)} placeholder="Cerca…"
-                className="pl-9 pr-3 py-2 text-sm outline-none campo" style={{ width: 190, background: "var(--tela)" }} aria-label="Cerca commessa" />
+                className="pl-9 pr-3 py-2 text-sm outline-none campo" style={{ width: 190, background: "var(--tela-alt)" }} aria-label="Cerca commessa" />
             </div>
           </div>
           <div className="overflow-x-auto">
@@ -2822,7 +2822,7 @@ function PannelloDettaglio({ riga, riep, costi, dal, al, serieMensile, allegati,
               Costo mese per mese da quando ha ore registrate, indipendente dall'intervallo scelto.
             </p>
             {datiCommessa.length < 2 ? (
-              <p className="text-sm leading-relaxed rounded-xl px-4 py-3.5" style={{ background: "var(--tela)", color: "var(--muted)" }}>
+              <p className="text-sm leading-relaxed rounded-[9px] px-4 py-3.5" style={{ background: "var(--tela-alt)", color: "var(--muted)" }}>
                 {datiCommessa.length === 1
                   ? `Questa commessa ha ore in un solo mese (${fmtMese(serieCommessa[0].mese)}): non c'è ancora un andamento da confrontare.`
                   : "Nessuna ora registrata su questa commessa nello storico disponibile."}
@@ -2911,7 +2911,7 @@ function SezioneMateriali({ commessa, voci, totale, dal, al, onAggiungi, onAggio
         Voci di spesa inserite a mano, nell'intervallo scelto. Il costo della riga è quantità × prezzo unitario e si somma alla manodopera solo nel costo totale.
       </p>
 
-      <div className="rounded-xl p-4 space-y-3" style={{ background: "var(--tela-alt)", borderRadius: "var(--r-sm)", boxShadow: "var(--ombra-xs)" }}
+      <div className="rounded-[9px] p-4 space-y-3" style={{ background: "var(--tela-alt)", borderRadius: "var(--r-sm)", boxShadow: "var(--ombra-xs)" }}
         onKeyDown={(e) => e.key === "Enter" && invia()}>
         <div className="grid grid-cols-2 gap-3">
           <Campo etichetta="Data" errore={err.data}>
@@ -2954,7 +2954,7 @@ function SezioneMateriali({ commessa, voci, totale, dal, al, onAggiungi, onAggio
       ) : (
         <ul className="mt-4 space-y-2">
           {voci.map((m) => (
-            <li key={m.id} className="rounded-xl px-3.5 py-3 flex items-start justify-between gap-3"
+            <li key={m.id} className="rounded-[9px] px-3.5 py-3 flex items-start justify-between gap-3"
               style={{ border: "1px solid var(--hairline)", background: inModifica === m.id ? "var(--velo-accento)" : "transparent" }}>
               <div className="min-w-0">
                 <p className="text-sm font-medium truncate">{m.descrizione}</p>
@@ -2968,11 +2968,11 @@ function SezioneMateriali({ commessa, voci, totale, dal, al, onAggiungi, onAggio
               <div className="flex items-center gap-1.5 shrink-0">
                 <p className="f-mono text-sm" style={{ color: "var(--euro)" }}>{euro(m.costo)}</p>
                 <button onClick={() => { setInModifica(m.id); setErr({}); setF({ data: m.data, fornitore: m.fornitore, descrizione: m.descrizione, quantita: String(m.quantita).replace(".", ","), prezzoUnitario: String(m.prezzoUnitario).replace(".", ",") }); }}
-                  aria-label={"Modifica materiale " + m.descrizione} className="p-1.5 rounded-lg btn" style={{ border: "1px solid var(--hairline)" }}>
+                  aria-label={"Modifica materiale " + m.descrizione} className="p-1.5 rounded-[9px] btn" style={{ boxShadow: "var(--ombra-sm)" }}>
                   <Pencil size={12} strokeWidth={1.75} />
                 </button>
                 <button onClick={async () => { if (inModifica === m.id) annulla(); await onElimina(m); }}
-                  aria-label={"Elimina materiale " + m.descrizione} className="p-1.5 rounded-lg btn" style={{ border: "1px solid rgba(166,58,50,.22)", color: "var(--errore)" }}>
+                  aria-label={"Elimina materiale " + m.descrizione} className="p-1.5 rounded-[9px] btn" style={{ border: "1px solid rgba(166,58,50,.22)", color: "var(--errore)" }}>
                   <Trash2 size={12} strokeWidth={1.75} />
                 </button>
               </div>
@@ -3085,7 +3085,7 @@ function SezioneDocumenti({ commessa, allegati, spazio, fornitoriNoti = [], onCa
         onChange={(e) => { const f = e.target.files[0]; e.target.value = ""; scegli(f); }} />
 
       {inCaricamento ? (
-        <div className="rounded-xl px-4 py-3.5" style={{ background: "var(--tela-alt)", borderRadius: "var(--r-sm)", boxShadow: "var(--ombra-xs)" }}>
+        <div className="rounded-[9px] px-4 py-3.5" style={{ background: "var(--tela-alt)", borderRadius: "var(--r-sm)", boxShadow: "var(--ombra-xs)" }}>
           <div className="flex items-center gap-2.5">
             <Loader2 size={14} strokeWidth={1.75} className="animate-spin" style={{ color: "var(--accent)" }} />
             <p className="text-sm truncate">Caricamento di {inCaricamento}…</p>
@@ -3097,7 +3097,7 @@ function SezioneDocumenti({ commessa, allegati, spazio, fornitoriNoti = [], onCa
       ) : form ? (
         /* I tre campi del DDT, prima di scegliere il file. Si può premere
            "Scegli il file" con tutti i campi vuoti: sono facoltativi davvero. */
-        <div className="rounded-xl px-4 py-4" style={{ background: "var(--tela-alt)", borderRadius: "var(--r-sm)", boxShadow: "var(--ombra-xs)" }}>
+        <div className="rounded-[9px] px-4 py-4" style={{ background: "var(--tela-alt)", borderRadius: "var(--r-sm)", boxShadow: "var(--ombra-xs)" }}>
           <p className="t-piccolo mb-3" style={{ color: "var(--muted)" }}>
             Se scrivi <strong style={{ color: "var(--txt)" }}>numero, data e fornitore</strong> del DDT, quando arriverà la fattura che lo cita
             questa commessa verrà proposta da sola. Non è obbligatorio: puoi lasciarli vuoti e archiviare il documento come sempre.
@@ -3124,10 +3124,10 @@ function SezioneDocumenti({ commessa, allegati, spazio, fornitoriNoti = [], onCa
       ) : (
         <ul className="mt-4 space-y-2">
           {allegati.map((a) => (
-            <li key={a.id} className="rounded-xl px-3.5 py-3" style={{ border: "1px solid var(--hairline)" }}>
+            <li key={a.id} className="rounded-[9px] px-3.5 py-3" style={{ boxShadow: "var(--ombra-sm)" }}>
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: "var(--velo-accento)" }}>
+                  <div className="w-9 h-9 rounded-[9px] flex items-center justify-center shrink-0" style={{ background: "var(--velo-accento)" }}>
                     {a.tipo === "application/pdf"
                       ? <FileText size={16} strokeWidth={1.75} style={{ color: "var(--accent)" }} />
                       : <FileImage size={16} strokeWidth={1.75} style={{ color: "var(--accent)" }} />}
@@ -3147,17 +3147,17 @@ function SezioneDocumenti({ commessa, allegati, spazio, fornitoriNoti = [], onCa
                 <div className="flex items-center gap-1.5 shrink-0">
                   <button onClick={() => setInModifica(inModifica?.id === a.id ? null : { id: a.id, ddtNumero: a.ddtNumero || "", ddtData: a.ddtData || "", fornitore: a.fornitore || "" })}
                     aria-label={"Dati del DDT per " + a.nomeFile} title="Dati del DDT (numero, data, fornitore)"
-                    className="p-1.5 rounded-lg btn" style={{ border: "1px solid var(--hairline)" }}>
+                    className="p-1.5 rounded-[9px] btn" style={{ boxShadow: "var(--ombra-sm)" }}>
                     <Pencil size={12} strokeWidth={1.75} />
                   </button>
                   <button onClick={() => apri(a)} disabled={inApertura === a.id}
-                    aria-label={"Apri documento " + a.nomeFile} className="p-1.5 rounded-lg btn" style={{ border: "1px solid var(--hairline)" }}>
+                    aria-label={"Apri documento " + a.nomeFile} className="p-1.5 rounded-[9px] btn" style={{ boxShadow: "var(--ombra-sm)" }}>
                     {inApertura === a.id
                       ? <Loader2 size={12} strokeWidth={1.75} className="animate-spin" />
                       : <Download size={12} strokeWidth={1.75} />}
                   </button>
                   <button onClick={() => onElimina(a)} aria-label={"Elimina documento " + a.nomeFile}
-                    className="p-1.5 rounded-lg btn" style={{ border: "1px solid rgba(166,58,50,.22)", color: "var(--errore)" }}>
+                    className="p-1.5 rounded-[9px] btn" style={{ border: "1px solid rgba(166,58,50,.22)", color: "var(--errore)" }}>
                     <Trash2 size={12} strokeWidth={1.75} />
                   </button>
                 </div>
@@ -3259,7 +3259,7 @@ function StatoAbbinamento({ stato, commessa }) {
   }[tipo];
 
   return (
-    <div className="rounded-lg px-3 py-2 mt-2 inline-flex flex-col gap-1"
+    <div className="rounded-[9px] px-3 py-2 mt-2 inline-flex flex-col gap-1"
       style={{ background: s.velo, border: `1px solid ${s.bordo}` }}>
       <p className="t-piccolo flex items-start gap-1.5" style={{ color: s.colore }}>
         <Icona size={13} strokeWidth={1.75} className="mt-0.5 shrink-0" /> <span>{testo}</span>
@@ -3456,10 +3456,10 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
           <h1 className="t-titolo mt-2">{lettura.fattura.nomeFile}</h1>
         </div>
         <section className="p-7" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-4" style={{ background: "var(--velo-accento)" }}>
+          <div className="w-10 h-10 rounded-[9px] flex items-center justify-center mb-4" style={{ background: "var(--velo-accento)" }}>
             <AlertTriangle size={18} strokeWidth={1.75} style={{ color: "var(--accent)" }} />
           </div>
-          <h2 className="f-display text-lg mb-2">Questo PDF è una scansione</h2>
+          <h2 className="t-sezione mb-3">Questo PDF è una scansione</h2>
           <p className="text-sm leading-relaxed mb-4" style={{ color: "var(--muted)" }}>{lettura.avvisi[0]}</p>
           <p className="text-sm leading-relaxed mb-6" style={{ color: "var(--muted)" }}>
             Non provo a indovinare cosa c'è scritto: su un documento di spesa un numero sbagliato è peggio di un numero mancante.
@@ -3504,7 +3504,7 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
       </div>
 
       {lettura.avvisi.length > 0 && (
-        <div className="rounded-xl px-4 py-3 space-y-1" style={{ background: "var(--velo-accento)", border: "1px solid rgba(154,120,58,.18)" }} role="alert">
+        <div className="rounded-[9px] px-4 py-3 space-y-1" style={{ background: "var(--velo-accento)", border: "1px solid rgba(154,120,58,.18)" }} role="alert">
           {lettura.avvisi.map((a, i) => (
             <p key={i} className="text-sm flex items-start gap-2" style={{ color: "#7C6027" }}>
               <AlertTriangle size={14} strokeWidth={1.75} className="mt-0.5 shrink-0" /> {a}
@@ -3514,7 +3514,7 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
       )}
 
       {commesse.length === 0 && (
-        <div className="rounded-xl px-4 py-3 text-sm flex items-start gap-2" style={{ background: "var(--velo-errore)", border: "1px solid rgba(166,58,50,.2)", color: "var(--errore)" }}>
+        <div className="rounded-[9px] px-4 py-3 text-sm flex items-start gap-2" style={{ background: "var(--velo-errore)", border: "1px solid rgba(166,58,50,.2)", color: "var(--errore)" }}>
           <Info size={14} strokeWidth={1.75} className="mt-0.5 shrink-0" />
           Non ci sono commesse a cui assegnare le righe: creane una nella sezione Dati, poi torna qui.
         </div>
@@ -3535,7 +3535,7 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
             <div className="px-7 py-5 flex flex-wrap items-end justify-between gap-5" style={{ borderBottom: "1px solid var(--hairline)", background: "var(--tela-alt)" }}>
               <div>
                 <Micro>{g.ddtNumero ? "Documento di trasporto" : "Righe senza DDT"}</Micro>
-                <p className="f-display text-lg mt-1">
+                <p className="t-sotto mt-1.5">
                   {g.ddtNumero ? `DDT ${g.ddtNumero}` : "Nessun riferimento a un DDT"}
                   {g.ddtData && <span className="text-sm font-normal" style={{ color: "var(--muted)" }}> del {fmtData(g.ddtData)}</span>}
                 </p>
@@ -3592,7 +3592,7 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
                       <tr key={r.id} style={{ borderTop: "1px solid var(--hairline)", background: daControllare ? "var(--velo-accento)" : "transparent" }}>
                         <td  style={{ minWidth: 280 }}>
                           <input value={r.descrizione} onChange={(e) => modificaRiga(r.id, { descrizione: e.target.value })}
-                            className={inputCls + " py-1.5"} style={{ background: "var(--tela)" }} aria-label="Descrizione della riga" />
+                            className={inputCls + " py-1.5"} style={{ background: "var(--tela-alt)" }} aria-label="Descrizione della riga" />
                           {daControllare && (
                             <p className="t-piccolo mt-1 flex items-center gap-1" style={{ color: "#7C6027" }}>
                               <AlertTriangle size={11} strokeWidth={1.75} /> da controllare: {r.daControllare.join(", ")}
@@ -3602,11 +3602,11 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
                         </td>
                         <td className="text-right">
                           <input value={r.quantita} onChange={(e) => modificaRiga(r.id, { quantita: e.target.value })}
-                            className={inputCls + " f-mono text-right py-1.5"} style={{ width: 90, background: "var(--tela)" }} aria-label="Quantità" />
+                            className={inputCls + " f-mono text-right py-1.5"} style={{ width: 90, background: "var(--tela-alt)" }} aria-label="Quantità" />
                         </td>
                         <td className="text-right">
                           <input value={r.prezzoUnitario} onChange={(e) => modificaRiga(r.id, { prezzoUnitario: e.target.value })}
-                            className={inputCls + " f-mono text-right py-1.5"} style={{ width: 110, background: "var(--tela)" }} aria-label="Prezzo unitario" />
+                            className={inputCls + " f-mono text-right py-1.5"} style={{ width: 110, background: "var(--tela-alt)" }} aria-label="Prezzo unitario" />
                         </td>
                         <td className="f-mono text-right whitespace-nowrap" style={{ color: tot == null ? "var(--errore)" : "var(--euro)" }}>
                           {tot == null ? "da controllare" : euro(tot)}
@@ -3615,7 +3615,7 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
                           {/* Anche la singola riga si cambia: e da quel momento
                               l'assegnazione è dell'utente, non del software. */}
                           <select value={r.commessaId} onChange={(e) => modificaRiga(r.id, { commessaId: e.target.value, assegnazione: "manuale" })}
-                            className={inputCls + " py-1.5"} style={{ width: 200, background: "var(--tela)" }} aria-label={"Commessa per " + r.descrizione}>
+                            className={inputCls + " py-1.5"} style={{ width: 200, background: "var(--tela-alt)" }} aria-label={"Commessa per " + r.descrizione}>
                             <option value={NON_IMPORTARE}>— non importare —</option>
                             {commesse.map((c) => <option key={c.id} value={c.id}>{c.codice}</option>)}
                           </select>
@@ -3632,14 +3632,14 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
 
       {/* riepilogo e conferma */}
       <section className="p-7" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
-        <h2 className="f-display text-lg mb-4">Riepilogo prima di importare</h2>
+        <h2 className="t-sotto mb-5">Riepilogo prima di importare</h2>
         <div className="grid sm:grid-cols-3 gap-4 mb-5">
           {[
             { e: "Righe da importare", v: `${daImportare.length} di ${righe.length}` },
             { e: "Totale materiali", v: euro(totaleDaImportare), c: "var(--euro)" },
             { e: "Righe escluse", v: String(righe.length - daImportare.length), c: righe.length - daImportare.length > 0 ? "#7C6027" : "var(--muted)" },
           ].map((k) => (
-            <div key={k.e} className="rounded-xl px-4 py-3" style={{ border: "1px solid var(--hairline)" }}>
+            <div key={k.e} className="rounded-[9px] px-4 py-3" style={{ boxShadow: "var(--ombra-sm)" }}>
               <Micro>{k.e}</Micro>
               <p className="f-mono text-[17px] mt-1.5" style={{ color: k.c || "var(--txt)" }}>{k.v}</p>
             </div>
@@ -3660,7 +3660,7 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
               const s = STILI_STATO[v.tipo];
               const Icona = s.icona;
               return (
-                <div key={v.tipo} className="rounded-lg px-3 py-2 flex items-center gap-2 t-piccolo"
+                <div key={v.tipo} className="rounded-[9px] px-3 py-2 flex items-center gap-2 t-piccolo"
                   style={{ background: s.velo, border: `1px solid ${s.bordo}`, color: s.colore }}>
                   <Icona size={13} strokeWidth={1.75} />
                   <span className="f-mono font-medium">{v.n}</span> {v.testo}
@@ -3674,7 +3674,7 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
             qualcosa è finito sulla commessa sbagliata, si vede qui prima di
             premere Conferma — che è l'unico momento in cui i costi entrano. */}
         {gruppiAutomatici.length > 0 && (
-          <div className="rounded-xl px-4 py-3.5 mb-5" style={{ background: "rgba(30,115,80,.06)", border: "1px solid rgba(30,115,80,.18)" }}>
+          <div className="rounded-[9px] px-4 py-3.5 mb-5" style={{ background: "rgba(30,115,80,.06)", border: "1px solid rgba(30,115,80,.18)" }}>
             <p className="t-piccolo font-semibold mb-2" style={{ color: "var(--euro)" }}>
               Abbinati in automatico, da controllare:
             </p>
@@ -3772,14 +3772,14 @@ function VistaDipendenti({ dipendenti, setDipendenti, riep, elimina, notifica })
             return (
               <div key={dip.id} className="p-7" style={{ background: "var(--card)", borderRadius: "var(--r-md)", boxShadow: "var(--ombra-sm)" }}>
                 <div className="flex items-center gap-3.5 mb-5">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center f-mono t-piccolo shrink-0" style={{ background: "var(--velo)", color: "var(--txt)" }}>{iniziali}</div>
+                  <div className="w-10 h-10 rounded-[9px] flex items-center justify-center f-mono t-piccolo shrink-0" style={{ background: "var(--velo)", color: "var(--txt)" }}>{iniziali}</div>
                   <div className="min-w-0">
-                    <p className="f-display text-[17px] leading-none truncate">{dip.nome} {dip.cognome}</p>
+                    <p className="t-sotto truncate">{dip.nome} {dip.cognome}</p>
                     <p className="t-piccolo f-mono mt-1.5" style={{ color: "var(--muted)" }}>Ore nell'intervallo: {fmtOre.format(oreIntervallo.get(dip.id) || 0)} h</p>
                   </div>
                   <div className="ml-auto flex gap-1 shrink-0">
-                    <button onClick={() => setEditor({ dip })} aria-label="Modifica dipendente" className="p-2 rounded-lg btn" style={{ border: "1px solid var(--hairline)" }}><Pencil size={13} strokeWidth={1.75} /></button>
-                    <button onClick={() => elimina(dip)} aria-label="Elimina dipendente" className="p-2 rounded-lg btn" style={{ border: "1px solid rgba(166,58,50,.22)", color: "var(--errore)" }}><Trash2 size={13} strokeWidth={1.75} /></button>
+                    <button onClick={() => setEditor({ dip })} aria-label="Modifica dipendente" className="p-2 rounded-[9px] btn" style={{ boxShadow: "var(--ombra-sm)" }}><Pencil size={13} strokeWidth={1.75} /></button>
+                    <button onClick={() => elimina(dip)} aria-label="Elimina dipendente" className="p-2 rounded-[9px] btn" style={{ border: "1px solid rgba(166,58,50,.22)", color: "var(--errore)" }}><Trash2 size={13} strokeWidth={1.75} /></button>
                   </div>
                 </div>
                 {elenco.length === 0 ? (
@@ -3865,7 +3865,7 @@ function EditorDipendente({ iniziale, onSalva, onChiudi }) {
           <div key={i} className="flex gap-2 items-center">
             <input type="month" value={riga.mese} onChange={(e) => setLordi((l) => l.map((x, j) => (j === i ? { ...x, mese: e.target.value } : x)))} className={inputCls + " f-mono"} style={{ width: 170 }} aria-label="Mese" />
             <input value={riga.importo} onChange={(e) => setLordi((l) => l.map((x, j) => (j === i ? { ...x, importo: e.target.value } : x)))} placeholder="es. 2.500,00" className={inputCls + " f-mono text-right"} aria-label="Lordo del mese in euro" />
-            <button onClick={() => setLordi((l) => l.filter((_, j) => j !== i))} aria-label="Rimuovi mese" className="p-2 rounded-lg shrink-0 btn" style={{ border: "1px solid var(--hairline)" }}><X size={13} strokeWidth={1.75} /></button>
+            <button onClick={() => setLordi((l) => l.filter((_, j) => j !== i))} aria-label="Rimuovi mese" className="p-2 rounded-[9px] shrink-0 btn" style={{ boxShadow: "var(--ombra-sm)" }}><X size={13} strokeWidth={1.75} /></button>
           </div>
         ))}
       </div>
@@ -3976,7 +3976,7 @@ function VistaDati({ dipendenti, commesse, registrazioni, setCommesse, aggiungi,
         {commesse.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {commesse.map((c) => (
-              <span key={c.id} className="inline-flex items-center gap-1.5 t-piccolo rounded-lg pl-2.5 pr-1 py-1" style={{ border: "1px solid var(--hairline)", background: "var(--tela)" }} title={c.descrizione}>
+              <span key={c.id} className="inline-flex items-center gap-1.5 t-piccolo rounded-[9px] pl-2.5 pr-1 py-1" style={{ border: "1px solid var(--hairline)", background: "var(--tela-alt)" }} title={c.descrizione}>
                 <span className="f-mono font-medium">{c.codice}</span>
                 <button onClick={() => setRinomina(c)} aria-label={"Rinomina commessa " + c.codice} title="Rinomina" className="p-0.5 rounded btn" style={{ color: "var(--muted)" }}><Pencil size={10} strokeWidth={1.75} /></button>
                 <button onClick={() => eliminaCommessa(c)} aria-label={"Elimina commessa " + c.codice} className="p-0.5 rounded btn" style={{ color: "var(--muted)" }}><X size={11} strokeWidth={1.75} /></button>
@@ -3990,7 +3990,7 @@ function VistaDati({ dipendenti, commesse, registrazioni, setCommesse, aggiungi,
         extra={
           <div className="relative">
             <Search size={13} strokeWidth={1.75} className="absolute left-3 top-2.5" style={{ color: "var(--muted)" }} />
-            <input value={filtro} onChange={(e) => setFiltro(e.target.value)} placeholder="Cerca…" className={inputCls + " pl-8 py-1.5"} style={{ width: 200, background: "var(--tela)" }} aria-label="Filtra registrazioni" />
+            <input value={filtro} onChange={(e) => setFiltro(e.target.value)} placeholder="Cerca…" className={inputCls + " pl-8 py-1.5"} style={{ width: 200, background: "var(--tela-alt)" }} aria-label="Filtra registrazioni" />
           </div>
         }>
         {registrazioni.length === 0 ? (
@@ -4015,8 +4015,8 @@ function VistaDati({ dipendenti, commesse, registrazioni, setCommesse, aggiungi,
                       <td className="px-6 py-3 f-mono">{c ? c.codice : "—"}</td>
                       <td className="px-6 py-3 f-mono text-right">{fmtOre.format(r.ore)}</td>
                       <td className="px-6 py-3 text-right whitespace-nowrap">
-                        <button onClick={() => setModifica(r)} aria-label="Modifica registrazione" className="p-1.5 rounded-lg mr-1 btn" style={{ border: "1px solid var(--hairline)" }}><Pencil size={12} strokeWidth={1.75} /></button>
-                        <button onClick={() => { eliminaReg(r.id); notifica("Registrazione eliminata."); }} aria-label="Elimina registrazione" className="p-1.5 rounded-lg btn" style={{ border: "1px solid rgba(166,58,50,.22)", color: "var(--errore)" }}><Trash2 size={12} strokeWidth={1.75} /></button>
+                        <button onClick={() => setModifica(r)} aria-label="Modifica registrazione" className="p-1.5 rounded-[9px] mr-1 btn" style={{ boxShadow: "var(--ombra-sm)" }}><Pencil size={12} strokeWidth={1.75} /></button>
+                        <button onClick={() => { eliminaReg(r.id); notifica("Registrazione eliminata."); }} aria-label="Elimina registrazione" className="p-1.5 rounded-[9px] btn" style={{ border: "1px solid rgba(166,58,50,.22)", color: "var(--errore)" }}><Trash2 size={12} strokeWidth={1.75} /></button>
                       </td>
                     </tr>
                   );
