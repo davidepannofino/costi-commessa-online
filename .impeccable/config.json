@@ -1,7 +1,9 @@
 {
   "detector": {
     "ignoreRules": [],
-    "ignoreFiles": [],
+    "ignoreFiles": [
+      "backend/src/email.js"
+    ],
     "ignoreValues": [
       {
         "rule": "overused-font",

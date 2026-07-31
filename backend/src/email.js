@@ -21,7 +21,12 @@ export async function inviaEmailResetPassword(email, link) {
         <p style="font-size:16px;">Hai richiesto di reimpostare la password del tuo account <strong>Commexa</strong>.</p>
         <p style="font-size:16px;">Apri questo link entro <strong>un'ora</strong> per scegliere una nuova password:</p>
         <p style="margin:24px 0;">
-          <a href="${link}" style="background:#9A783A;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600;display:inline-block;">
+          <!-- Bronzo #8A6D4B: lo stesso del marchio, non un bronzo diverso.
+               Prima qui c'era #9A783A, nato prima che l'accento fosse fissato e
+               mai riconciliato. Su fondo bianco con testo bianco fa 4,81:1,
+               quindi si allinea senza perdere leggibilita'. Il raggio resta 8px
+               come i controlli dell'app. -->
+          <a href="${link}" style="background:#8A6D4B;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600;display:inline-block;">
             Reimposta la password
           </a>
         </p>
