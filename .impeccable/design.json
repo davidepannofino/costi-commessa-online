@@ -1,0 +1,180 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-31T00:00:00.000Z",
+  "title": "Design System: Commexa",
+  "extensions": {
+    "colorMeta": {
+      "bronzo-spento": {
+        "role": "primary",
+        "displayName": "Bronzo spento",
+        "canonical": "#8A6D4B",
+        "tonalRamp": ["#1A140D", "#2E2418", "#453522", "#5C472D", "#73593A", "#8A6D4B", "#A88B66", "#C7AE8F"]
+      },
+      "verde-importo": {
+        "role": "secondary",
+        "displayName": "Verde importo",
+        "canonical": "#4ADE80",
+        "tonalRamp": ["#07160E", "#0D2318", "#16432A", "#215C3B", "#2E8B57", "#3BB56C", "#4ADE80", "#8CEBAF"]
+      },
+      "ambra-controllare": {
+        "role": "secondary",
+        "displayName": "Ambra da controllare",
+        "canonical": "#D9A441",
+        "tonalRamp": ["#171106", "#241B0C", "#3A2C13", "#4A3818", "#7A5C26", "#A87F35", "#D9A441", "#E9C685"]
+      },
+      "rosso-guasto": {
+        "role": "tertiary",
+        "displayName": "Rosso guasto",
+        "canonical": "#F09595",
+        "tonalRamp": ["#1B0C0D", "#2A1315", "#3B1B1D", "#4A2226", "#7A383C", "#A85055", "#F09595", "#F7C0C0"]
+      },
+      "fondo-app": {
+        "role": "neutral",
+        "displayName": "Fondo app",
+        "canonical": "#08080A",
+        "tonalRamp": ["#08080A", "#0A0A0D", "#0D0D10", "#131317", "#16161A", "#18181C", "#1A1A1F", "#1F1F24"]
+      },
+      "testo-primo": {
+        "role": "neutral",
+        "displayName": "Testo primo",
+        "canonical": "#FAFAFA",
+        "tonalRamp": ["#52525B", "#7E7E88", "#8A8A93", "#A1A1AA", "#C4C4CB", "#E4E4E7", "#F4F4F5", "#FAFAFA"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Numero-eroe", "purpose": "Un solo numero per schermata, fuori da qualunque card. 37px sotto i 640px." },
+      "headline": { "displayName": "Titolo di schermata", "purpose": "L'h1 di una vista. Mai preceduto da un'etichetta in maiuscoletto." },
+      "title": { "displayName": "Titolo di blocco", "purpose": "Blocchi importanti dentro una schermata." },
+      "subtitle": { "displayName": "Intestazione di card", "purpose": "Testata di card e di sezione." },
+      "body": { "displayName": "Corpo", "purpose": "Testo delle righe. Prose lunghe fino a 58-66ch." },
+      "caption": { "displayName": "Didascalia", "purpose": "Note e righe di contesto sotto un dato." },
+      "label": { "displayName": "Etichetta", "purpose": "Maiuscoletto sopra un valore, e intestazioni di tabella. Mai sopra un titolo." },
+      "numeric": { "displayName": "Cifra in evidenza", "purpose": "Qualunque numero che deve incolonnarsi. Crenatura zero sulle colonne di importi." }
+    },
+    "shadows": [
+      { "name": "piano-sollevato", "value": "0 0 0 .5px #1F1F24, 0 24px 64px -12px rgba(0,0,0,.7)", "purpose": "L'unica ombra vera del sistema: modale e pannello laterale, che galleggiano davvero sopra il resto." },
+      { "name": "anello-fuoco", "value": "0 0 0 2px #08080A, 0 0 0 4px #8A6D4B", "purpose": "Fuoco da tastiera, identico su bottoni e campi. Il primo anello è del colore del fondo, così il bronzo non tocca l'elemento." },
+      { "name": "filo", "value": "0 0 0 .5px #1A1A1F", "purpose": "Non è un'ombra: è l'anello di bordo che disegna la struttura al posto delle ombre." }
+    ],
+    "motion": [
+      { "name": "moto", "value": "170ms cubic-bezier(.2,.7,.3,1)", "purpose": "Il tempo unico di tutta l'applicazione: colore, bordo, fondo. Nessun elemento cambia dimensione al passaggio del mouse." },
+      { "name": "pop", "value": "200ms cubic-bezier(.2,.7,.3,1)", "purpose": "Comparsa di modali e notifiche: 6px verso l'alto e una scala da .99." },
+      { "name": "slide", "value": "260ms cubic-bezier(.2,.7,.3,1)", "purpose": "Ingresso del pannello di dettaglio dal lato destro." },
+      { "name": "barra", "value": "600ms cubic-bezier(.19,1,.22,1)", "purpose": "Crescita delle barre di proporzione. Unica animazione di layout ammessa: la larghezza è il dato." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" },
+      { "name": "contenuto-max", "value": "1180px" },
+      { "name": "barra-laterale", "value": "230px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Bottone primario",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "L'azione della schermata. Una per schermata, non due.",
+      "html": "<button class=\"ds-btn-primario\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 12h14M12 5v14\"/></svg>Registra</button>",
+      "css": ".ds-btn-primario { display:inline-flex; align-items:center; justify-content:center; gap:8px; font-family:'Fira Sans',system-ui,sans-serif; font-size:13px; font-weight:500; letter-spacing:-.005em; padding:9px 15px; border:none; border-radius:8px; background:#8A6D4B; color:#FFFBF5; cursor:pointer; transition:background 170ms cubic-bezier(.2,.7,.3,1); } .ds-btn-primario:hover { background:#7A6042; } .ds-btn-primario:focus-visible { outline:none; box-shadow:0 0 0 2px #08080A, 0 0 0 4px #8A6D4B; } .ds-btn-primario:active { opacity:.85; }"
+    },
+    {
+      "name": "Bottone fantasma",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Azione secondaria: un box rialzato come tutti gli altri box.",
+      "html": "<button class=\"ds-btn-fantasma\">Annulla</button>",
+      "css": ".ds-btn-fantasma { display:inline-flex; align-items:center; gap:8px; font-family:'Fira Sans',system-ui,sans-serif; font-size:13px; font-weight:500; padding:9px 15px; border:.5px solid #1F1F24; border-radius:8px; background:#131317; color:#F4F4F5; cursor:pointer; transition:background 170ms cubic-bezier(.2,.7,.3,1), border-color 170ms cubic-bezier(.2,.7,.3,1); } .ds-btn-fantasma:hover { background:#16161A; border-color:#2E2E36; } .ds-btn-fantasma:focus-visible { outline:none; box-shadow:0 0 0 2px #08080A, 0 0 0 4px #8A6D4B; }"
+    },
+    {
+      "name": "Cestino di riga",
+      "kind": "button",
+      "refersTo": "button-row-delete",
+      "description": "Elimina dentro una riga d'elenco. Neutro a riposo: trecento contorni rossi brucerebbero il rosso.",
+      "html": "<button class=\"ds-btn-riga-elimina\" aria-label=\"Elimina la riga\"><svg width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6\"/></svg></button>",
+      "css": ".ds-btn-riga-elimina { display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border:.5px solid #1F1F24; border-radius:8px; background:#131317; color:#7E7E88; cursor:pointer; transition:background 170ms cubic-bezier(.2,.7,.3,1), border-color 170ms, color 170ms; } .ds-btn-riga-elimina:hover, .ds-btn-riga-elimina:focus-visible { background:#2A1315; border-color:#4A2226; color:#F09595; } .ds-btn-riga-elimina:focus-visible { outline:none; }"
+    },
+    {
+      "name": "Campo di testo",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Fondo rialzato, bordo di mezzo pixel. Al fuoco cambia bordo E prende l'anello: un cambio di bordo da solo si perde.",
+      "html": "<label class=\"ds-campo\"><span class=\"ds-campo-etichetta\">Ore</span><input class=\"ds-campo-input\" value=\"8\" inputmode=\"decimal\"></label>",
+      "css": ".ds-campo { display:block; font-family:'Fira Sans',system-ui,sans-serif; } .ds-campo-etichetta { display:block; font-size:11px; font-weight:500; letter-spacing:.06em; text-transform:uppercase; color:#8A8A93; margin-bottom:8px; } .ds-campo-input { width:100%; box-sizing:border-box; padding:10px 14px; font-family:inherit; font-size:13px; font-variant-numeric:tabular-nums; text-align:right; background:#131317; border:.5px solid #1F1F24; border-radius:8px; color:#F4F4F5; transition:border-color 170ms cubic-bezier(.2,.7,.3,1), background 170ms; } .ds-campo-input:hover { border-color:#26262C; } .ds-campo-input:focus { outline:none; border-color:#8A6D4B; background:#16161A; } .ds-campo-input:focus-visible { box-shadow:0 0 0 2px #08080A, 0 0 0 4px #8A6D4B; } .ds-campo-input::placeholder { color:#7E7E88; }"
+    },
+    {
+      "name": "Badge codice commessa",
+      "kind": "chip",
+      "refersTo": "badge-code",
+      "description": "Il codice di una commessa, identico in ogni schermata. Bronzo pieno solo per la più costosa.",
+      "html": "<span class=\"ds-badge\">P16</span> <span class=\"ds-badge ds-badge-primo\">P19</span>",
+      "css": ".ds-badge { display:inline-flex; align-items:center; justify-content:center; font-family:'Fira Sans',system-ui,sans-serif; font-size:11.5px; font-weight:500; font-variant-numeric:tabular-nums; padding:3px 8px; border-radius:6px; white-space:nowrap; background:#18181C; color:#A1A1AA; } .ds-badge-primo { background:#8A6D4B; color:#FFFBF5; }"
+    },
+    {
+      "name": "Voce di navigazione attiva",
+      "kind": "nav",
+      "refersTo": "nav-item-active",
+      "description": "Filo bronzo a sinistra, fondo di passaggio, contatore in pillola. Porta aria-current=\"page\".",
+      "html": "<nav class=\"ds-nav\"><button class=\"ds-nav-voce ds-nav-attiva\" aria-current=\"page\"><svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z\"/></svg><span>Commesse</span><span class=\"ds-nav-conteggio\">23</span></button><button class=\"ds-nav-voce\"><svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"9\" cy=\"7\" r=\"3\"/><path d=\"M3 20c0-3 3-5 6-5s6 2 6 5\"/></svg><span>Dipendenti</span></button></nav>",
+      "css": ".ds-nav { display:flex; flex-direction:column; gap:2px; background:#0A0A0D; padding:10px; font-family:'Fira Sans',system-ui,sans-serif; } .ds-nav-voce { position:relative; display:flex; align-items:center; gap:10px; width:100%; padding:8px 12px 8px 14px; font-size:13px; font-weight:500; border:none; border-radius:8px; background:transparent; color:#A1A1AA; cursor:pointer; text-align:left; transition:background 170ms cubic-bezier(.2,.7,.3,1), color 170ms; } .ds-nav-voce:hover { background:#16161A; color:#F4F4F5; } .ds-nav-attiva { background:#16161A; color:#F4F4F5; } .ds-nav-attiva::before { content:\"\"; position:absolute; left:0; top:50%; transform:translateY(-50%); width:2.5px; height:15px; border-radius:99px; background:#8A6D4B; } .ds-nav-attiva svg { color:#A88B66; } .ds-nav-conteggio { margin-left:auto; font-size:12px; font-variant-numeric:tabular-nums; background:#18181C; color:#7E7E88; border-radius:6px; padding:1px 6px; }"
+    },
+    {
+      "name": "Banda-eroe",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "L'apertura delle schermate di riepilogo: la cifra sul fondo nudo, la ripartizione, il libro mastro a fianco. Non sta dentro una card.",
+      "html": "<section class=\"ds-eroe\"><div><p class=\"ds-eroe-etichetta\">Costo del periodo</p><p class=\"ds-eroe-cifra\">8.574,00 €</p><div class=\"ds-eroe-barra\"><i style=\"width:78%;background:#52525B\"></i><i style=\"width:22%;background:#2A2A31\"></i></div><div class=\"ds-eroe-voci\"><span><i style=\"background:#52525B\"></i>manodopera <b>6.687,72 €</b></span><span><i style=\"background:#2A2A31\"></i>materiali <b>1.886,28 €</b></span></div></div><dl class=\"ds-eroe-mastro\"><div><dt>Ore del periodo</dt><dd>432</dd></div><div><dt>Costo medio orario</dt><dd>19,85</dd></div></dl></section>",
+      "css": ".ds-eroe { display:grid; gap:24px 56px; grid-template-columns:minmax(0,1.55fr) minmax(0,1fr); align-items:start; background:#08080A; padding:24px; font-family:'Fira Sans',system-ui,sans-serif; } .ds-eroe-etichetta { margin:0; font-size:11px; font-weight:500; letter-spacing:.06em; text-transform:uppercase; color:#8A8A93; } .ds-eroe-cifra { margin:14px 0 0; font-size:56px; line-height:.98; font-weight:600; letter-spacing:-.03em; font-variant-numeric:tabular-nums; color:#4ADE80; } .ds-eroe-barra { display:flex; height:3px; border-radius:99px; background:#18181C; overflow:hidden; margin-top:28px; } .ds-eroe-barra i { display:block; } .ds-eroe-voci { display:flex; flex-wrap:wrap; gap:6px 28px; margin-top:14px; font-size:12px; color:#7E7E88; } .ds-eroe-voci span { display:flex; align-items:baseline; gap:8px; } .ds-eroe-voci i { width:6px; height:6px; border-radius:2px; transform:translateY(-1px); } .ds-eroe-voci b { font-weight:400; font-variant-numeric:tabular-nums; color:#4ADE80; } .ds-eroe-mastro { margin:0; } .ds-eroe-mastro div { display:flex; align-items:baseline; justify-content:space-between; gap:20px; padding:12px 0; border-top:.5px solid #131316; } .ds-eroe-mastro div:first-child { border-top:none; } .ds-eroe-mastro dt { font-size:11px; font-weight:500; letter-spacing:.06em; text-transform:uppercase; color:#8A8A93; } .ds-eroe-mastro dd { margin:0; font-size:15px; font-weight:500; font-variant-numeric:tabular-nums; color:#FAFAFA; }"
+    },
+    {
+      "name": "Card di gruppo con filo di stato",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "L'unico bordo spesso del sistema: 3px sul fianco, colorato dallo stato, per scorrere venti gruppi senza leggere.",
+      "html": "<section class=\"ds-card ds-card-attesa\"><div class=\"ds-card-testa\"><p class=\"ds-card-titolo\">DDT 4738 <span>del 14/07/2026</span></p><p class=\"ds-card-conto\">2 righe · <b>744,80 €</b></p></div><p class=\"ds-card-stato\"><svg width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M9.1 9a3 3 0 015.8 1c0 2-3 3-3 3M12 17h.01\"/></svg><span>Possibile abbinamento a <b>P13</b> — da confermare</span></p><p class=\"ds-card-motivo\">il fornitore non combacia</p></section>",
+      "css": ".ds-card { background:#0D0D10; border:.5px solid #1A1A1F; border-radius:14px; padding:20px 24px; font-family:'Fira Sans',system-ui,sans-serif; } .ds-card-attesa { border-left:3px solid #D9A441; } .ds-card-testa { display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:4px 16px; } .ds-card-titolo { margin:0; font-size:13.5px; font-weight:500; color:#F4F4F5; } .ds-card-titolo span { font-size:12px; font-weight:400; color:#7E7E88; } .ds-card-conto { margin:0; font-size:12px; font-variant-numeric:tabular-nums; color:#7E7E88; } .ds-card-conto b { font-weight:400; color:#4ADE80; } .ds-card-stato { display:flex; align-items:flex-start; gap:6px; margin:10px 0 0; font-size:12px; color:#D9A441; } .ds-card-stato svg { margin-top:2px; flex-shrink:0; } .ds-card-stato b { font-weight:600; } .ds-card-motivo { margin:2px 0 0 19px; font-size:12px; color:#7E7E88; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Il registro di cantiere",
+    "overview": "Il libro dei conti tenuto bene. Righe, colonne, numeri incolonnati, nessun ornamento — e un solo inchiostro colorato, il bronzo, per segnare la voce che conta più delle altre. Ogni decisione di questo sistema si spiega guardando un registro: perché le tabelle sono il cuore e non un ripiego, perché il colore è quasi assente, perché una cifra si allinea alla virgola con quella di sopra, perché la pagina è densa senza essere stretta.\n\nIl sistema serve due persone dentro la stessa impresa: chi guarda un totale in tre secondi e chi inserisce cento righe in un'ora. Non sono due modi diversi, sono due velocità della stessa pagina — e ogni schermata deve reggerle entrambe.\n\nIl tema è scuro perché la scena d'uso lo chiede — un ufficio la sera, un telefono in cantiere — ma è un buio da strumento, non da vetrina: sei fondi grigio-neri appena distinguibili fra loro, bordi di mezzo pixel, e nessuna ombra a fingere una profondità che su un fondo quasi nero non si vedrebbe comunque.",
+    "keyCharacteristics": [
+      "Densità da tabella: corpo a 13px, cifre sempre tabellari, virgole in colonna",
+      "Sei livelli di fondo (#08080A → #18181C) al posto delle ombre",
+      "Bordi di mezzo pixel come unica linea strutturale",
+      "Un accento bronzo, usato al massimo su un elemento in evidenza per schermata",
+      "Tre colori che significano qualcosa e non decorano mai",
+      "Numeri-eroe fuori dai contenitori, mai dentro una card"
+    ],
+    "rules": [
+      { "name": "La Regola del Verde Denaro", "body": "Il verde vale solo per un importo in euro positivo. Nel momento in cui significa anche «l'ha fatto il software» o «è andata bene», le cifre in euro smettono di leggersi come denaro. Se serve dire «confermato», si usa un'icona di spunta e il testo chiaro.", "section": "colors" },
+      { "name": "La Regola dell'Unico in Evidenza", "body": "Su una schermata il bronzo pieno marca un solo elemento. Marchio, voce attiva e link non contano nel conto: sono struttura, non evidenza.", "section": "colors" },
+      { "name": "La Regola del Pavimento", "body": "Ogni testo che qualcuno deve leggere sta ad almeno 4,5:1 sul proprio fondo. I tre gradini bassi sono calcolati, non scelti a occhio: etichetta 5,85:1, tenue 4,98:1, decorativo 2,59:1 — e il decorativo non è testo, mai.", "section": "colors" },
+      { "name": "La Regola della Colonna", "body": "Ogni cifra che può finire sopra o sotto un'altra cifra è tabellare, con crenatura zero. Su una colonna di importi anche un centesimo di em toglie aria fra la virgola e i decimali.", "section": "typography" },
+      { "name": "La Regola dei Tre Pesi", "body": "Si caricano 400, 500 e 600: nient'altro esiste. Le intestazioni nude e gli <strong> valgono 600, e font-synthesis-weight: none impedisce al browser di fabbricare un 700 ingrassando le aste.", "section": "typography" },
+      { "name": "La Regola del Titolo Nudo", "body": "Nessuna etichetta in maiuscoletto sopra un titolo. Il titolo si porta da solo; un occhiello che ripete il nome della schermata non dice niente. Un'etichetta in maiuscoletto sta sopra un numero, che è il suo mestiere.", "section": "typography" },
+      { "name": "La Regola dell'Unico Contenitore", "body": "Una schermata ha un contenitore e tante righe, non tanti contenitori uguali impilati. Se stai per ripetere la stessa card N volte, quella è una lista.", "section": "layout" },
+      { "name": "La Regola della Tabella che si Arrende", "body": "Sotto i 640px una tabella con azioni di riga diventa un elenco. Se un bottone finisce fuori dallo schermo, la tabella ha perso — non l'utente.", "section": "layout" },
+      { "name": "La Regola del Filo", "body": "La struttura la disegna un bordo di mezzo pixel, non un'ombra. Se una superficie ha bisogno di staccarsi, si schiarisce il suo fondo di un gradino.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do mettere il numero più importante di una schermata fuori da qualunque contenitore, alla scala display (56px), con sotto la sua scomposizione.",
+      "Do usare griglie asimmetriche quando gli elementi non contano uguale — 1.55fr / 1fr è la proporzione di casa.",
+      "Do far diventare elenchi le tabelle sotto i 640px, se hanno più di tre colonne o azioni di riga.",
+      "Do dichiarare l'ambito di una lista quando non coincide con il periodo mostrato in testata («non filtrate dal periodo in alto»).",
+      "Do dare una via d'uscita alle azioni distruttive frequenti: nove secondi di «Annulla» nella notifica, invece di una conferma che si preme dieci volte di fila.",
+      "Do scrivere il rapporto di contrasto quando si introduce un colore di testo nuovo. Si calcola, non si stima."
+    ],
+    "donts": [
+      "Don't costruire una schermata come una pila di card della stessa larghezza, né una fascia di metriche in colonne uguali con un'icona in un quadratino sopra ogni numero.",
+      "Don't usare il colore come decorazione. Verde solo per gli euro, ambra solo per l'attenzione, bronzo solo per marchio, voce attiva, link e badge. Un colore che compare senza significare qualcosa è un difetto, non uno stile.",
+      "Don't aggiungere ombre diffuse per fingere profondità. Su questo fondo non hanno niente da scurire: si cambia il livello del fondo.",
+      "Don't riempire un vuoto con un numero inventato — barre piene quando il totale è zero, tariffe plausibili al posto di un dato mancante, contatori fermi a zero. Se non c'è, si dice che non c'è.",
+      "Don't mettere un'etichetta in maiuscoletto sopra un titolo di schermata.",
+      "Don't usare glifi di testo (▲, ↓) al posto di un'icona disegnata, né affidare un significato al solo colore.",
+      "Don't lasciare che un componente si dichiari aria-modal senza trattenere il fuoco al suo interno e restituirlo alla chiusura."
+    ]
+  }
+}
