@@ -198,11 +198,24 @@ app.post("/api/reset-password", async (req, res) => {
  * Stato dell'abbonamento dell'azienda del token (esente / attivo / prova /
  * scaduto), più se quell'utente è amministratore.
  *
- * L'admin viaggia QUI e non altrove per un motivo preciso: questa rotta è
- * protetta da richiedeAuth e basta, quindi risponde anche a prova scaduta.
- * La voce "Amministrazione" non dipende dall'abbonamento — non è la sezione
- * operativa — e su /api/stato, che è dietro il filtro dell'abbonamento, un
- * admin scaduto non avrebbe mai ricevuto la risposta.
+ * L'admin viaggia QUI e non su /api/stato per un motivo preciso: questa rotta è
+ * protetta da richiedeAuth e basta, mentre /api/stato ha anche
+ * richiedeAbbonamentoAttivo. Un admin con la prova scaduta da /api/stato non
+ * riceverebbe nessuna risposta, quindi il flag non arriverebbe mai.
+ *
+ * Cosa succede DAVVERO oggi, per non lasciare qui una promessa che
+ * l'interfaccia non mantiene: il flag arriva anche a prova scaduta, ma il
+ * frontend, quando l'abbonamento è scaduto, rende soltanto PaginaAbbonamento —
+ * niente barra laterale, niente voci di menù. Quindi un admin scaduto NON
+ * vedrebbe il pannello, per quanto `admin` valga true. Il caso oggi non si
+ * presenta perché l'unica email in EMAIL_ADMIN è anche in EMAIL_ESENTI
+ * (abbonamento.js), quindi non viene mai bloccata.
+ *
+ * Se un giorno ci sarà un amministratore NON esente, la forma sensata non è
+ * farlo passare oltre il blocco — la cornice dell'app si aprirebbe mentre tutte
+ * le rotte dati continuano a rispondere 402, cioè schermate rotte. È che
+ * PaginaAbbonamento, quando chi guarda è admin, offra una via d'ingresso al
+ * solo pannello di amministrazione.
  */
 app.get("/api/abbonamento/stato", richiedeAuth, async (req, res) => {
   try {
