@@ -31,6 +31,26 @@ export async function richiedeAdmin(req, res, next) {
   }
 }
 
+/**
+ * Lo stesso giudizio di richiedeAdmin, ma come risposta invece che come blocco.
+ *
+ * Serve a una cosa sola: permettere al frontend di sapere se mostrare la voce
+ * "Amministrazione" senza doverlo INDOVINARE bussando a una rotta protetta e
+ * leggendo il 403. Prima faceva così, e ogni utente normale produceva un 403 a
+ * ogni caricamento — rumore che nasconde gli errori veri e, il giorno che
+ * arriva un monitoraggio, falsi allarmi ricorrenti.
+ *
+ * Resta una risposta, non un permesso: richiedeAdmin continua a guardare ogni
+ * rotta /api/admin/*. Chi falsificasse questo campo nel browser otterrebbe solo
+ * una voce di menù le cui schermate rispondono 403. Il campo decide cosa si
+ * VEDE, il middleware cosa si può FARE — e l'email si legge sempre dal
+ * database partendo dall'aziendaId del token verificato, mai dal client.
+ */
+export async function eAdmin(aziendaId) {
+  const email = await emailDiAzienda(aziendaId);
+  return !!email && EMAIL_ADMIN.has(email.trim().toLowerCase());
+}
+
 export const adminRouter = Router();
 
 /**

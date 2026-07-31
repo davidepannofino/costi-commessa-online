@@ -7,7 +7,7 @@ import { cifraPassword, verificaPassword, generaToken, richiedeAuth } from "./au
 import { inviaEmailResetPassword } from "./email.js";
 import { stripe, PREZZO_MENSILE_CENTESIMI } from "./stripe.js";
 import { richiedeAbbonamentoAttivo, statoAbbonamentoDi } from "./abbonamento.js";
-import { adminRouter, richiedeAdmin } from "./admin.js";
+import { adminRouter, richiedeAdmin, eAdmin } from "./admin.js";
 import {
   salvaFile, leggiFile, eliminaFile, eliminaFileInBlocco,
   archivioEsterno, descrizioneArchivio, QUOTA_AZIENDA_BYTE, TETTO_GLOBALE_BYTE,
@@ -194,12 +194,21 @@ app.post("/api/reset-password", async (req, res) => {
   }
 });
 
-/** Stato dell'abbonamento dell'azienda del token (esente / attivo / prova / scaduto). */
+/**
+ * Stato dell'abbonamento dell'azienda del token (esente / attivo / prova /
+ * scaduto), più se quell'utente è amministratore.
+ *
+ * L'admin viaggia QUI e non altrove per un motivo preciso: questa rotta è
+ * protetta da richiedeAuth e basta, quindi risponde anche a prova scaduta.
+ * La voce "Amministrazione" non dipende dall'abbonamento — non è la sezione
+ * operativa — e su /api/stato, che è dietro il filtro dell'abbonamento, un
+ * admin scaduto non avrebbe mai ricevuto la risposta.
+ */
 app.get("/api/abbonamento/stato", richiedeAuth, async (req, res) => {
   try {
     const info = await statoAbbonamentoDi(req.aziendaId);
     if (!info) return res.status(404).json({ errore: "Azienda non trovata." });
-    res.json(info);
+    res.json({ ...info, admin: await eAdmin(req.aziendaId) });
   } catch (e) {
     console.error(e);
     res.status(500).json({ errore: "Impossibile leggere lo stato dell'abbonamento." });

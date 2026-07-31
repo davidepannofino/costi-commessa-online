@@ -1599,7 +1599,7 @@ export default function App() {
   const [verificandoPagamento, setVerificandoPagamento] = useState(
     () => new URLSearchParams(window.location.search).get("abbonamento") === "successo"
   );
-  const [abbonamentoInfo, setAbbonamentoInfo] = useState(null); // { stato, giorniProvaRestanti, haAccesso }
+  const [abbonamentoInfo, setAbbonamentoInfo] = useState(null); // { stato, giorniProvaRestanti, haAccesso, admin }
   const [bloccatoAbbonamento, setBloccatoAbbonamento] = useState(false);
   const [versioneAccesso, setVersioneAccesso] = useState(0); // incrementato per forzare un ricaricamento dati
   const [mostraBenvenuto, setMostraBenvenuto] = useState(false); // solo subito dopo una registrazione riuscita
@@ -1637,6 +1637,14 @@ export default function App() {
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), azione ? 9000 : 4600);
   }, []);
   const chiudiToast = useCallback((id) => setToasts((t) => t.filter((x) => x.id !== id)), []);
+
+  /** Lo stato dell'abbonamento e il flag admin arrivano nella stessa risposta e
+   *  si applicano insieme, da un punto solo: sono due letture della stessa
+   *  chiamata, e tenerle separate vorrebbe dire poterle dimenticare una. */
+  const applicaStatoAbbonamento = useCallback((info) => {
+    setAbbonamentoInfo(info);
+    setIsAdmin(!!info?.admin);
+  }, []);
 
   /* ---------------------------------------------------------------------
      PERSISTENZA VIA BACKEND (src/datiAPI.js → GET/PUT /api/stato)
@@ -1683,18 +1691,17 @@ export default function App() {
     setToken(null);
   }, []);
 
-  /** Mostra la voce "Amministrazione" solo se il server conferma che l'utente
-   *  è admin (chiamando /api/admin/statistiche, che risponde 403 altrimenti).
-   *  Indipendente dallo stato dell'abbonamento: non è la sezione operativa. */
-  useEffect(() => {
-    if (!token) { setIsAdmin(false); return; }
-    let annullato = false;
-    (async () => {
-      const stats = await datiAPI.adminStatistiche();
-      if (!annullato) setIsAdmin(!!stats);
-    })();
-    return () => { annullato = true; };
-  }, [token]);
+  /* Qui c'era una SONDA: si chiamava /api/admin/statistiche e si guardava se
+     rispondeva 403, perché il 403 era l'unico modo che il client avesse di
+     sapere di non essere amministratore. Funzionava, ma usava una rotta di
+     DATI per rispondere a una domanda di IDENTITÀ: ogni utente normale
+     produceva un 403 a ogni caricamento (due in sviluppo, per il doppio
+     montaggio di StrictMode), e il server tirava fuori dal database le
+     statistiche di tutte le aziende solo per dire sì o no.
+     Adesso il server lo dice e basta, dentro una risposta che l'app chiede già:
+     `admin` arriva da /api/abbonamento/stato, vedi setAbbonamentoInfo qui
+     sotto. Nessuna richiesta in più, nessun 403 per chi non ha fatto niente
+     di male. La guardia vera resta richiedeAdmin su ogni rotta /api/admin/*. */
 
   /** Se qualcosa porta la vista su "admin" senza che l'utente lo sia (es. uno
    *  stato rimasto da una sessione precedente), si torna alla dashboard con un
@@ -1725,7 +1732,7 @@ export default function App() {
       if (annullato) return;
       tentativi += 1;
       if (info?.haAccesso) {
-        setAbbonamentoInfo(info);
+        applicaStatoAbbonamento(info);
         setBloccatoAbbonamento(false);
         setVerificandoPagamento(false);
         setVersioneAccesso((v) => v + 1);
@@ -1744,7 +1751,7 @@ export default function App() {
     (async () => {
       const [{ dati, avviso }, infoAbbonamento] = await Promise.all([datiAPI.carica(), datiAPI.statoAbbonamento()]);
       if (annullato) return;
-      if (infoAbbonamento) setAbbonamentoInfo(infoAbbonamento);
+      if (infoAbbonamento) applicaStatoAbbonamento(infoAbbonamento);
       if (avviso) notifica(avviso, "avviso");
       // Un'azienda appena registrata parte sempre vuota: i dati d'esempio restano
       // disponibili solo su richiesta esplicita (pulsante "Ricarica dati d'esempio").
