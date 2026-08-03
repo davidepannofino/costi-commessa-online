@@ -8,7 +8,7 @@ import {
   FileSpreadsheet, FileText, AlertTriangle, CheckCircle2, X, ChevronRight, ChevronLeft,
   Search, RotateCcw, Save, Eraser, Info, FileDown, LogOut, Mail, Lock, Building2, ArrowRight, Loader2, ChevronDown,
   Clock, Sparkles, Eye, EyeOff, CreditCard, Gift, PartyPopper, ShieldCheck, FileImage,
-  ReceiptText, Link2, CheckCircle, Check, HelpCircle, CircleDot, CalendarDays, TrendingUp, TrendingDown,
+  ReceiptText, Link2, CheckCircle, Check, HelpCircle, CircleDot, CalendarDays, TrendingUp, TrendingDown, Layers,
 } from "lucide-react";
 import { datiAPI, suSessioneScaduta, suAbbonamentoRichiesto, API_BASE } from "./datiAPI.js";
 import { statoGruppo, assegnazioneIniziale, NON_IMPORTARE } from "./statoGruppoDDT.js";
@@ -84,7 +84,7 @@ const dataValida = (iso) => /^\d{4}-\d{2}-\d{2}$/.test(iso) && !isNaN(new Date(i
 
 /** Deve restare allineato agli id di NAV. Un valore sconosciuto nell'URL viene
  *  ignorato invece di rompere la schermata: gli indirizzi si scrivono a mano. */
-const VISTE_VALIDE = new Set(["dashboard", "commesse", "dipendenti", "fatture", "dati", "abbonamento", "admin"]);
+const VISTE_VALIDE = new Set(["dashboard", "commesse", "dipendenti", "ddt", "fatture", "dati", "abbonamento", "admin"]);
 
 function leggiStatoDaURL() {
   const p = new URLSearchParams(window.location.search);
@@ -2158,6 +2158,21 @@ export default function App() {
       return { ok: false, errore: e.message };
     }
   };
+  /* --- DDT da scansione: un blocco in un PDF solo, una pagina per DDT ---
+     La lettura non archivia niente e non tocca nessuno stato locale: torna un
+     piano che vive nella schermata finché non si conferma. */
+  const leggiScansioneDDT = (file) => datiAPI.leggiScansioneDDT(file);
+
+  const confermaScansioneDDT = async (scansioneId, righe) => {
+    const ris = await datiAPI.confermaScansioneDDT(scansioneId, righe);
+    /* I documenti appena archiviati entrano subito nell'elenco locale: aprendo
+       la commessa si devono trovare lì, senza ricaricare la pagina. */
+    const nuovi = ris.archiviate.map((a) => a.allegato);
+    if (nuovi.length > 0) setAllegati((a) => [...nuovi, ...a]);
+    if (ris.spazio) setSpazioAllegati(ris.spazio);
+    return ris;
+  };
+
   const importaFattura = async (fatturaId, righe) => {
     try {
       const ris = await datiAPI.importaFattura(fatturaId, righe);
@@ -2278,6 +2293,7 @@ export default function App() {
     { id: "dashboard", nome: "Dashboard", icona: LayoutDashboard },
     { id: "commesse", nome: "Commesse", icona: FolderKanban },
     { id: "dipendenti", nome: "Dipendenti", icona: Users },
+    { id: "ddt", nome: "DDT", icona: Layers },
     { id: "fatture", nome: "Fatture", icona: ReceiptText },
     { id: "dati", nome: "Dati", icona: Database },
     { id: "abbonamento", nome: "Abbonamento", icona: CreditCard },
@@ -2293,7 +2309,7 @@ export default function App() {
     : abbonamentoInfo?.stato ? "Abbonamento scaduto" : "";
   const GRUPPI_NAV = [
     { etichetta: "Generale", voci: ["dashboard", "commesse", "dipendenti"] },
-    { etichetta: "Documenti", voci: ["fatture", "dati"] },
+    { etichetta: "Documenti", voci: ["ddt", "fatture", "dati"] },
     { etichetta: "Account", voci: ["abbonamento", "admin"] },
   ];
 
@@ -2588,6 +2604,10 @@ export default function App() {
               svuota={svuotaTutto} esempio={ricaricaEsempio} azienda={azienda} setAzienda={setAzienda} notifica={notifica}
               esportaTutto={() => esportaCompletoXLSX({ dipendenti, commesse, registrazioni }, dal, al)}
             />
+          )}
+          {vista === "ddt" && (
+            <VistaScansioneDDT commesse={commesse} onLeggi={leggiScansioneDDT} onConferma={confermaScansioneDDT}
+              notifica={notifica} vaiCommesse={() => setVista("commesse")} />
           )}
           {vista === "fatture" && (
             <VistaFatture commesse={commesse} onCarica={caricaFattura} onImporta={importaFattura}
@@ -3876,6 +3896,320 @@ const etichettaOrigine = {
   documentai: "letto con Document AI · controlla i valori",
   pdf: "letto da PDF · controlla i valori",
 };
+
+/* ---------------------------------------------------------------------------
+   DDT DA SCANSIONE — un blocco di documenti in un PDF solo
+
+   Prima un DDT si archiviava solo da DENTRO una commessa: un file, una
+   commessa. Ma un blocco si scansiona tutto insieme, e ogni pagina è di una
+   commessa diversa: così finivano tutte sotto la stessa, tutte sbagliate
+   tranne una. Questa schermata sta al livello delle fatture, non dentro una
+   commessa, perché il blocco non APPARTIENE a nessuna commessa: le contiene.
+--------------------------------------------------------------------------- */
+function VistaScansioneDDT({ commesse, onLeggi, onConferma, notifica, vaiCommesse }) {
+  const refFile = useRef();
+  const [inLettura, setInLettura] = useState(false);
+  const [inArchiviazione, setInArchiviazione] = useState(false);
+  const [scansione, setScansione] = useState(null);   // { id, nomeFile, pagine }
+  const [righe, setRighe] = useState([]);
+  const [esito, setEsito] = useState(null);           // { archiviate, saltate }
+
+  const comById = useMemo(() => new Map(commesse.map((c) => [c.id, c])), [commesse]);
+
+  const scegliFile = async (file) => {
+    if (!file) return;
+    setInLettura(true);
+    setEsito(null);
+    try {
+      const ris = await onLeggi(file);
+      setScansione(ris.scansione);
+      setRighe(ris.righe);
+      const daVedere = ris.righe.filter((r) => r.stato !== "ok").length;
+      notifica(
+        daVedere === 0
+          ? `${ris.righe.length} pagine lette, tutte riconosciute: controlla e conferma.`
+          : `${ris.righe.length} pagine lette, ${daVedere} da controllare prima di archiviare.`,
+        daVedere === 0 ? "ok" : "avviso"
+      );
+    } catch (e) {
+      notifica(e.message, "errore");
+    } finally {
+      setInLettura(false);
+    }
+  };
+
+  /* Toccando un campo la riga smette di essere "da controllare": da quel
+     momento è una scelta di chi guarda, e l'interfaccia non deve più dire che
+     il software non aveva capito. Il motivo però resta scritto sotto, perché
+     spiega perché quella riga chiedeva attenzione. */
+  const modifica = (numeroPagina, patch) =>
+    setRighe((rr) => rr.map((r) => (r.numeroPagina === numeroPagina ? { ...r, ...patch, toccata: true } : r)));
+
+  const completa = (r) => !!r.commessaId && String(r.numero || "").trim() !== "";
+  const pronte = righe.filter(completa);
+  const incomplete = righe.length - pronte.length;
+
+  const conferma = async () => {
+    if (inArchiviazione || pronte.length === 0) return;
+    setInArchiviazione(true);
+    try {
+      const ris = await onConferma(scansione.id, pronte.map((r) => ({
+        numeroPagina: r.numeroPagina,
+        commessaId: r.commessaId,
+        ddtNumero: r.numero,
+        fornitore: r.fornitore || "",
+      })));
+      setEsito(ris);
+      const archiviateOra = new Set(ris.archiviate.map((a) => a.numeroPagina));
+      setRighe((rr) => rr.filter((r) => !archiviateOra.has(r.numeroPagina)));
+      notifica(
+        ris.archiviate.length === 1 ? "1 DDT archiviato." : `${ris.archiviate.length} DDT archiviati.`,
+        ris.archiviate.length > 0 ? "ok" : "avviso"
+      );
+    } catch (e) {
+      notifica(e.message, "errore");
+    } finally {
+      setInArchiviazione(false);
+    }
+  };
+
+  const ricomincia = () => { setScansione(null); setRighe([]); setEsito(null); };
+
+  /* --- nessun file caricato: la porta d'ingresso --- */
+  if (!scansione) {
+    return (
+      <div className="space-y-8">
+        <div>
+          <h1 className="t-titolo">DDT</h1>
+          <p className="t-piccolo mt-1.5" style={{ color: "var(--txt-tenue)" }}>
+            Un blocco scansionato in un PDF solo: ogni pagina diventa un DDT, sulla sua commessa.
+          </p>
+        </div>
+
+        <input ref={refFile} type="file" accept=".pdf,application/pdf" className="hidden"
+          onChange={(e) => { const f = e.target.files[0]; e.target.value = ""; scegliFile(f); }} />
+
+        <section className="card px-7 py-9 sm:px-10 sm:py-11">
+          <div className="flex items-start gap-4 flex-wrap">
+            <span className="flex items-center justify-center shrink-0 box" style={{ width: 44, height: 44, borderRadius: "var(--r-md)" }}>
+              <Layers size={20} strokeWidth={1.5} style={{ color: "var(--txt-attenuato)" }} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h2 className="t-sezione">
+                {inLettura ? "Sto leggendo il blocco…" : "Carica il blocco scansionato"}
+              </h2>
+              <p className="t-corpo mt-2" style={{ color: "var(--txt-attenuato)", maxWidth: "58ch" }}>
+                Il PDF viene diviso in pagine, e su ogni pagina si legge la casella
+                che hai scritto tu: prima il codice della commessa, poi il numero del DDT.
+              </p>
+
+              <div className="mt-6 flex flex-wrap items-center gap-3">
+                {inLettura
+                  ? <Bottone disabled><Loader2 size={14} strokeWidth={1.75} className="animate-spin" /> Lettura…</Bottone>
+                  : <Bottone onClick={() => refFile.current.click()}><Upload size={14} strokeWidth={1.75} /> Scegli il PDF</Bottone>}
+                <p className="f-mono t-piccolo" style={{ color: "var(--txt-tenue)" }}>PDF · fino a 25 MB · massimo 40 pagine</p>
+              </div>
+
+              <div className="mt-7 pt-6 grid gap-3 sm:grid-cols-2" style={{ borderTop: ".5px solid var(--bordo-tenue)" }}>
+                <p className="t-piccolo flex items-start gap-2">
+                  <CheckCircle2 size={13} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: "var(--txt-attenuato)" }} />
+                  <span style={{ color: "var(--txt-tenue)" }}>
+                    <span style={{ color: "var(--txt-medio)" }}>Scrivi</span> «PC24 B05/4959»: il primo pezzo è la commessa, il resto il numero.
+                  </span>
+                </p>
+                <p className="t-piccolo flex items-start gap-2">
+                  <AlertTriangle size={13} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: "var(--ambra)" }} />
+                  <span style={{ color: "var(--txt-tenue)" }}>
+                    <span style={{ color: "var(--txt-medio)" }}>Se una casella manca</span> quella pagina resta da compilare: le altre si archiviano lo stesso.
+                  </span>
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {esito && <EsitoScansione esito={esito} comById={comById} vaiCommesse={vaiCommesse} />}
+      </div>
+    );
+  }
+
+  /* --- blocco letto: revisione pagina per pagina --- */
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="t-titolo">{scansione.nomeFile}</h1>
+          <p className="f-mono t-piccolo mt-1.5" style={{ color: "var(--txt-tenue)" }}>
+            {scansione.pagine} {scansione.pagine === 1 ? "pagina" : "pagine"} · {righe.length} da archiviare
+          </p>
+        </div>
+        <Bottone variante="fantasma" onClick={ricomincia}>
+          <X size={14} strokeWidth={1.75} /> Annulla
+        </Bottone>
+      </div>
+
+      {esito && <EsitoScansione esito={esito} comById={comById} vaiCommesse={vaiCommesse} />}
+
+      {righe.length > 0 && (
+        <section className="card overflow-hidden">
+          <div className="px-6 py-4" style={{ borderBottom: ".5px solid var(--bordo)" }}>
+            <h2 className="t-sotto">Una pagina, un DDT</h2>
+          </div>
+          <ul>
+            {righe.map((r, i) => {
+              /* Una riga chiede attenzione finché non la si tocca: dopo, la
+                 scelta è di chi guarda e il filo d'ambra non ha più senso. */
+              const daVedere = r.stato !== "ok" && !r.toccata;
+              return (
+                <li key={r.numeroPagina} className="px-6 py-5"
+                  style={{
+                    borderTop: i > 0 ? ".5px solid var(--bordo)" : "none",
+                    borderLeft: `3px solid ${daVedere ? "var(--ambra)" : "transparent"}`,
+                    background: daVedere ? "var(--ambra-bg)" : "transparent",
+                  }}>
+                  <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-4">
+                    <span className="badge-codice">pagina {r.numeroPagina}</span>
+                    {r.codiceLetto && (
+                      <span className="f-mono t-piccolo" style={{ color: "var(--txt-tenue)" }}>
+                        letto: {r.codiceLetto}{r.numero ? ` ${r.numero}` : ""}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+                    <Campo etichetta="Commessa">
+                      <select value={r.commessaId || ""} onChange={(e) => modifica(r.numeroPagina, { commessaId: e.target.value || null })}
+                        className={inputCls}
+                        style={{ background: "var(--tela-alt)", ...(daVedere && !r.commessaId ? { borderColor: "var(--ambra-bordo)" } : {}) }}>
+                        <option value="">— da scegliere —</option>
+                        {commesse.map((c) => <option key={c.id} value={c.id}>{c.codice} — {c.descrizione}</option>)}
+                      </select>
+                    </Campo>
+                    <Campo etichetta="Numero del DDT">
+                      <input value={r.numero || ""} onChange={(e) => modifica(r.numeroPagina, { numero: e.target.value })}
+                        placeholder="es. B05/4959"
+                        className={inputCls + " f-mono"}
+                        style={{ background: "var(--tela-alt)", ...(daVedere && !r.numero ? { borderColor: "var(--ambra-bordo)" } : {}) }} />
+                    </Campo>
+                  </div>
+
+                  {r.motivo && (
+                    <p className="t-piccolo mt-3 flex items-start gap-1.5"
+                      style={{ color: daVedere ? "var(--ambra)" : "var(--txt-tenue)" }}>
+                      <AlertTriangle size={12} strokeWidth={1.75} className="mt-0.5 shrink-0" /> {r.motivo}
+                    </p>
+                  )}
+
+                  {/* Il suggerimento della O contro lo zero: si propone, non si
+                      applica. Deve passare da un clic di chi sa qual è la
+                      commessa giusta. */}
+                  {r.suggerimento && !r.commessaId && (
+                    <button onClick={() => modifica(r.numeroPagina, { commessaId: r.suggerimento.id })}
+                      className="t-piccolo mt-2.5 px-2.5 py-1.5 btn btn-fantasma inline-flex items-center gap-2"
+                      style={{ borderRadius: "var(--r-sm)" }}>
+                      <Check size={12} strokeWidth={1.75} /> Sì, è {r.suggerimento.codice}
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+
+      {righe.length > 0 && (
+        <section className="card overflow-hidden">
+          <div className="px-6 py-7 sm:px-8 grid gap-x-10 gap-y-7 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] items-start">
+            <div>
+              <h2 className="t-micro">Stai per archiviare</h2>
+              <p className="cifra-grande mt-3" style={{ fontSize: 36, lineHeight: 1 }}>
+                {pronte.length} <span className="t-corpo" style={{ fontWeight: 400, color: "var(--txt-tenue)" }}>
+                  {pronte.length === 1 ? "DDT" : "DDT"}
+                </span>
+              </p>
+              <p className="t-piccolo mt-3" style={{ color: "var(--txt-tenue)" }}>
+                ognuno sulla sua commessa, come documento a sé
+              </p>
+            </div>
+            {incomplete > 0 && (
+              <dl className="w-full">
+                <div className="flex items-baseline justify-between gap-5 py-2.5">
+                  <dt className="t-micro">Pagine incomplete</dt>
+                  <dd className="f-mono shrink-0" style={{ fontSize: 15, fontWeight: 500, color: "var(--ambra)" }}>{incomplete}</dd>
+                </div>
+                <p className="t-piccolo" style={{ color: "var(--txt-tenue)" }}>
+                  Restano qui: senza commessa e numero non si archiviano, ma non bloccano le altre.
+                </p>
+              </dl>
+            )}
+          </div>
+
+          <div className="px-6 py-5 sm:px-8 flex flex-wrap justify-end gap-2" style={{ borderTop: ".5px solid var(--bordo)" }}>
+            <Bottone variante="fantasma" onClick={ricomincia}>Carica un altro blocco</Bottone>
+            <Bottone onClick={conferma} disabled={inArchiviazione || pronte.length === 0}>
+              {inArchiviazione ? <Loader2 size={14} strokeWidth={1.75} className="animate-spin" /> : <CheckCircle size={14} strokeWidth={1.75} />}
+              {inArchiviazione ? "Archiviazione…" : `Archivia ${pronte.length ? `(${pronte.length})` : ""}`}
+            </Bottone>
+          </div>
+        </section>
+      )}
+
+      {righe.length === 0 && !esito && (
+        <StatoVuoto icona={Layers} titolo="Tutte le pagine sono state archiviate"
+          testo="Non resta niente da questo blocco."
+          azione={<Bottone onClick={ricomincia}><Upload size={14} strokeWidth={1.75} /> Carica un altro blocco</Bottone>} />
+      )}
+    </div>
+  );
+}
+
+/** Com'è andata: quante archiviate, e quali no e perché. */
+function EsitoScansione({ esito, comById, vaiCommesse }) {
+  return (
+    <section className="card overflow-hidden">
+      <div className="px-6 py-4 flex flex-wrap items-baseline justify-between gap-3" style={{ borderBottom: ".5px solid var(--bordo)" }}>
+        <h2 className="t-sotto">
+          {esito.archiviate.length > 0
+            ? `${esito.archiviate.length} ${esito.archiviate.length === 1 ? "DDT archiviato" : "DDT archiviati"}`
+            : "Nessuna pagina archiviata"}
+        </h2>
+        {esito.archiviate.length > 0 && (
+          <button onClick={vaiCommesse} className="t-piccolo flex items-center gap-1 btn"
+            style={{ color: "var(--accento-chiaro)", fontWeight: 500 }}>
+            Vai alle commesse <ChevronRight size={13} strokeWidth={1.75} />
+          </button>
+        )}
+      </div>
+
+      {esito.archiviate.length > 0 && (
+        <ul className="px-6 py-4 space-y-2">
+          {esito.archiviate.map((a) => (
+            <li key={a.numeroPagina} className="t-piccolo flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+              <Check size={12} strokeWidth={1.75} className="shrink-0" style={{ color: "var(--txt-attenuato)" }} />
+              <span className="f-mono" style={{ color: "var(--txt-tenue)" }}>p. {a.numeroPagina}</span>
+              <span className="badge-codice">{comById.get(a.allegato.commessaId)?.codice ?? "?"}</span>
+              <span className="f-mono" style={{ color: "var(--txt-medio)" }}>{a.allegato.ddtNumero}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {esito.saltate.length > 0 && (
+        <div className="px-6 py-4" style={{ borderTop: esito.archiviate.length > 0 ? ".5px solid var(--bordo-tenue)" : "none" }}>
+          <p className="t-micro mb-2.5">Non archiviate</p>
+          <ul className="space-y-1.5">
+            {esito.saltate.map((s, i) => (
+              <li key={i} className="t-piccolo flex items-start gap-2" style={{ color: "var(--ambra)" }}>
+                <AlertTriangle size={12} strokeWidth={1.75} className="mt-0.5 shrink-0" />
+                <span><span className="f-mono">p. {s.numeroPagina ?? "?"}</span> — {s.motivo}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
+  );
+}
 
 function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) {
   const refFile = useRef();

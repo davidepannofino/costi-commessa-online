@@ -335,6 +335,40 @@ export const datiAPI = {
       "Impossibile importare le righe della fattura.", (d) => d);
   },
 
+  /**
+   * Carica il PDF di un blocco di DDT scansionati e si fa dire cosa ci ha
+   * capito. NON archivia niente: torna un piano, una riga per pagina.
+   */
+  async leggiScansioneDDT(file) {
+    let res;
+    try {
+      res = await fetch(`${API_BASE}/api/ddt/scansione`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/pdf",
+          "X-Nome-File": encodeURIComponent(file.name),
+          ...headerAuth(),
+        },
+        body: file,
+      });
+    } catch (e) {
+      throw new Error("Impossibile contattare il server: riprova.");
+    }
+    if (res.status === 401) { gestoreSessioneScaduta?.(); throw new Error("Sessione scaduta: accedi di nuovo."); }
+    if (res.status === 402) { gestoreAbbonamentoRichiesto?.(); throw new Error("Abbonamento richiesto."); }
+    if (!res.ok) {
+      const dati = await res.json().catch(() => null);
+      throw new Error(dati?.errore || "Impossibile leggere la scansione.");
+    }
+    return await res.json();
+  },
+
+  /** Archivia le pagine confermate. Torna { archiviate, saltate, spazio }. */
+  async confermaScansioneDDT(scansioneId, righe) {
+    return chiamaMateriali("POST", `/api/ddt/scansione/${encodeURIComponent(scansioneId)}/conferma`, { righe },
+      "Impossibile archiviare le pagine della scansione.", (d) => d);
+  },
+
   /** Elenco delle fatture già caricate. */
   async elencoFatture() {
     return chiamaMateriali("GET", "/api/fatture", null, "Impossibile leggere le fatture.", (d) => d.fatture);
