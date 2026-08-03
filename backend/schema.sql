@@ -158,6 +158,34 @@ CREATE INDEX IF NOT EXISTS idx_allegati_ddt ON allegati(azienda_id, ddt_numero)
 ALTER TABLE allegati ADD COLUMN IF NOT EXISTS origine_nome_file TEXT NOT NULL DEFAULT '';
 ALTER TABLE allegati ADD COLUMN IF NOT EXISTS origine_pagina    INTEGER;
 
+-- La SOSTA di una scansione, fra la lettura e la conferma.
+--
+-- Il flusso ha due tempi: prima si legge il blocco e si mostra cosa si e'
+-- capito, poi la persona conferma e ogni pagina diventa un DDT archiviato. Fra
+-- i due momenti il PDF deve stare da qualche parte, e questa e' quella parte.
+--
+-- NON e' l'archivio, ed e' il motivo per cui ha una tabella sua invece di una
+-- riga in allegati: finche' non si conferma, in archivio non compare niente —
+-- che e' la promessa fatta all'utente. Qui c'e' solo il file di partenza, che
+-- al momento della conferma viene diviso, e poi cancellato.
+--
+-- Si svuota da sola: alla conferma, e comunque dopo 24 ore. Una scansione
+-- abbandonata a meta' (chiusa la scheda, finita la batteria) non deve restare
+-- a occupare spazio per sempre.
+CREATE TABLE IF NOT EXISTS scansioni (
+  id             TEXT PRIMARY KEY,
+  azienda_id     TEXT NOT NULL REFERENCES aziende(id),
+  nome_file      TEXT NOT NULL,
+  dimensione     INTEGER NOT NULL,
+  posizione      TEXT NOT NULL DEFAULT 'database',
+  contenuto      BYTEA,
+  chiave_esterna TEXT,
+  pagine         INTEGER NOT NULL,
+  caricata_il    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_scansioni_azienda ON scansioni(azienda_id, caricata_il);
+
 -- Tappa DDT (2b): fatture elettroniche XML (FatturaPA) da cui leggere le righe
 -- dei materiali. La fattura NON appartiene a una commessa (può riguardarne
 -- diverse), quindi ha una tabella sua e non sta fra gli allegati.

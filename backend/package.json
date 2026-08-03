@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node src/server.js",
     "migrate": "node src/migrate.js",
-    "prova": "node src/abbinamentoDDT.test.js && node src/ddtDaScansione.test.js"
+    "prova": "node src/abbinamentoDDT.test.js && node src/ddtDaScansione.test.js && node src/pdfScansione.test.js"
   },
   "dependencies": {
     "@google-cloud/documentai": "^9.6.2",

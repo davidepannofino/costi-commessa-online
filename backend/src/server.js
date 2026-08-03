@@ -15,6 +15,8 @@ import {
 import { leggiFatturaXML, raggruppaPerDDT, riconosciFormatoFattura, estraiXMLdaP7M } from "./fatturaPA.js";
 import { abbinaDDT, normalizzaNumero } from "./abbinamentoDDT.js";
 import { leggiFatturaPDF, eUnPDF, estraiRighePDF } from "./fatturaPDF.js";
+import { leggiScansione } from "./ddtDaScansione.js";
+import { leggiTestoPagine, contaPagine, MAX_PAGINE_SCANSIONE } from "./pdfScansione.js";
 import {
   leggiFatturaConDocumentAI, documentAIConfigurato, descrizioneDocumentAI, consumiDelMese,
 } from "./fatturaDocumentAI.js";
@@ -867,6 +869,129 @@ app.patch("/api/allegati/:id", richiedeAuth, richiedeAbbonamentoAttivo, async (r
  * che è quello che poi fa combaciare l'abbinamento. Il campo resta comunque
  * libero: la tendina suggerisce, non obbliga.
  */
+/* ===========================================================================
+   DDT DA SCANSIONE — un blocco di documenti in un PDF solo
+   ===========================================================================
+   Un blocco di DDT si scansiona tutto insieme: un file, molte pagine, ogni
+   pagina il documento di una commessa diversa. Prima si poteva archiviare solo
+   un file per commessa, quindi tutte le pagine finivano sotto la stessa —
+   tutte sbagliate tranne una.
+   Il flusso ha due tempi. Qui c'è il primo: si legge e si RIFERISCE, senza
+   archiviare niente. Il secondo (la conferma) archivia pagina per pagina.
+=========================================================================== */
+
+/** Il corpo di una scansione è molto più grande di un documento singolo: un
+ *  blocco di venti pagine passa i 5 MB con facilità. */
+const MAX_SCANSIONE_BYTE = 25 * 1024 * 1024;
+const corpoScansione = express.raw({ type: () => true, limit: "26mb" });
+const leggiCorpoScansione = (req, res, next) =>
+  corpoScansione(req, res, (err) => {
+    if (!err) return next();
+    if (err.type === "entity.too.large") {
+      return res.status(413).json({ errore: `La scansione è troppo grande: il limite è ${inMB(MAX_SCANSIONE_BYTE)} MB.` });
+    }
+    console.error("Errore leggendo la scansione caricata:", err);
+    res.status(400).json({ errore: "Impossibile leggere il file caricato." });
+  });
+
+/** Le scansioni in sosta scadono: una lasciata a metà non resta lì per sempre. */
+const ORE_SOSTA_SCANSIONE = 24;
+async function ripulisciScansioniVecchie(aziendaId) {
+  const vecchie = await pool.query(
+    `DELETE FROM scansioni
+      WHERE azienda_id = $1 AND caricata_il < now() - ($2 || ' hours')::interval
+      RETURNING id, posizione, chiave_esterna`,
+    [aziendaId, String(ORE_SOSTA_SCANSIONE)]
+  );
+  if (vecchie.rows.length > 0) await eliminaFileInBlocco(vecchie.rows);
+}
+
+/**
+ * Primo tempo: leggi la scansione e dimmi cosa hai capito.
+ *
+ * NON archivia niente. Il PDF va in sosta (tabella `scansioni`, che non è
+ * l'archivio) e torna indietro un piano: una riga per pagina, con commessa e
+ * numero già compilati dove si è capito, e il motivo scritto dove non si è
+ * capito. Chi guarda corregge, e solo allora conferma.
+ *
+ * La lettura NON è un OCR: la casella che identifica il DDT è testo digitale
+ * vero dentro il PDF. Nessun costo a pagina, nessun Document AI.
+ */
+app.post("/api/ddt/scansione", richiedeAuth, richiedeAbbonamentoAttivo, leggiCorpoScansione, async (req, res) => {
+  const contenuto = Buffer.isBuffer(req.body) ? req.body : null;
+  if (!contenuto || contenuto.length === 0) return res.status(400).json({ errore: "Nessun file ricevuto." });
+  if (contenuto.length > MAX_SCANSIONE_BYTE) {
+    return res.status(413).json({ errore: `La scansione è troppo grande: il limite è ${inMB(MAX_SCANSIONE_BYTE)} MB.` });
+  }
+  if (riconosciTipo(contenuto) !== "application/pdf") {
+    return res.status(415).json({ errore: "Una scansione di DDT dev'essere un PDF: le foto singole si allegano dalla commessa." });
+  }
+
+  try {
+    /* Si legge PRIMA di scrivere qualunque cosa: se il PDF è illeggibile o ha
+       troppe pagine, non resta niente in sosta da ripulire. */
+    const pagineTotali = await contaPagine(contenuto);
+    if (pagineTotali > MAX_PAGINE_SCANSIONE) {
+      return res.status(413).json({
+        errore: `Il PDF ha ${pagineTotali} pagine: il massimo per una scansione è ${MAX_PAGINE_SCANSIONE}. Dividilo in blocchi più piccoli.`,
+      });
+    }
+
+    const pagine = await leggiTestoPagine(contenuto);
+
+    const [commesse, numeriInArchivio] = await Promise.all([
+      pool.query("SELECT id, codice, descrizione FROM commesse WHERE azienda_id = $1", [req.aziendaId]),
+      pool.query("SELECT DISTINCT ddt_numero FROM allegati WHERE azienda_id = $1 AND ddt_numero <> ''", [req.aziendaId]),
+    ]);
+
+    const righe = leggiScansione({
+      pagine,
+      commesse: commesse.rows,
+      giaInArchivio: numeriInArchivio.rows.map((r) => r.ddt_numero),
+    });
+
+    /* Il codice della commessa risolta viaggia con la riga: la schermata deve
+       poterlo mostrare senza rifare la ricerca, e senza fidarsi di quello letto
+       dal PDF, che può essere scritto in minuscolo o con spazi. */
+    const perId = new Map(commesse.rows.map((c) => [c.id, c]));
+    const conCodice = righe.map((r) => ({
+      ...r,
+      commessaCodice: r.commessaId ? perId.get(r.commessaId)?.codice ?? null : null,
+    }));
+
+    const spazio = await spazioAllegati(req.aziendaId);
+    if (spazio.usatoAzienda + contenuto.length > QUOTA_AZIENDA_BYTE) {
+      return res.status(507).json({
+        errore: `Spazio esaurito: i documenti occupano ${inMB(spazio.usatoAzienda)} MB dei ${inMB(QUOTA_AZIENDA_BYTE)} MB disponibili.`,
+      });
+    }
+
+    await ripulisciScansioniVecchie(req.aziendaId);
+
+    const id = randomUUID();
+    const salvato = await salvaFile({ aziendaId: req.aziendaId, id, contenuto, tipo: "application/pdf" });
+    try {
+      await pool.query(
+        `INSERT INTO scansioni (id, azienda_id, nome_file, dimensione, posizione, contenuto, chiave_esterna, pagine)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [id, req.aziendaId, nomeFilePulito(req.headers["x-nome-file"]), contenuto.length,
+         salvato.posizione, salvato.contenuto, salvato.chiaveEsterna, pagineTotali]
+      );
+    } catch (e) {
+      await eliminaFile({ posizione: salvato.posizione, chiave_esterna: salvato.chiaveEsterna });
+      throw e;
+    }
+
+    res.status(201).json({
+      scansione: { id, nomeFile: nomeFilePulito(req.headers["x-nome-file"]), pagine: pagineTotali },
+      righe: conCodice,
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(400).json({ errore: e.message || "Impossibile leggere la scansione." });
+  }
+});
+
 app.get("/api/fornitori", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) => {
   try {
     const ris = await pool.query(
