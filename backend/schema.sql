@@ -141,6 +141,23 @@ ALTER TABLE allegati ADD COLUMN IF NOT EXISTS fornitore  TEXT NOT NULL DEFAULT '
 CREATE INDEX IF NOT EXISTS idx_allegati_ddt ON allegati(azienda_id, ddt_numero)
   WHERE ddt_numero <> '';
 
+-- Tappa DDT (2c): da dove viene questa pagina.
+--
+-- Un blocco di DDT si scansiona tutto insieme: un PDF solo, molte pagine, ogni
+-- pagina un documento di una commessa diversa. Il PDF viene diviso e ogni
+-- pagina diventa un allegato a sé, con la SUA commessa — la riga resta quella
+-- di sempre, e per questo l'abbinamento con le fatture continua a funzionare
+-- senza saperne niente.
+--
+-- Queste due colonne servono a ritrovare la carta. Senza, dodici righe si
+-- chiamerebbero tutte "scansione-3-agosto.pdf" e nessuno saprebbe più quale
+-- pagina era quale: il giorno che un numero non torna, si va a cercare
+-- l'originale, e bisogna sapere a che pagina guardare.
+-- Restano vuote per i documenti caricati uno alla volta, che non vengono da
+-- nessuna scansione.
+ALTER TABLE allegati ADD COLUMN IF NOT EXISTS origine_nome_file TEXT NOT NULL DEFAULT '';
+ALTER TABLE allegati ADD COLUMN IF NOT EXISTS origine_pagina    INTEGER;
+
 -- Tappa DDT (2b): fatture elettroniche XML (FatturaPA) da cui leggere le righe
 -- dei materiali. La fattura NON appartiene a una commessa (può riguardarne
 -- diverse), quindi ha una tabella sua e non sta fra gli allegati.
