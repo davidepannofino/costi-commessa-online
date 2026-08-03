@@ -16,7 +16,7 @@ import { leggiFatturaXML, raggruppaPerDDT, riconosciFormatoFattura, estraiXMLdaP
 import { abbinaDDT, normalizzaNumero } from "./abbinamentoDDT.js";
 import { leggiFatturaPDF, eUnPDF, estraiRighePDF } from "./fatturaPDF.js";
 import { leggiScansione } from "./ddtDaScansione.js";
-import { leggiTestoPagine, contaPagine, MAX_PAGINE_SCANSIONE } from "./pdfScansione.js";
+import { leggiTestoPagine, estraiPagina, contaPagine, MAX_PAGINE_SCANSIONE } from "./pdfScansione.js";
 import {
   leggiFatturaConDocumentAI, documentAIConfigurato, descrizioneDocumentAI, consumiDelMese,
 } from "./fatturaDocumentAI.js";
@@ -989,6 +989,125 @@ app.post("/api/ddt/scansione", richiedeAuth, richiedeAbbonamentoAttivo, leggiCor
   } catch (e) {
     console.error(e);
     res.status(400).json({ errore: e.message || "Impossibile leggere la scansione." });
+  }
+});
+
+/**
+ * Secondo tempo: archivia le pagine approvate, una per una.
+ *
+ * Riceve le righe che la persona ha confermato. Per ognuna estrae la sua pagina
+ * dal PDF in sosta, la salva come documento a sé e scrive la riga in archivio,
+ * con la commessa che le è stata assegnata.
+ *
+ * OGNI PAGINA VA PER CONTO SUO, e questa è la decisione che conta. Se la terza
+ * fallisce — la rete cade, lo spazio finisce — le prime due RESTANO
+ * archiviate, e la risposta dice esattamente quali sono passate e quali no.
+ * Annullare tutto sembrerebbe più pulito, ma costringerebbe a rifare da capo un
+ * blocco di venti pagine per colpa dell'ultima: su un lavoro che si fa a fine
+ * mese, di fretta, è il modo migliore per farlo abbandonare a metà.
+ *
+ * SI PUÒ RIFARE. La scansione in sosta non viene cancellata qui: resta fino
+ * alle 24 ore, così chi ha sistemato le righe rimaste indietro conferma di
+ * nuovo senza ricaricare il file. Una pagina già archiviata da questa stessa
+ * scansione viene saltata invece di sdoppiarsi: la coppia nome del file +
+ * numero di pagina è la chiave naturale che lo impedisce.
+ */
+app.post("/api/ddt/scansione/:id/conferma", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) => {
+  const scansioneId = String(req.params.id);
+  const richieste = Array.isArray(req.body?.righe) ? req.body.righe : null;
+  if (!richieste || richieste.length === 0) {
+    return res.status(400).json({ errore: "Nessuna pagina da archiviare." });
+  }
+
+  try {
+    const sos = await pool.query(
+      "SELECT id, nome_file, posizione, contenuto, chiave_esterna, pagine FROM scansioni WHERE id = $1 AND azienda_id = $2",
+      [scansioneId, req.aziendaId]
+    );
+    if (sos.rows.length === 0) {
+      return res.status(404).json({ errore: "Scansione non trovata: potrebbe essere scaduta. Ricarica il file." });
+    }
+    const scansione = sos.rows[0];
+    const sorgente = await leggiFile(scansione);
+    if (!sorgente) return res.status(410).json({ errore: "Il file della scansione non è più disponibile: ricaricalo." });
+
+    const commesse = await pool.query("SELECT id, codice FROM commesse WHERE azienda_id = $1", [req.aziendaId]);
+    const commessePerId = new Map(commesse.rows.map((c) => [c.id, c]));
+
+    const archiviate = [];
+    const saltate = [];
+
+    for (const riga of richieste) {
+      const numeroPagina = Number(riga?.numeroPagina);
+      const salta = (motivo) => saltate.push({ numeroPagina: riga?.numeroPagina ?? null, motivo });
+
+      if (!Number.isInteger(numeroPagina) || numeroPagina < 1 || numeroPagina > scansione.pagine) {
+        salta("numero di pagina non valido"); continue;
+      }
+      if (!riga?.commessaId || !commessePerId.has(riga.commessaId)) {
+        salta("la commessa non è stata scelta, o non esiste"); continue;
+      }
+      const { dati: ddt, errore: erroreDDT } = leggiDatiDDT(riga);
+      if (erroreDDT) { salta(erroreDDT); continue; }
+      if (!ddt.ddtNumero) { salta("manca il numero del DDT"); continue; }
+
+      /* Già archiviata da questa stessa scansione: si salta invece di
+         sdoppiarla. Succede quando si conferma due volte dopo aver sistemato
+         solo le righe rimaste indietro. */
+      const gia = await pool.query(
+        "SELECT 1 FROM allegati WHERE azienda_id = $1 AND origine_nome_file = $2 AND origine_pagina = $3",
+        [req.aziendaId, scansione.nome_file, numeroPagina]
+      );
+      if (gia.rows.length > 0) { salta("questa pagina era già stata archiviata"); continue; }
+
+      let salvato = null;
+      try {
+        const pagina = await estraiPagina(sorgente, numeroPagina);
+
+        const spazio = await spazioAllegati(req.aziendaId);
+        if (spazio.usatoAzienda + pagina.length > QUOTA_AZIENDA_BYTE) {
+          salta(`spazio esaurito: i documenti occupano ${inMB(spazio.usatoAzienda)} MB dei ${inMB(QUOTA_AZIENDA_BYTE)} MB`);
+          continue;
+        }
+        if (spazio.usatoGlobale + pagina.length > TETTO_GLOBALE_BYTE) {
+          salta("archivio documenti pieno: contatta l'assistenza"); continue;
+        }
+
+        const id = randomUUID();
+        salvato = await salvaFile({ aziendaId: req.aziendaId, id, contenuto: pagina, tipo: "application/pdf" });
+
+        /* Il nome del documento archiviato dice da dove viene: chi lo trova in
+           una commessa fra sei mesi deve poter risalire al foglio. */
+        const nome = `${scansione.nome_file.replace(/\.pdf$/i, "")} — p. ${numeroPagina}.pdf`;
+
+        const ris = await pool.query(
+          `INSERT INTO allegati (id, azienda_id, commessa_id, nome_file, tipo, dimensione, posizione, contenuto, chiave_esterna,
+                                 ddt_numero, ddt_data, fornitore, origine_nome_file, origine_pagina)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NULLIF($11, '')::date, $12, $13, $14)
+           RETURNING ${COLONNE_ALLEGATO}`,
+          [id, req.aziendaId, riga.commessaId, nome, "application/pdf", pagina.length,
+           salvato.posizione, salvato.contenuto, salvato.chiaveEsterna,
+           ddt.ddtNumero, ddt.ddtData, ddt.fornitore, scansione.nome_file, numeroPagina]
+        );
+        archiviate.push({ numeroPagina, allegato: mappaAllegato(ris.rows[0]) });
+      } catch (e) {
+        /* Il file può essere già finito nell'archivio prima che la riga
+           fallisse: si toglie, altrimenti resta un file che nessuno sa di avere. */
+        if (salvato) {
+          try { await eliminaFile({ posizione: salvato.posizione, chiave_esterna: salvato.chiaveEsterna }); } catch { /* meglio un file orfano che una risposta persa */ }
+        }
+        console.error("Pagina non archiviata:", numeroPagina, e);
+        salta(e.message || "errore durante l'archiviazione");
+      }
+    }
+
+    res.status(archiviate.length > 0 ? 201 : 400).json({
+      archiviate, saltate,
+      spazio: await spazioAllegati(req.aziendaId),
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ errore: "Impossibile archiviare le pagine della scansione." });
   }
 });
 
