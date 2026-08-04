@@ -127,6 +127,17 @@ Vincoli tecnici e di prodotto:
   diversamente si accomoda lì, senza toccare il resto.
 - **Nessun dato reale in prova.** I file in `esempi/` non sono fatture vere, e le
   prove end-to-end vanno su uno schema Neon separato.
+- **L'azienda con id `azienda-prova` è reale.** In produzione quell'identificatore
+  appartiene a **PIEMME IMPIANTI SRL**, con le sue commesse, i suoi dipendenti e
+  le sue centinaia di registrazioni. È l'eredità del primo giorno, quando uno
+  script seminava un'azienda di prova per far partire l'applicazione: la
+  registrazione vera è arrivata dopo, e quella riga era già diventata l'azienda
+  del cliente. Il nome dell'id inganna, il nome dell'azienda no. **Non
+  cancellarla**, e non cancellare le righe che la referenziano.
+  Rinominare l'id non è una via d'uscita facile: sette tabelle ci puntano con
+  `ON UPDATE NO ACTION`, quindi il cambio non si propaga e andrebbe fatto a mano
+  su centinaia di righe, in transazione. Per un identificatore che l'utente non
+  vede mai, l'avvertenza costa meno del rischio.
 
 Non deciso (da non inventare): piani diversi dal singolo abbonamento mensile,
 gestione multiutente, integrazioni con gestionali o con lo SdI.

@@ -226,5 +226,25 @@ CREATE TABLE IF NOT EXISTS consumi_documentai (
   chiamate INTEGER NOT NULL DEFAULT 0
 );
 
-INSERT INTO aziende (id, nome) VALUES ('azienda-prova', 'Azienda di prova')
-ON CONFLICT (id) DO NOTHING;
+-- ===========================================================================
+-- ATTENZIONE — L'AZIENDA CON id 'azienda-prova' CONTIENE DATI REALI
+--
+-- In produzione quell'id appartiene a PIEMME IMPIANTI SRL: e' l'azienda vera,
+-- con le sue commesse, i suoi dipendenti e le sue centinaia di registrazioni.
+-- Il nome dell'ID inganna, il nome dell'AZIENDA no: guarda la colonna `nome`.
+-- NON cancellare quella riga e non cancellare le righe che la referenziano.
+--
+-- Perche' si chiama cosi': qui sotto c'era un INSERT che seminava un'azienda
+-- 'azienda-prova' per far partire l'applicazione il primo giorno. La
+-- registrazione vera e' arrivata dopo, e quella riga era gia' diventata
+-- l'azienda del cliente. L'INSERT e' stato tolto — nessun codice lo usava,
+-- nessuna prova ne aveva bisogno, e la registrazione crea da se' la propria
+-- azienda con un UUID (verificato su un database vuoto: si registra e
+-- funziona). Restava solo a fabbricare l'equivoco su ogni database nuovo.
+--
+-- Sette tabelle puntano ad aziende.id — utenti, commesse, dipendenti,
+-- registrazioni, materiali, allegati, fatture — tutte con ON UPDATE NO ACTION:
+-- cambiare quell'id NON si propaga da solo e va fatto a mano, in transazione,
+-- su centinaia di righe. Non ne vale la pena per un identificatore che
+-- l'utente non vede mai. Meglio questo avviso.
+-- ===========================================================================
