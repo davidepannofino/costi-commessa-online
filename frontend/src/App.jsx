@@ -4570,7 +4570,11 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
           <section key={g.chiave} className="card overflow-hidden" style={{
             /* Il filetto sul bordo: rende leggibile a colpo d'occhio, scorrendo
                la pagina, quali gruppi sono a posto e quali chiedono qualcosa.
-               È l'unico bordo spesso dell'applicazione, e se lo merita. */
+               È l'unico bordo spesso del sistema, e ha UN mestiere solo: fare
+               da canale di stato in un elenco che si scorre. Lo porta anche la
+               revisione delle pagine di una scansione, per lo stesso motivo —
+               non è un'eccezione in più, è lo stesso strumento nello stesso
+               lavoro. Fuori da quel mestiere, i bordi restano di mezzo pixel. */
             borderLeft: `3px solid ${stile.filo}` }}>
             {/* La testata del gruppo. Prima aveva un fondo rialzato (un
                 contenitore dentro un contenitore) e le misure vecchie px-7/py-5,

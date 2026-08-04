@@ -251,7 +251,9 @@ Le variabili storicamente chiamate `--ombra-*` non disegnano ombre: sono anelli 
 
 Quattro raggi e nient'altro: **badge e pillole 6px**, **controlli e campi 8px**, **card 14px**, **modale 16px**. La scala sale con la superficie: più una cosa è grande, più l'angolo è morbido.
 
-I bordi sono di **mezzo pixel** — non uno — perché su questi fondi un pixel intero legge come una linea disegnata invece che come un confine. L'unica eccezione in tutto il sistema è il **filo di stato da 3px** sul fianco sinistro delle card di gruppo DDT, dove il colore del bordo codifica lo stato dell'abbinamento e serve a scorrere venti gruppi senza leggere una parola.
+I bordi sono di **mezzo pixel** — non uno — perché su questi fondi un pixel intero legge come una linea disegnata invece che come un confine.
+
+L'unica eccezione è il **filo di stato da 3px** sul fianco sinistro, e ha un mestiere solo: fare da canale di stato in un **elenco che si scorre**, dove il colore del bordo dice a colpo d'occhio quali righe chiedono qualcosa senza costringere a leggerle. Oggi lo portano i gruppi DDT di una fattura e le pagine di una scansione da rivedere — due schermate, stesso strumento, stesso lavoro. Fuori da quel mestiere il bordo resta di mezzo pixel: un filo spesso su una card qualsiasi non sta segnalando niente, sta solo decorando.
 
 Le barre di proporzione sono alte 3–5px con raggio pieno; a totale zero **restano vuote** invece di riempirsi.
 
