@@ -1,0 +1,81 @@
+/**
+ * Verifica in SOLA LETTURA che la migrazione sia arrivata.
+ *
+ *     node src/verifica-schema.js
+ *
+ * Non scrive niente: fa solo domande al catalogo di sistema di Postgres e
+ * stampa cosa ha trovato. Serve a non doversi fidare — dopo `npm run migrate`
+ * si guarda una risposta, non una promessa.
+ *
+ * Punta al database che trova in DATABASE_URL: quella della riga di comando se
+ * c'è, altrimenti quella del file .env.
+ */
+import "dotenv/config";
+import { pool } from "./db.js";
+
+const ATTESE = [
+  { tipo: "tabella", nome: "scansioni" },
+  { tipo: "colonna", tabella: "allegati", nome: "origine_nome_file" },
+  { tipo: "colonna", tabella: "allegati", nome: "origine_pagina" },
+];
+
+async function main() {
+  const dove = await pool.query("SELECT current_database() AS db, current_schema() AS schema");
+  console.log(`\ndatabase: ${dove.rows[0].db} · schema: ${dove.rows[0].schema}\n`);
+
+  const esiti = [];
+  for (const a of ATTESE) {
+    if (a.tipo === "tabella") {
+      const r = await pool.query(
+        "SELECT 1 FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = $1",
+        [a.nome]
+      );
+      esiti.push({ cosa: `tabella ${a.nome}`, presente: r.rows.length > 0 ? "SI" : "NO" });
+    } else {
+      const r = await pool.query(
+        `SELECT data_type FROM information_schema.columns
+          WHERE table_schema = current_schema() AND table_name = $1 AND column_name = $2`,
+        [a.tabella, a.nome]
+      );
+      esiti.push({
+        cosa: `colonna ${a.tabella}.${a.nome}`,
+        presente: r.rows.length > 0 ? "SI" : "NO",
+        tipo: r.rows[0]?.data_type ?? "—",
+      });
+    }
+  }
+  console.table(esiti);
+
+  /* Il conteggio serve a vedere che la migrazione non ha toccato i dati:
+     dev'essere identico a prima. Si contano solo le tabelle che esistono, così
+     questo comando funziona anche PRIMA della migrazione — che è il momento in
+     cui serve di più, per avere il numero di partenza con cui confrontare. */
+  const righe = [];
+  for (const t of ["aziende", "commesse", "dipendenti", "registrazioni", "materiali", "allegati", "fatture", "scansioni"]) {
+    const c = await pool.query(
+      "SELECT 1 FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = $1",
+      [t]
+    );
+    righe.push({
+      tabella: t,
+      righe: c.rows.length === 0 ? "(non esiste ancora)" : (await pool.query(`SELECT count(*)::int AS n FROM ${t}`)).rows[0].n,
+    });
+  }
+  console.table(righe);
+
+  const mancanti = esiti.filter((e) => e.presente === "NO");
+  if (mancanti.length === 0) {
+    console.log("Tutto a posto: la migrazione è arrivata.\n");
+  } else {
+    console.log(`MANCA ANCORA: ${mancanti.map((m) => m.cosa).join(", ")}\n`);
+  }
+  await pool.end();
+  process.exit(mancanti.length === 0 ? 0 : 1);
+}
+
+main().catch(async (e) => {
+  console.error("\nErrore durante la verifica:", e.message);
+  console.error("Se dice che la relazione «scansioni» non esiste, la migrazione non è ancora stata eseguita.\n");
+  await pool.end();
+  process.exit(1);
+});
