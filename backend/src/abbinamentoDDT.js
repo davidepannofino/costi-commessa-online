@@ -25,6 +25,15 @@
  *            Si mostra il candidato, non si assegna niente.
  *   niente = si assegna a mano, esattamente come si faceva prima.
  *
+ * E QUANDO NESSUN CANDIDATO È MIGLIORE DEGLI ALTRI non si nomina nessuna
+ * commessa. Un debole che dice "forse P13" quando P13 e P27 se lo contendono
+ * alla pari non è una proposta: è un sorteggio scritto in giallo. Peggio, il
+ * sorteggio lo vinceva chi usciva per primo dal database, quindi la stessa
+ * fattura poteva proporre due commesse diverse a due caricamenti di distanza.
+ * In quel caso l'esito dice QUANTI sono e lascia la scelta, senza fare nomi.
+ * Se invece i candidati appaiati indicano tutti la stessa commessa la si
+ * propone: non c'è niente fra cui scegliere.
+ *
  * Tutto quello che c'è in questo file è una funzione pura: entrano dati, esce
  * un giudizio. Nessuna query, nessuna data di oggi, nessun caso al di fuori di
  * quelli scritti — così si può collaudare per intero senza database.
@@ -44,6 +53,15 @@ export const GIORNI_VICINI = 5;
 /** Quanto deve essere lungo un nome di fornitore perché il confronto
  *  "uno contiene l'altro" sia una somiglianza e non una coincidenza. */
 const MIN_FORNITORE = 4;
+
+/**
+ * La distanza che vale per "data non confrontabile", quando manca da una delle
+ * due parti. Serve un numero FINITO e non un Infinity: le distanze si
+ * confrontano sottraendole, e `Infinity - Infinity` non è un numero — due
+ * candidati entrambi senza data risulterebbero incomparabili invece che pari,
+ * ed è proprio il pareggio che qui va riconosciuto.
+ */
+const LONTANISSIMO = Number.MAX_SAFE_INTEGER;
 
 /**
  * Le paroline che si scrivono DAVANTI a un numero di documento e che non fanno
@@ -210,26 +228,60 @@ export function abbinaUnDDT(riferimento, archiviati) {
     return risultato(forti[0], "forte");
   }
 
-  // Più esiti forti su commesse DIVERSE: il software non ha modo di sapere
-  // quale sia quella giusta, e indovinare qui vorrebbe dire sbagliare la metà
-  // delle volte senza dirlo. Si mostra il primo e si chiede.
+  // Più esiti forti su commesse DIVERSE: sono forti allo stesso modo, quindi
+  // non c'è nemmeno un criterio per metterli in fila. Si dice quanti sono.
   if (forti.length > 0) {
-    return risultato(forti[0], "debole", `ci sono ${forti.length} DDT archiviati con questo numero, su commesse diverse: scegli tu`);
+    return ambiguo(forti.length);
   }
 
-  // Nessun esito forte: si propone il candidato debole più promettente. Prima
+  // Nessun esito forte: si guarda il candidato debole più promettente. Prima
   // quelli con il fornitore che torna, poi i più vicini di data: è l'ordine in
   // cui un occhio umano li guarderebbe.
-  const ordinati = [...giudicati].sort((x, y) => {
-    const peso = (g) => (confrontaFornitori(riferimento.fornitore, g.archiviato.fornitore) === "uguale" ? 0 : 1);
-    if (peso(x) !== peso(y)) return peso(x) - peso(y);
-    const gx = giorniFra(riferimento.ddtData, x.archiviato.ddtData);
-    const gy = giorniFra(riferimento.ddtData, y.archiviato.ddtData);
-    return (gx ?? Infinity) - (gy ?? Infinity);
-  });
+  const conChiave = giudicati.map((g) => ({ ...g, chiave: chiaveOrdine(riferimento, g.archiviato) }));
+  const ordinati = [...conChiave].sort((x, y) => (x.chiave[0] - y.chiave[0]) || (x.chiave[1] - y.chiave[1]));
+
+  /* I candidati che ARRIVANO PARI col primo: né il fornitore né la data li
+     separano. Se puntano a commesse diverse, qualunque nome si faccia è quello
+     che è uscito per primo dal database, non quello più probabile. */
+  const [pesoMigliore, giorniMigliori] = ordinati[0].chiave;
+  const aPari = ordinati.filter((g) => g.chiave[0] === pesoMigliore && g.chiave[1] === giorniMigliori);
+  if (new Set(aPari.map((g) => g.archiviato.commessaId)).size > 1) {
+    return ambiguo(giudicati.length);
+  }
+
   const scelto = ordinati[0];
   const extra = giudicati.length > 1 ? ` · in archivio ci sono ${giudicati.length} DDT con questo numero` : "";
   return risultato(scelto, "debole", scelto.motivo + extra);
+}
+
+/**
+ * Con che criterio si mettono in fila i candidati deboli: prima il fornitore
+ * che torna, poi la data più vicina. Torna una coppia [peso, giorni] fatta
+ * apposta per essere confrontata E per riconoscere i pari merito — che è la
+ * parte che conta, perché su un pareggio non si sceglie.
+ */
+function chiaveOrdine(riferimento, archiviato) {
+  const peso = confrontaFornitori(riferimento.fornitore, archiviato.fornitore) === "uguale" ? 0 : 1;
+  return [peso, giorniFra(riferimento.ddtData, archiviato.ddtData) ?? LONTANISSIMO];
+}
+
+/**
+ * L'esito quando più DDT si contendono lo stesso numero e niente li separa.
+ *
+ * Non nomina nessuna commessa e non allega nessun documento, di proposito: la
+ * schermata deve poter dire "sono in due, decidi tu" senza avere sottomano un
+ * nome da mettere in grassetto. Resta "debole" perché resta un abbinamento da
+ * confermare a mano — quello che cambia è che non finge di sapere quale.
+ */
+function ambiguo(quanti) {
+  return {
+    forza: "debole",
+    commessaId: null,
+    commessaCodice: "",
+    commessaDescrizione: "",
+    motivo: `ci sono ${quanti} DDT archiviati con questo numero, su commesse diverse: scegli tu`,
+    allegato: null,
+  };
 }
 
 /** Confeziona la risposta nella forma che il frontend si aspetta. */

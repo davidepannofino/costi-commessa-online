@@ -3857,11 +3857,17 @@ function StatoAbbinamento({ stato, commessa }) {
   const s = STILI_STATO[tipo];
   const Icona = s.icona;
   const codice = commessa ? `${commessa.codice}${commessa.descrizione ? ` — ${commessa.descrizione}` : ""}` : "?";
-  const proposta = abbinamento?.commessaCodice || "?";
+  /* Senza commessaCodice l'abbinamento è ambiguo: più DDT con quel numero e
+     nessuno più probabile degli altri. Il backend di proposito non fa nomi, e
+     qui non se ne inventa uno: la riga sotto dice quanti sono. Mettere "?" in
+     grassetto sarebbe la stessa bugia detta con un carattere in meno. */
+  const proposta = abbinamento?.commessaCodice || "";
 
   const testo = {
     auto: <>Abbinato in automatico a <strong>{codice}</strong> · <span style={{ fontWeight: 400 }}>controlla e, se serve, cambialo col menù qui accanto</span></>,
-    possibile: <>Possibile abbinamento a <strong>{proposta}</strong> — da confermare</>,
+    possibile: proposta
+      ? <>Possibile abbinamento a <strong>{proposta}</strong> — da confermare</>
+      : <>Più DDT archiviati con questo numero — scegli tu la commessa</>,
     manuale: <>Assegnato da te a <strong>{codice}</strong></>,
     misto: <>Righe assegnate a commesse diverse</>,
     vuoto: <>Da assegnare</>,

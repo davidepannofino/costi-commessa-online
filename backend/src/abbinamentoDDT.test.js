@@ -131,6 +131,71 @@ prova("fra più candidati deboli vince quello col fornitore giusto", () => {
   uguale(e.commessaId, "24-018", "deve proporre il DDT dello stesso fornitore:");
 });
 
+console.log("\nPARI MERITO — quando nessuno è più probabile, non si fa il nome");
+
+/* Come esce dall'archivio un DDT archiviato dalla schermata delle scansioni:
+   c'è il numero, c'è la commessa, e basta. Data e fornitore quella schermata
+   non li chiede, quindi su questi documenti i pari merito sono la norma e non
+   l'eccezione — ed è per loro che la regola esiste. */
+const daScansione = (id, numero, commessa) => ddt({ id, numero, data: null, fornitore: "", commessa });
+
+prova("due DDT col solo numero su commesse diverse → non si nomina nessuna commessa", () => {
+  const e = abbinaUnDDT({ ddtNumero: "3001", ddtData: "2026-07-14", fornitore: EPIU }, [
+    daScansione("s1", "3001", "24-100"),
+    daScansione("s2", "3001", "24-200"),
+  ]);
+  uguale(e.forza, "debole", "forza:");
+  uguale(e.commessaId, null, "commessa:");
+  uguale(e.commessaCodice, "", "codice:");
+  uguale(e.allegato, null, "allegato:");
+  if (!/2 DDT/.test(e.motivo)) throw new Error("il motivo deve dire quanti sono: " + e.motivo);
+});
+prova("due DDT col solo numero sulla STESSA commessa → si propone: non c'è niente da scegliere", () => {
+  const e = abbinaUnDDT({ ddtNumero: "3002", ddtData: "2026-07-14", fornitore: EPIU }, [
+    daScansione("s1", "3002", "24-100"),
+    daScansione("s2", "3002", "24-100"),
+  ]);
+  uguale(e.forza, "debole", "forza:");
+  uguale(e.commessaId, "24-100", "commessa:");
+});
+prova("un candidato STRETTAMENTE migliore si propone ancora", () => {
+  // 4711 sta su due commesse, ma uno dei due è del fornitore della fattura.
+  // Non sono pari: il fornitore che torna è un criterio, non un sorteggio, e
+  // rinunciare qui vorrebbe dire buttare via l'unico dato che li distingue.
+  const e = abbinaUnDDT({ ddtNumero: "4711", ddtData: "2026-07-30", fornitore: EPIU }, ARCHIVIO);
+  uguale(e.forza, "debole");
+  uguale(e.commessaId, "24-018");
+});
+
+console.log("\nSTESSO ARCHIVIO, STESSO ESITO — l'ordine delle righe non conta");
+
+/* La prova che prima falliva. Finché i pari merito non venivano riconosciuti,
+   a parità di candidati vinceva quello che il database restituiva per primo:
+   la stessa fattura, sullo stesso archivio, poteva proporre due commesse
+   diverse a due caricamenti di distanza. Un software che cambia idea da solo
+   non lo si può controllare, e a quel punto non lo si crede più su niente. */
+const nonDipendeDallOrdine = (nome, riferimento, archiviati) => prova(nome, () => {
+  const dritto = abbinaUnDDT(riferimento, archiviati);
+  const rovescio = abbinaUnDDT(riferimento, [...archiviati].reverse());
+  uguale(rovescio, dritto, "invertendo l'ordine delle righe dell'archivio:");
+});
+
+nonDipendeDallOrdine("due deboli pari merito su commesse diverse",
+  { ddtNumero: "3001", ddtData: "2026-07-14", fornitore: EPIU },
+  [daScansione("s1", "3001", "24-100"), daScansione("s2", "3001", "24-200")]);
+
+nonDipendeDallOrdine("due forti su commesse diverse",
+  { ddtNumero: "555", ddtData: "2026-07-06", fornitore: EPIU },
+  [ddt({ id: "b1", numero: "555", data: "2026-07-06", fornitore: EPIU, commessa: "24-100" }),
+   ddt({ id: "b2", numero: "555", data: "2026-07-06", fornitore: EPIU, commessa: "24-200" })]);
+
+nonDipendeDallOrdine("tre col solo numero, due dei quali sulla stessa commessa",
+  { ddtNumero: "3003", ddtData: "2026-07-14", fornitore: EPIU },
+  [daScansione("s1", "3003", "24-100"), daScansione("s2", "3003", "24-100"), daScansione("s3", "3003", "24-300")]);
+
+nonDipendeDallOrdine("un candidato migliore degli altri resta lui in ogni ordine",
+  { ddtNumero: "4711", ddtData: "2026-07-30", fornitore: EPIU }, ARCHIVIO);
+
 console.log("\nNESSUN ABBINAMENTO (si assegna a mano, come prima)");
 prova("DDT mai archiviato → null", () => {
   uguale(abbinaUnDDT({ ddtNumero: "8888", ddtData: "2026-07-06", fornitore: EPIU }, ARCHIVIO), null);

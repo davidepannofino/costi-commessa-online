@@ -1235,11 +1235,17 @@ async function abbinamentiDaDDT(aziendaId, { riferimenti, fornitore }) {
   if (daCercare.length === 0) return [];
 
   const ris = await pool.query(
+    /* L'ORDER BY non è pignoleria: senza, a parità di candidati l'abbinamento
+       proponeva la commessa che il database restituiva per prima, e quella non
+       è stabile. La logica adesso i pari merito li riconosce e non sceglie, ma
+       un ordine fisso resta la rete sotto: stessa fattura, stesso archivio,
+       stessa risposta, sempre. `id` in coda perché sia un ordine totale. */
     `SELECT a.id, a.nome_file, a.commessa_id, a.ddt_numero,
             to_char(a.ddt_data, 'YYYY-MM-DD') AS ddt_data, a.fornitore,
             c.codice, c.descrizione
        FROM allegati a JOIN commesse c ON c.id = a.commessa_id
-      WHERE a.azienda_id = $1`,
+      WHERE a.azienda_id = $1
+      ORDER BY a.ddt_data NULLS LAST, a.nome_file, a.id`,
     [aziendaId]
   );
 
@@ -1446,7 +1452,11 @@ app.post("/api/fatture", richiedeAuth, richiedeAbbonamentoAttivo, leggiCorpoFatt
       // Vecchio nome, vecchia forma: serve solo perché una versione del
       // frontend già pubblicata continui a funzionare mentre il nuovo va in
       // linea. Si può togliere quando il frontend nuovo è dappertutto.
-      suggerimenti: abbinamenti.map((a) => ({
+      // Gli abbinamenti ambigui non ci entrano: in questa forma non esiste il
+      // modo di dire "sono in due, scegli tu", e un client vecchio leggerebbe
+      // una commessa nulla. Non ricevendo niente si comporta come sempre —
+      // assegnazione a mano, che è la risposta giusta per quel caso.
+      suggerimenti: abbinamenti.filter((a) => a.commessaId).map((a) => ({
         ddtNumero: a.ddtNumero, commessaId: a.commessaId,
         commessaCodice: a.commessaCodice, nomeFile: a.allegato?.nomeFile || "",
       })),
