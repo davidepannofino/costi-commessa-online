@@ -55,14 +55,60 @@ export async function leggiTestoPagine(buffer) {
   const pagine = [];
   for (let n = 1; n <= doc.numPages; n++) {
     const contenuto = await (await doc.getPage(n)).getTextContent();
-    const testo = contenuto.items
-      .map((f) => String(f.str ?? ""))
-      .join(" ")
-      .replace(/\s+/g, " ")
-      .trim();
-    pagine.push({ numeroPagina: n, testo });
+    pagine.push({ numeroPagina: n, testo: unisciFrammenti(contenuto.items) });
   }
   return pagine;
+}
+
+/**
+ * Rimette insieme i frammenti di testo di una pagina.
+ *
+ * PERCHÉ NON BASTA UNIRLI CON UNO SPAZIO. pdfjs non restituisce parole:
+ * restituisce un frammento per ogni operatore di disegno del PDF. Su un file
+ * scritto a mano capita che la casella arrivi tutta in un pezzo — ed è quello
+ * che succede oggi, verificato sul file vero: un frammento per pagina, con
+ * dentro esattamente "PD02". Ma capita anche il contrario: la stessa parola
+ * spezzata in due pezzi per una crenatura o un cambio di font, e allora
+ * "PC24" esce come "PC" + "24".
+ *
+ * Unire sempre con uno spazio raddrizzerebbe il primo caso e romperebbe il
+ * secondo: "PC 24 B05/4959" farebbe leggere "PC" come codice della commessa.
+ * Quindi lo spazio si mette solo dove nel foglio c'era uno spazio davvero: si
+ * guarda la DISTANZA fra la fine di un frammento e l'inizio del successivo.
+ * Attaccati (o quasi) = stessa parola; staccati, o su righe diverse = due cose.
+ *
+ * La soglia è un quarto del corpo del carattere: sotto, nessuno scriverebbe
+ * uno spazio; sopra, si vede. E se la stima sbagliasse, sbaglia dalla parte
+ * giusta — la riga finisce "da controllare" e la compila una persona, invece
+ * di archiviare un numero inventato.
+ */
+function unisciFrammenti(items) {
+  let testo = "";
+  let precedente = null;
+
+  for (const frammento of items || []) {
+    const pezzo = String(frammento?.str ?? "");
+    if (!pezzo) continue;
+
+    const x = frammento.transform?.[4] ?? 0;
+    const y = frammento.transform?.[5] ?? 0;
+    const larghezza = frammento.width ?? 0;
+    // L'altezza del carattere: `height` non è sempre valorizzata, la scala
+    // della trasformazione sì.
+    const corpo = frammento.height || Math.abs(frammento.transform?.[3] ?? 10) || 10;
+
+    if (precedente) {
+      const stessaRiga = Math.abs(y - precedente.y) < 2;
+      const distanza = x - (precedente.x + precedente.larghezza);
+      const attaccati = stessaRiga && distanza < Math.max(1, corpo * 0.25);
+      if (!attaccati) testo += " ";
+    }
+
+    testo += pezzo;
+    precedente = { x, y, larghezza };
+  }
+
+  return testo.replace(/\s+/g, " ").trim();
 }
 
 /**

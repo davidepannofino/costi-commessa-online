@@ -61,6 +61,48 @@ await prova("una pagina senza casella torna con testo vuoto, non salta", async (
   uguale(pagine[2], { numeroPagina: 3, testo: "" });
 });
 
+console.log("\nCASELLA SPEZZATA IN PIÙ FRAMMENTI");
+
+/* pdfjs non restituisce parole ma frammenti di disegno: la stessa casella può
+   arrivare intera (come nel file vero: un frammento, "PD02") oppure spezzata.
+   Questi due casi sono opposti e vanno distinti dalla DISTANZA, non dal numero
+   di frammenti — altrimenti si raddrizza uno e si rompe l'altro. */
+async function paginaConPezzi(pezzi) {
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const pagina = doc.addPage([595, 842]);
+  for (const { testo, x } of pezzi) pagina.drawText(testo, { x, y: 780, size: 12, font });
+  return { pdf: Buffer.from(await doc.save()), font };
+}
+
+await prova("due pezzi ATTACCATI sono una parola sola: PC + 24 → PC24", async () => {
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const largo = font.widthOfTextAtSize("PC", 12);
+  const { pdf } = await paginaConPezzi([
+    { testo: "PC", x: 40 },
+    { testo: "24", x: 40 + largo },      // esattamente dove finisce il precedente
+    { testo: "B05/4959", x: 40 + largo + font.widthOfTextAtSize("24", 12) + 12 },
+  ]);
+  const [p] = await leggiTestoPagine(pdf);
+  uguale(p.testo, "PC24 B05/4959", "se esce 'PC 24 B05/4959' la regola leggerebbe PC come commessa:");
+});
+
+await prova("due pezzi STACCATI sono due cose: resta lo spazio in mezzo", async () => {
+  const { pdf } = await paginaConPezzi([
+    { testo: "PD02", x: 40 },
+    { testo: "B05/4711", x: 120 },
+  ]);
+  const [p] = await leggiTestoPagine(pdf);
+  uguale(p.testo, "PD02 B05/4711");
+});
+
+await prova("un frammento solo resta com'è — il caso del file vero", async () => {
+  const { pdf } = await paginaConPezzi([{ testo: "PC18", x: 40 }]);
+  const [p] = await leggiTestoPagine(pdf);
+  uguale(p.testo, "PC18");
+});
+
 console.log("\nDIVISIONE — la pagina estratta è quella chiesta");
 
 await prova("estrarre la pagina 2 dà un PDF di una pagina sola", async () => {
