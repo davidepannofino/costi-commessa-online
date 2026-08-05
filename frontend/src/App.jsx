@@ -753,6 +753,43 @@ const Campo = ({ etichetta, children, errore }) => {
 };
 const inputCls = "w-full px-3.5 py-2.5 text-sm outline-none campo";
 
+/** Una media query letta come stato: serve a scegliere COME si apre l'elenco,
+ *  e deve seguire il ridimensionamento della finestra, non solo il primo caricamento. */
+function useMedia(query) {
+  const [risponde, setRisponde] = useState(() => window.matchMedia?.(query).matches ?? false);
+  useEffect(() => {
+    const mq = window.matchMedia?.(query);
+    if (!mq) return;
+    const su = () => setRisponde(mq.matches);
+    su();
+    mq.addEventListener("change", su);
+    return () => mq.removeEventListener("change", su);
+  }, [query]);
+  return risponde;
+}
+
+/**
+ * Quanta pagina si VEDE davvero, in pixel.
+ *
+ * Su un telefono la tastiera a schermo si mangia metà della finestra, ma
+ * `innerHeight` non se ne accorge: continua a dire l'altezza intera, e un
+ * pannello alto "il 70% dello schermo" finisce per metà sotto la tastiera.
+ * `visualViewport` invece misura quello che l'occhio vede, e si aggiorna
+ * quando la tastiera sale e scende.
+ */
+function useAltezzaVisibile() {
+  const [alta, setAlta] = useState(() => window.visualViewport?.height ?? window.innerHeight);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const su = () => setAlta(vv.height);
+    vv.addEventListener("resize", su);
+    vv.addEventListener("scroll", su);
+    return () => { vv.removeEventListener("resize", su); vv.removeEventListener("scroll", su); };
+  }, []);
+  return alta;
+}
+
 /**
  * CAMPO CHE SI FILTRA SCRIVENDO — al posto di una tendina lunga.
  *
@@ -762,9 +799,32 @@ const inputCls = "w-full px-3.5 py-2.5 text-sm outline-none campo";
  * solo dall'INIZIO dell'etichetta — "TARCENTO" non trovava "PN02 — TARCENTO".
  * Qui si scrive un pezzo qualsiasi del nome e l'elenco si stringe.
  *
- * SI FA TUTTO CON LA TASTIERA, mai col mouse per obbligo:
- *   si scrive per filtrare · frecce su/giù per scegliere · Invio o Tab per
- *   confermare · Esc per annullare e tornare a quello di prima.
+ * DUE MODI, PERCHÉ DUE MANI DIVERSE.
+ *
+ *   col mouse e la tastiera (puntatore fine, schermo largo) — casella di
+ *   testo con la tendina sotto: si scrive per filtrare, frecce su/giù per
+ *   scegliere, Invio o Tab per confermare, Esc per annullare. C'è anche il
+ *   bottoncino a destra che apre l'elenco con un clic, per chi non vuole
+ *   scrivere niente.
+ *
+ *   COL DITO (puntatore grosso, o schermo stretto) — il campo NON è una
+ *   casella di testo: è un bottone che apre un foglio a tutta larghezza.
+ *   È il punto che va spiegato, perché qui prima c'era un <select> nativo e
+ *   sostituirlo poteva essere un passo indietro: toccando un <select> il
+ *   telefono apre il SUO selettore, grande e comodo, senza tirare su la
+ *   tastiera. Una casella di testo invece la tastiera la tira su sempre —
+ *   metà schermo se ne va, e per scegliere fra quindici nomi che si vedono
+ *   tutti bisogna prima scrivere. Sarebbe stato un peggioramento.
+ *   Quindi sul dito il tocco apre l'elenco e basta: righe alte 48px, nessuna
+ *   tastiera. Chi vuole filtrare tocca il campo di ricerca DENTRO il foglio,
+ *   e solo allora la tastiera sale — e il foglio si accorcia da solo per
+ *   restare tutto visibile (vedi useAltezzaVisibile).
+ *
+ * OGNI COSA HA UN COMANDO CHE SI PREME. I tasti rapidi sono un di più, mai
+ * l'unica strada: aprire (bottone), scegliere (si tocca la riga), svuotare
+ * (bottone "Nessuno"), chiudere (bottone "Chiudi"). Niente che si scopra solo
+ * passandoci sopra il mouse: l'evidenziazione al passaggio è un aiuto per
+ * l'occhio, non cambia MAI cosa conferma l'Invio.
  *
  * E NON SCEGLIE MAI DA SOLO. Se quello che è scritto corrisponde a più voci,
  * Invio e Tab NON confermano niente: restano qui e dicono quante sono. La
@@ -778,9 +838,14 @@ const inputCls = "w-full px-3.5 py-2.5 text-sm outline-none campo";
  * il testo torna a essere quello della voce scelta — non si resta mai con
  * "and" scritto e "Andrea Bianchi" selezionato di nascosto.
  */
+const ALTO_TOCCO = 48;   // il minimo per un bersaglio da dito: 44 è la soglia, 48 sta comodo
+
 const CampoScelta = React.forwardRef(function CampoScelta(
   { etichetta, voci, valore, onCambia, errore, segnaposto, onAvanti, nome }, riferimento
 ) {
+  const aDito = useMedia("(pointer: coarse), (max-width: 640px)");
+  const altezzaVisibile = useAltezzaVisibile();
+  const cercaRef = useRef(null);
   const scelta = useMemo(() => voci.find((v) => v.id === valore) || null, [voci, valore]);
   const [testo, setTesto] = useState(scelta ? scelta.etichetta : "");
   const [aperto, setAperto] = useState(false);
@@ -809,6 +874,12 @@ const CampoScelta = React.forwardRef(function CampoScelta(
     setAperto(false); setEvidenziato(null); setAvviso(null);
   };
 
+  /** Chiude senza scegliere niente e rimette la casella com'era. */
+  const chiudi = () => {
+    setTesto(scelta ? scelta.etichetta : "");
+    setAperto(false); setEvidenziato(null); setAvviso(null);
+  };
+
   const suTasto = (e) => {
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
@@ -834,6 +905,10 @@ const CampoScelta = React.forwardRef(function CampoScelta(
       return;   // col Tab si lascia andare il fuoco da solo
     }
     if (d.esito === VUOTO) {
+      /* Nel foglio la casella di ricerca è VUOTA di partenza, e l'Invio a
+         vuoto lì significa "non ho ancora scritto niente", non "togli quello
+         che avevo scelto". Per togliere c'è il bottone "Nessuno". */
+      if (aDito) { e.preventDefault(); return; }
       applica(null);
       if (e.key === "Enter") { e.preventDefault(); onAvanti?.(); }
       return;
@@ -848,6 +923,116 @@ const CampoScelta = React.forwardRef(function CampoScelta(
       : "Nessuna corrispondenza.");
   };
 
+  /* La riga dell'elenco è la stessa nei due modi: cambia DOVE sta l'elenco,
+     non come si tocca una voce. Alta almeno 48px sempre, anche col mouse: una
+     riga bassa non è più precisa, è solo più facile da sbagliare.
+     `voce-elenco` porta l'evidenziazione al passaggio del mouse; sta nel CSS e
+     non qui perché è :hover, e NON tocca `evidenziato` — se lo facesse, un
+     passaggio di mouse per sbaglio cambierebbe cosa conferma l'Invio, che è
+     esattamente la scelta silenziosa che questo campo non deve mai fare. */
+  const voceRiga = (v, i) => (
+    <li key={v.id} role="option" aria-selected={i === evidenziato}
+      // mousedown e non click: il click arriva dopo il blur, che avrebbe già chiuso l'elenco.
+      onMouseDown={(e) => { e.preventDefault(); applica(v); }}
+      className="voce-elenco px-4 flex items-center cursor-pointer t-corpo"
+      style={{
+        minHeight: ALTO_TOCCO,
+        background: i === evidenziato ? "var(--velo)" : "transparent",
+        color: i === evidenziato ? "var(--txt)" : "var(--txt-chiaro)",
+      }}>
+      {v.etichetta}
+    </li>
+  );
+
+  const riquadroAvviso = avviso && (
+    <p role="status" className="px-4 py-2.5 t-piccolo"
+      style={{ color: "var(--ambra)", background: "var(--ambra-bg)", borderBottom: ".5px solid var(--ambra-bordo)" }}>
+      {avviso}
+    </p>
+  );
+
+  const messaggioErrore = errore && (
+    <span role="alert" className="block t-piccolo mt-2" style={{ color: "var(--errore)" }}>{errore}</span>
+  );
+
+  /* ---------------------------------------------------------------- *
+   *  COL DITO: bottone + foglio. Nessuna tastiera finché non la chiedi. *
+   * ---------------------------------------------------------------- */
+  if (aDito) {
+    return (
+      <div>
+        <span className="block t-micro mb-2" id={`${idElenco}-et`}>{etichetta}</span>
+        <button type="button" ref={riferimento} name={nome}
+          aria-haspopup="listbox" aria-expanded={aperto} aria-labelledby={`${idElenco}-et`}
+          aria-invalid={errore ? true : undefined}
+          onClick={() => { setTesto(""); setEvidenziato(null); setAvviso(null); setAperto(true); }}
+          className={inputCls + " flex items-center justify-between gap-2 text-left"}
+          style={{ minHeight: ALTO_TOCCO, color: scelta ? "var(--txt-chiaro)" : "var(--txt-tenue)" }}>
+          <span className="truncate">{scelta ? scelta.etichetta : (segnaposto || "Scegli…")}</span>
+          <ChevronDown size={18} strokeWidth={1.75} className="shrink-0" style={{ color: "var(--txt-tenue)" }} />
+        </button>
+        {messaggioErrore}
+
+        {aperto && (
+          /* Il velo si ferma all'altezza VISIBILE, non a quella della finestra:
+             con la tastiera aperta le due cose non coincidono, e un foglio alto
+             quanto la finestra finirebbe per metà sotto i tasti. */
+          <div className="fixed left-0 right-0 z-40 flex flex-col justify-end"
+            style={{ top: 0, height: altezzaVisibile, background: "rgba(0,0,0,.55)" }}
+            onMouseDown={chiudi}>
+            <div className="flex flex-col w-full mx-auto overflow-hidden"
+              onMouseDown={(e) => e.stopPropagation()}
+              style={{
+                maxHeight: altezzaVisibile, background: "var(--bg-elevato)",
+                borderTop: ".5px solid var(--bordo-input)",
+                borderTopLeftRadius: "var(--r-md)", borderTopRightRadius: "var(--r-md)",
+              }}>
+              <div className="flex items-center justify-between gap-3 px-4 py-3 shrink-0"
+                style={{ borderBottom: ".5px solid var(--bordo)" }}>
+                <span className="t-sotto">{etichetta}</span>
+                <div className="flex items-center gap-2 shrink-0">
+                  {/* Svuotare e chiudere hanno un bottone che si preme: i tasti
+                      Esc e Canc sono un di più, non l'unica strada. */}
+                  {scelta && (
+                    <button type="button" className="btn btn-fantasma px-3.5 t-piccolo"
+                      style={{ minHeight: ALTO_TOCCO, borderRadius: "var(--r-sm)" }}
+                      onMouseDown={(e) => { e.preventDefault(); applica(null); }}>Nessuno</button>
+                  )}
+                  <button type="button" className="btn btn-fantasma px-3.5 t-piccolo"
+                    style={{ minHeight: ALTO_TOCCO, borderRadius: "var(--r-sm)" }}
+                    onMouseDown={(e) => { e.preventDefault(); chiudi(); }}>Chiudi</button>
+                </div>
+              </div>
+
+              {/* La ricerca NON prende il fuoco da sola: se lo prendesse
+                  salirebbe la tastiera, e chi voleva solo scegliere fra quindici
+                  nomi si troverebbe metà schermo occupato per niente. */}
+              <div className="px-4 py-3 shrink-0" style={{ borderBottom: ".5px solid var(--bordo)" }}>
+                <input ref={cercaRef} value={testo} inputMode="search" autoComplete="off"
+                  placeholder="cerca, se vuoi" className={inputCls} style={{ minHeight: ALTO_TOCCO }}
+                  onChange={(e) => { setTesto(e.target.value); setEvidenziato(null); setAvviso(null); }}
+                  onKeyDown={suTasto} />
+              </div>
+
+              {riquadroAvviso}
+
+              <ul ref={elencoRef} id={idElenco} role="listbox" className="overflow-y-auto flex-1"
+                style={{ WebkitOverflowScrolling: "touch" }}>
+                {visibili.map(voceRiga)}
+                {visibili.length === 0 && (
+                  <li className="px-4 py-5 t-corpo" style={{ color: "var(--txt-tenue)" }}>Nessuna corrispondenza.</li>
+                )}
+              </ul>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  /* ---------------------------------------------------------------- *
+   *  COL MOUSE E LA TASTIERA: casella di testo e tendina sotto.        *
+   * ---------------------------------------------------------------- */
   return (
     <div>
       <label className="block">
@@ -863,7 +1048,8 @@ const CampoScelta = React.forwardRef(function CampoScelta(
             aria-invalid={errore ? true : undefined}
             autoComplete="off"
             placeholder={segnaposto}
-            className={inputCls}
+            className={inputCls + " pr-12"}
+            style={{ minHeight: ALTO_TOCCO }}
             onChange={(e) => { setTesto(e.target.value); setAperto(true); setEvidenziato(null); setAvviso(null); }}
             onFocus={(e) => { e.target.select(); setAperto(true); }}
             onKeyDown={suTasto}
@@ -874,6 +1060,19 @@ const CampoScelta = React.forwardRef(function CampoScelta(
               setAperto(false); setEvidenziato(null); setAvviso(null);
             }}
           />
+          {/* Aprire l'elenco ha un bottone, non solo il fuoco da tastiera: chi
+              usa il mouse deve vedere che c'è qualcosa da aprire. */}
+          <button type="button" tabIndex={-1} aria-label={aperto ? "Chiudi l'elenco" : "Apri l'elenco"}
+            className="absolute right-0 top-0 btn flex items-center justify-center"
+            style={{ width: ALTO_TOCCO, height: "100%", color: "var(--txt-tenue)" }}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              if (aperto) { setAperto(false); return; }
+              setTesto(""); setEvidenziato(null); setAvviso(null); setAperto(true);
+              riferimento?.current?.focus();
+            }}>
+            <ChevronDown size={16} strokeWidth={1.75} />
+          </button>
           {elencoInVista && (
             <div className="absolute z-20 left-0 right-0 mt-1 overflow-hidden"
               style={{
@@ -884,25 +1083,9 @@ const CampoScelta = React.forwardRef(function CampoScelta(
                 casella ci finiva esattamente dove l'elenco aperto lo copre, e
                 un messaggio che chiede all'utente di decidere ma non si vede
                 non chiede niente. Misurato nel browser: nascosto per intero. */}
-            {avviso && (
-              <p role="status" className="px-3.5 py-2 t-piccolo"
-                style={{ color: "var(--ambra)", background: "var(--ambra-bg)", borderBottom: ".5px solid var(--ambra-bordo)" }}>
-                {avviso}
-              </p>
-            )}
-            <ul ref={elencoRef} id={idElenco} role="listbox" className="overflow-y-auto" style={{ maxHeight: 240 }}>
-              {visibili.map((v, i) => (
-                <li key={v.id} role="option" aria-selected={i === evidenziato}
-                  // mousedown e non click: click arriva dopo il blur, che avrebbe già chiuso l'elenco.
-                  onMouseDown={(e) => { e.preventDefault(); applica(v); }}
-                  className="px-3.5 py-2 t-corpo cursor-pointer"
-                  style={{
-                    background: i === evidenziato ? "var(--velo)" : "transparent",
-                    color: i === evidenziato ? "var(--txt)" : "var(--txt-chiaro)",
-                  }}>
-                  {v.etichetta}
-                </li>
-              ))}
+            {riquadroAvviso}
+            <ul ref={elencoRef} id={idElenco} role="listbox" className="overflow-y-auto" style={{ maxHeight: 288 }}>
+              {visibili.map(voceRiga)}
             </ul>
             </div>
           )}
@@ -915,7 +1098,7 @@ const CampoScelta = React.forwardRef(function CampoScelta(
       {avviso && !errore && !elencoInVista && (
         <span role="status" className="block t-piccolo mt-2" style={{ color: "var(--ambra)" }}>{avviso}</span>
       )}
-      {errore && <span role="alert" className="block t-piccolo mt-2" style={{ color: "var(--errore)" }}>{errore}</span>}
+      {messaggioErrore}
     </div>
   );
 });
@@ -5282,6 +5465,9 @@ function VistaDati({ dipendenti, commesse, registrazioni, setCommesse, aggiungi,
      cinque com'è successo, con la loro data bene in vista. */
   const [ultime, setUltime] = useState([]);
   const refExcel = useRef(); const refDip = useRef(); const refCom = useRef(); const refOre = useRef();
+  // Stessa condizione di CampoScelta: la spiegazione sotto il modulo deve
+  // descrivere il modo in cui i campi si comportano DAVVERO su questo schermo.
+  const aDito = useMedia("(pointer: coarse), (max-width: 640px)");
 
   const dipById = useMemo(() => new Map(dipendenti.map((d) => [d.id, d])), [dipendenti]);
   const comById = useMemo(() => new Map(commesse.map((c) => [c.id, c])), [commesse]);
@@ -5406,7 +5592,7 @@ function VistaDati({ dipendenti, commesse, registrazioni, setCommesse, aggiungi,
                 <div style={{ width: 170 }}>
                   <label className="block">
                     <span className="block t-micro mb-2">Cambia giorno</span>
-                    <input type="date" value={form.data} className={inputCls + " f-mono"}
+                    <input type="date" value={form.data} className={inputCls + " f-mono min-h-[48px]"}
                       aria-invalid={erroriForm.data ? true : undefined}
                       onChange={(e) => setForm((f) => ({ ...f, data: e.target.value }))}
                       onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); vaiA(refDip)(); } }} />
@@ -5431,26 +5617,47 @@ function VistaDati({ dipendenti, commesse, registrazioni, setCommesse, aggiungi,
                   onCambia={(id) => setForm((f) => ({ ...f, commessaId: id }))}
                   errore={erroriForm.com} segnaposto="codice o nome del cantiere"
                   onAvanti={vaiA(refOre)} />
-                <Campo etichetta="Ore" errore={erroriForm.ore}>
-                  <input ref={refOre} value={form.ore} placeholder="8 o 0,5"
-                    className={inputCls + " f-mono text-right"}
-                    onChange={(e) => setForm((f) => ({ ...f, ore: e.target.value }))}
-                    onFocus={(e) => e.target.select()}
-                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); registra(); } }} />
-                </Campo>
-                {/* Lo spaziatore ha la stessa altezza delle etichette dei campi
-                    accanto, così il bottone si allinea agli input senza un
-                    margine indovinato a occhio che si scolla al primo
-                    cambio di tipografia. */}
-                <div>
-                  <span className="block t-micro mb-2" aria-hidden="true">&nbsp;</span>
-                  <Bottone onClick={registra}><Plus size={14} strokeWidth={1.75} /> Registra</Bottone>
+                {/* SOTTO lg, Ore e Registra stanno sulla STESSA RIGA. Non è
+                    estetica: sul telefono la tastiera a schermo si prende metà
+                    pagina, e le Ore sono l'ultimo campo prima di salvare. Se il
+                    bottone stesse sotto, nel momento in cui si scrivono le ore
+                    finirebbe dietro ai tasti — si scrive "8" e non si vede più
+                    dove premere. `lg:contents` fa sparire questo contenitore
+                    sugli schermi larghi, dove le quattro colonne tornano quelle
+                    di prima. */}
+                <div className="grid grid-cols-[1fr_auto] gap-3 items-start lg:contents">
+                  <Campo etichetta="Ore" errore={erroriForm.ore}>
+                    <input ref={refOre} value={form.ore} placeholder="8 o 0,5"
+                      inputMode="decimal"
+                      className={inputCls + " f-mono text-right min-h-[48px]"}
+                      onChange={(e) => setForm((f) => ({ ...f, ore: e.target.value }))}
+                      onFocus={(e) => e.target.select()}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); registra(); } }} />
+                  </Campo>
+                  {/* Lo spaziatore ha la stessa altezza delle etichette dei campi
+                      accanto, così il bottone si allinea agli input senza un
+                      margine indovinato a occhio che si scolla al primo
+                      cambio di tipografia. */}
+                  <div>
+                    <span className="block t-micro mb-2" aria-hidden="true">&nbsp;</span>
+                    <Bottone onClick={registra} className="min-h-[48px] px-5">
+                      <Plus size={16} strokeWidth={1.75} /> Registra
+                    </Bottone>
+                  </div>
                 </div>
               </div>
+              {/* La spiegazione dice quello che si fa DAVVERO su questo schermo.
+                  Sul telefono non c'è nessun Invio da premere e le frecce non
+                  esistono: lasciarci la versione da tastiera sarebbe istruzioni
+                  per un'altra applicazione. */}
               <p className="t-piccolo mt-3.5" style={{ color: "var(--txt-tenue)" }}>
-                Tutto da tastiera: scrivi un pezzo del nome, frecce ↑↓ se ce n'è più d'uno,
-                Invio per confermare e passare al campo dopo. Dalle Ore, Invio registra e
-                riparte dal dipendente. La giornata resta quella lì sopra finché non la cambi.
+                {aDito
+                  ? <>Tocca Dipendente o Commessa e scegli dall'elenco; se preferisci scrivere,
+                      dentro c'è anche la ricerca. Poi le ore e <strong style={{ fontWeight: 500 }}>Registra</strong>.
+                      La giornata resta quella lì sopra finché non la cambi.</>
+                  : <>Tutto da tastiera: scrivi un pezzo del nome, frecce ↑↓ se ce n'è più d'uno,
+                      Invio per confermare e passare al campo dopo. Dalle Ore, Invio registra e
+                      riparte dal dipendente. La giornata resta quella lì sopra finché non la cambi.</>}
               </p>
             </div>
 
@@ -6059,6 +6266,12 @@ function StileGlobale() {
         color:var(--txt-chiaro); transition:background var(--moto);
       }
       .campo-nudo:hover{ background:var(--bg-hover); }
+      /* Le voci dell'elenco che si filtra scrivendo. Il passaggio del mouse
+         schiarisce la riga: è un AIUTO PER L'OCCHIO e nient'altro — non cambia
+         quale voce conferma l'Invio, che resta solo quella evidenziata con le
+         frecce. Dove non c'è un mouse (dito) questa regola non scatta mai, e
+         infatti lì non serve: si tocca la riga e basta. */
+      .voce-elenco:hover{ background:var(--bg-hover); }
       .campo-nudo:focus{ background:var(--bg-hover); outline:none; }
       .campo:hover{ border-color:#26262C; }
       /* Il fuoco su un campo non può essere solo un cambio di bordo: chi
