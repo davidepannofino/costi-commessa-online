@@ -3,6 +3,7 @@ import cors from "cors";
 import "dotenv/config";
 import { randomUUID, randomBytes, createHash } from "node:crypto";
 import { pool } from "./db.js";
+import { registroRichieste } from "./registroRichieste.js";
 import { cifraPassword, verificaPassword, generaToken, richiedeAuth } from "./auth.js";
 import { inviaEmailResetPassword } from "./email.js";
 import { stripe, PREZZO_MENSILE_CENTESIMI } from "./stripe.js";
@@ -23,6 +24,12 @@ import {
 
 const app = express();
 app.use(cors());
+
+/* Una riga di log per ogni richiesta servita. Sta QUI, prima di tutto il
+   resto, per due motivi: vede anche il webhook Stripe (che è montato prima di
+   express.json()), e le rotte che rispondono senza arrivare in fondo alla
+   catena. Cosa scrive e cosa non scriverà mai è spiegato in registroRichieste.js. */
+app.use(registroRichieste());
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const FRONTEND_URL = process.env.FRONTEND_URL || "https://costi-commessa-frontend.onrender.com";
