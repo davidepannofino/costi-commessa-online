@@ -36,6 +36,28 @@ ALTER TABLE aziende ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT UNIQUE;
 -- qualcuno. Meglio un giorno di prova in piu' che una porta chiusa in faccia.
 ALTER TABLE aziende ADD COLUMN IF NOT EXISTS prova_fino_al TIMESTAMPTZ;
 
+-- IL PIANO E COME SI FATTURA. 'cantiere' | 'impresa' | 'struttura', e
+-- 'mensile' | 'annuale'. I valori ammessi, i tetti e i prezzi stanno TUTTI in
+-- src/piani.js e non qui: un CHECK con la lista dei piani sarebbe una seconda
+-- copia delle stesse regole, e due copie vanno fuori sincrono al primo piano
+-- nuovo. Qui si tiene solo il posto dove scrivere.
+--
+-- Restano NULL-abili e piani.js legge il vuoto come 'cantiere' e 'mensile',
+-- cioe' il piano piu' piccolo: una colonna non ancora riempita non deve mai
+-- far comparire un consiglio a salire di piano che nessuno ha calcolato.
+--
+-- Il tetto NON blocca niente: queste colonne servono a MOSTRARE quale piano
+-- serve, mai a decidere chi puo' lavorare. Nessuna rotta le guarda per
+-- rifiutare qualcosa, e non deve cominciare a farlo.
+--
+-- La riempitura per le aziende gia' esistenti NON e' qui: la fa
+-- `node src/assegna-piani.js`, che calcola il mese di punta e scrive il piano
+-- che ne risulta. Sta fuori perche' altrimenti le soglie 10/30 finirebbero
+-- duplicate in SQL, ed e' esattamente il tipo di doppione che si scopre
+-- quando i due posti non dicono piu' la stessa cosa.
+ALTER TABLE aziende ADD COLUMN IF NOT EXISTS piano TEXT;
+ALTER TABLE aziende ADD COLUMN IF NOT EXISTS fatturazione TEXT;
+
 CREATE TABLE IF NOT EXISTS utenti (
   id             SERIAL PRIMARY KEY,
   azienda_id     TEXT UNIQUE NOT NULL REFERENCES aziende(id),

@@ -1,4 +1,5 @@
 import { pool } from "./db.js";
+import { pianoDi, fatturazioneDi, pianoPerDipendenti, bastaIlPiano, prezzoDi } from "./piani.js";
 
 // Email con accesso completo e illimitato, senza prova né abbonamento.
 // Per aggiungerne altre in futuro basta inserire la stringa qui: nessun'altra
@@ -88,4 +89,84 @@ export async function statoAbbonamentoDi(aziendaId) {
   const riga = await leggiRigaAccesso(aziendaId);
   if (!riga) return null;
   return calcolaStatoAccesso(riga);
+}
+
+/**
+ * Quanti mesi indietro si guarda per misurare la capienza: il mese in corso
+ * più gli undici precedenti.
+ */
+const MESI_FINESTRA = 12;
+
+/**
+ * IL MESE DI PUNTA: in quale mese solare degli ultimi dodici hanno lavorato
+ * più persone, e quante erano.
+ *
+ * PERCHÉ IL PICCO E NON IL TOTALE. In edilizia il ricambio è alto: otto operai
+ * fissi più quattro sostituzioni nell'arco dell'anno fanno dodici teste
+ * diverse, ma in cantiere non ci sono mai state più di otto persone insieme.
+ * Contando le teste si farebbe pagare un piano più grande a chi non è mai
+ * cresciuto — e sarebbe anche un numero indifendibile davanti al cliente. Il
+ * picco misura la capienza vera.
+ *
+ * PERCHÉ NON SI PUÒ CONTARE LA TABELLA `dipendenti`. Là dentro non c'è niente
+ * che distingua chi lavora da chi se n'è andato: nessun flag, nessuna data di
+ * cessazione. E togliere una persona dall'elenco CANCELLA tutte le sue ore
+ * (chiave esterna in cascata, e il frontend lo avvisa), quindi chi vuole
+ * tenere lo storico è costretto a tenersi anche gli ex dipendenti. Contare
+ * quelle righe vorrebbe dire far salire di piano chi conserva i propri dati.
+ *
+ * SI GUARDA LA DATA DEL LAVORO, non quando le ore sono state battute. Qui le
+ * ore di luglio si inseriscono ad agosto, e un conteggio sul momento
+ * dell'inserimento direbbe che a luglio non ha lavorato nessuno.
+ *
+ * A parità di persone vince il mese più recente: serve un ordine totale,
+ * altrimenti la stessa azienda vedrebbe scritto un mese diverso a ogni
+ * ricaricamento.
+ */
+export async function mesePuntaDi(aziendaId) {
+  const ris = await pool.query(
+    `SELECT to_char(data, 'YYYY-MM') AS mese, count(DISTINCT dipendente_id)::int AS persone
+       FROM registrazioni
+      WHERE azienda_id = $1
+        AND data >= (date_trunc('month', CURRENT_DATE) - make_interval(months => $2::int))
+      GROUP BY 1
+      ORDER BY persone DESC, mese DESC
+      LIMIT 1`,
+    [aziendaId, MESI_FINESTRA - 1]
+  );
+  const r = ris.rows[0];
+  return r ? { mese: r.mese, persone: r.persone } : { mese: null, persone: 0 };
+}
+
+/**
+ * Il quadro della capienza: che piano ha, quanto costa, qual è stato il mese
+ * di punta e quale piano ne risulterebbe.
+ *
+ * NON DECIDE NIENTE. Restituisce numeri da mostrare nella schermata
+ * dell'abbonamento. Nessun middleware la chiama, nessuna rotta la guarda per
+ * rifiutare qualcosa: se un giorno qualcuno la mettesse dentro
+ * richiedeAbbonamentoAttivo, avrebbe trasformato un'informazione in un
+ * blocco — e sarebbe anche una query in più su ogni singola richiesta.
+ */
+export async function capienzaDi(aziendaId) {
+  const ris = await pool.query("SELECT piano, fatturazione FROM aziende WHERE id = $1", [aziendaId]);
+  if (!ris.rows[0]) return null;
+
+  const piano = pianoDi(ris.rows[0].piano);
+  const fatturazione = fatturazioneDi(ris.rows[0].fatturazione);
+  const punta = await mesePuntaDi(aziendaId);
+  const consigliato = pianoPerDipendenti(punta.persone);
+
+  return {
+    piano: piano.id,
+    pianoNome: piano.nome,
+    tetto: piano.tetto,
+    fatturazione,
+    prezzo: prezzoDi(piano.id, fatturazione),
+    mesePunta: punta.mese,
+    personeMesePunta: punta.persone,
+    pianoConsigliato: consigliato.id,
+    pianoConsigliatoNome: consigliato.nome,
+    bastaIlPiano: bastaIlPiano(piano.id, punta.persone),
+  };
 }

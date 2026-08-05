@@ -31,6 +31,8 @@ const ATTESE = [
   { tipo: "colonna", tabella: "allegati", nome: "origine_nome_file" },
   { tipo: "colonna", tabella: "allegati", nome: "origine_pagina" },
   { tipo: "colonna", tabella: "aziende", nome: "prova_fino_al" },
+  { tipo: "colonna", tabella: "aziende", nome: "piano" },
+  { tipo: "colonna", tabella: "aziende", nome: "fatturazione" },
 ];
 
 async function main() {

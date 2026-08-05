@@ -7,7 +7,7 @@ import { registroRichieste } from "./registroRichieste.js";
 import { cifraPassword, verificaPassword, generaToken, richiedeAuth } from "./auth.js";
 import { inviaEmailResetPassword } from "./email.js";
 import { stripe, PREZZO_MENSILE_CENTESIMI } from "./stripe.js";
-import { richiedeAbbonamentoAttivo, statoAbbonamentoDi, GIORNI_PROVA } from "./abbonamento.js";
+import { richiedeAbbonamentoAttivo, statoAbbonamentoDi, capienzaDi, GIORNI_PROVA } from "./abbonamento.js";
 import { adminRouter, richiedeAdmin, eAdmin } from "./admin.js";
 import {
   salvaFile, leggiFile, eliminaFile, eliminaFileInBlocco,
@@ -241,7 +241,13 @@ app.get("/api/abbonamento/stato", richiedeAuth, async (req, res) => {
   try {
     const info = await statoAbbonamentoDi(req.aziendaId);
     if (!info) return res.status(404).json({ errore: "Azienda non trovata." });
-    res.json({ ...info, admin: await eAdmin(req.aziendaId) });
+    /* AGLI ESENTI NON SI PARLA DI PIANI. Non pagano e non hanno un tetto:
+       un consiglio a salire di piano, su un account senza abbonamento, sarebbe
+       rumore su una schermata che per loro dice già tutto ("accesso completo e
+       illimitato"). Il conteggio non si calcola nemmeno — la chiave non esiste
+       proprio nella risposta, così non c'è niente da nascondere lato client. */
+    const capienza = info.stato === "esente" ? null : await capienzaDi(req.aziendaId);
+    res.json({ ...info, admin: await eAdmin(req.aziendaId), ...(capienza ? { capienza } : {}) });
   } catch (e) {
     console.error(e);
     res.status(500).json({ errore: "Impossibile leggere lo stato dell'abbonamento." });

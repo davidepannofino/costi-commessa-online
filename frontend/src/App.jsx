@@ -1837,6 +1837,65 @@ function VistaAbbonamento({ info }) {
           </>
         )}
       </Sezione>
+
+      {/* ================= CAPIENZA =================
+          Sta QUI, nella schermata dell'abbonamento, e non come striscia dentro
+          l'applicazione: il piano è una faccenda di amministrazione, e chi sta
+          battendo trecento righe di ore non deve trovarsi un invito a spendere
+          in mezzo al lavoro. Per lo stesso motivo qui non c'è nessun bottone
+          per cambiare piano — si dicono i numeri e basta.
+
+          `info.capienza` non arriva affatto per gli account esenti: il server
+          non calcola nemmeno il conteggio. Quindi non c'è niente da nascondere
+          qui, questa sezione semplicemente non compare.
+
+          E il tetto NON blocca niente: superarlo cambia una frase su questa
+          pagina, non quello che si può fare nell'app. */}
+      {info?.capienza && (
+        <Sezione titolo="Capienza">
+          <dl className="space-y-3.5">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+              <dt className="t-piccolo" style={{ color: "var(--muted)" }}>Il tuo piano</dt>
+              <dd className="t-corpo" style={{ color: "var(--txt)", fontWeight: 500 }}>
+                {info.capienza.pianoNome}
+                <span className="t-piccolo" style={{ fontWeight: 400, color: "var(--muted)" }}>
+                  {info.capienza.tetto === null ? " · oltre 30 dipendenti" : ` · fino a ${info.capienza.tetto} dipendenti`}
+                </span>
+              </dd>
+            </div>
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+              <dt className="t-piccolo" style={{ color: "var(--muted)" }}>Mese di punta degli ultimi 12</dt>
+              <dd className="t-corpo" style={{ color: "var(--txt)" }}>
+                {info.capienza.mesePunta
+                  ? <>{fmtMese(info.capienza.mesePunta)} · <span className="f-mono">{info.capienza.personeMesePunta}</span> {info.capienza.personeMesePunta === 1 ? "persona" : "persone"}</>
+                  : <span style={{ color: "var(--muted)" }}>nessuna ora registrata</span>}
+              </dd>
+            </div>
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+              <dt className="t-piccolo" style={{ color: "var(--muted)" }}>Piano che ne risulta</dt>
+              <dd className="t-corpo" style={{ color: "var(--txt)" }}>{info.capienza.pianoConsigliatoNome}</dd>
+            </div>
+          </dl>
+
+          {/* Il conteggio è sulla DATA DEL LAVORO, non su quando le ore sono
+              state battute: chi inserisce luglio ad agosto deve ritrovarsi
+              luglio, non un mese vuoto. Vale la pena scriverlo, perché è la
+              prima domanda che uno si fa guardando quel numero. */}
+          <p className="t-piccolo mt-5" style={{ color: "var(--tenue)" }}>
+            Si contano le persone che hanno ore registrate nello stesso mese di lavoro,
+            prendendo il mese più affollato degli ultimi dodici.
+          </p>
+
+          {!info.capienza.bastaIlPiano && (
+            <div className="mt-5">
+              <Avviso tono="accento" icona={AlertTriangle}>
+                Nel mese di punta hai avuto {info.capienza.personeMesePunta} persone, oltre le {info.capienza.tetto} del piano {info.capienza.pianoNome}:
+                per questa capienza serve il piano {info.capienza.pianoConsigliatoNome}. Nel frattempo non cambia niente — puoi aggiungere dipendenti e registrare ore come sempre.
+              </Avviso>
+            </div>
+          )}
+        </Sezione>
+      )}
     </div>
   );
 }
