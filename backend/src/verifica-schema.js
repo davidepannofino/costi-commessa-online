@@ -13,10 +13,24 @@
 import "dotenv/config";
 import { pool } from "./db.js";
 
+/**
+ * Cosa si va a guardare.
+ *
+ * Questo elenco è tutta la conoscenza che il comando ha: il suo «Tutto a
+ * posto» finale non vuol dire "la migrazione è completa", vuol dire "le cose
+ * scritte qui sotto ci sono". Il 6 agosto 2026 la migrazione ha aggiunto
+ * aziende.prova_fino_al e questo comando ha risposto «Tutto a posto» senza
+ * averla nemmeno cercata — era vero e inutile insieme.
+ *
+ * Quindi la regola: chi aggiunge una tabella o una colonna a schema.sql
+ * aggiunge una riga anche qui. È l'unico modo perché la risposta di questo
+ * comando resti una verifica e non diventi una formalità.
+ */
 const ATTESE = [
   { tipo: "tabella", nome: "scansioni" },
   { tipo: "colonna", tabella: "allegati", nome: "origine_nome_file" },
   { tipo: "colonna", tabella: "allegati", nome: "origine_pagina" },
+  { tipo: "colonna", tabella: "aziende", nome: "prova_fino_al" },
 ];
 
 async function main() {

@@ -1681,9 +1681,12 @@ function PaginaResetPassword({ token, alSuccesso }) {
   );
 }
 
-/** Schermata mostrata quando la prova di 30 giorni è scaduta e non c'è un
- *  abbonamento attivo: spiega il prezzo e porta a Stripe Checkout. Il login
- *  resta valido — solo l'accesso ai dati è bloccato (deciso lato server). */
+/** Schermata mostrata quando la prova è scaduta e non c'è un abbonamento
+ *  attivo: spiega il prezzo e porta a Stripe Checkout. Il login resta valido —
+ *  solo l'accesso ai dati è bloccato (deciso lato server).
+ *  Quanto sia durata quella prova qui non si dice, e non è una svista: la
+ *  scadenza è congelata per account su aziende.prova_fino_al, quindi non c'è
+ *  UNA durata da nominare. */
 function PaginaAbbonamento({ onUscire }) {
   const [caricando, setCaricando] = useState(false);
   const [errore, setErrore] = useState(null);
@@ -1711,7 +1714,18 @@ function PaginaAbbonamento({ onUscire }) {
         <div className="text-center">
           <h2 className="t-sezione mb-3">Il periodo di prova è terminato</h2>
           <p className="t-corpo mb-9 mx-auto" style={{ color: "var(--muted)", maxWidth: "44ch" }}>
-            Hai usato liberamente Commexa per 30 giorni. Per continuare ad accedere ai tuoi dati, attiva l'abbonamento mensile.
+            {/* Qui c'era scritto "Hai usato liberamente Commexa per 30 giorni".
+                Non ci sta più un numero: da quando la scadenza è congelata su
+                aziende.prova_fino_al, due account possono aver avuto prove di
+                lunghezza diversa, e il giorno che GIORNI_PROVA cambia questa
+                frase diventerebbe falsa per tutti quelli di prima. Una frase
+                che non promette un numero non può invecchiare.
+                E il numero non manca a nessuno: il titolo qui sopra dice già
+                che la prova è finita, il riquadro sotto dice già il prezzo.
+                Quello che a questo punto non è scritto da nessuna parte è
+                l'unica cosa che uno si chiede davvero — «i miei dati ci sono
+                ancora?». Ci sono: bloccare l'accesso non cancella niente. */}
+            I tuoi dati sono rimasti tutti dove li hai lasciati. Per tornare a vederli, attiva l'abbonamento mensile.
           </p>
 
           <div className="card px-6 py-7 mb-8">
