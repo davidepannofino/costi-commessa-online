@@ -8,7 +8,11 @@ CREATE TABLE IF NOT EXISTS aziende (
   nome TEXT NOT NULL
 );
 -- Tappa 3 (abbonamento): stato dell'abbonamento Stripe di ogni azienda.
--- "prova" finché non passano 14 giorni da utenti.creato_il o non si abbona;
+-- "prova" finché non passano i giorni di prova da utenti.creato_il o non si
+-- abbona. Quanti giorni siano NON è scritto qui: sta in GIORNI_PROVA dentro
+-- src/abbonamento.js, e siccome la scadenza si ricalcola a ogni richiesta,
+-- cambiarlo rimisura anche le prove già in corso. Il numero non si duplica qui
+-- apposta: due copie dello stesso valore vanno fuori sincrono al primo cambio.
 -- "attivo" mentre l'abbonamento Stripe è in regola; "scaduto" se il
 -- pagamento fallisce o l'azienda disdice.
 ALTER TABLE aziende ADD COLUMN IF NOT EXISTS stato_abbonamento TEXT NOT NULL DEFAULT 'prova';

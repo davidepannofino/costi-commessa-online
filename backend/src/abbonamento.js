@@ -7,7 +7,26 @@ const EMAIL_ESENTI = new Set([
   "pannofino.work@gmail.com",
 ]);
 
-const GIORNI_PROVA = 14;
+/**
+ * Quanto dura la prova libera, in giorni.
+ *
+ * ATTENZIONE, QUESTO NUMERO È RETROATTIVO. La fine della prova non è scritta
+ * da nessuna parte nel database: si ricalcola a ogni richiesta come
+ * `utenti.creato_il + GIORNI_PROVA`. Cambiarlo quindi non vale solo per chi si
+ * registra da domani — rimisura la prova di TUTTE le aziende che esistono già
+ * e che non sono "attivo" né esenti, comprese quelle a cui era già scaduta.
+ *
+ * Portandolo da 14 a 30 il 6 agosto 2026, un'azienda registrata da 16 giorni è
+ * passata da "scaduto, niente accesso" a "prova, 14 giorni rimasti". Nella
+ * direzione opposta il conto è più brutto: abbassare questo numero toglierebbe
+ * l'accesso, di colpo, a chi in quel momento sta lavorando.
+ *
+ * Se un giorno servirà che valga solo per le registrazioni nuove, la fine
+ * della prova va SCRITTA sulla riga al momento della registrazione (una
+ * colonna `prova_fino_al`), e questo numero resta solo il valore di partenza
+ * per le prossime. Finché sta qui, è una leva che muove anche il passato.
+ */
+const GIORNI_PROVA = 30;
 const MS_GIORNO = 24 * 60 * 60 * 1000;
 
 /** Funzione pura: dati email/stato_abbonamento/creato_il, decide se l'azienda
