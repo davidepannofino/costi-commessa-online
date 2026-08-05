@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { datiAPI, suSessioneScaduta, suAbbonamentoRichiesto, API_BASE } from "./datiAPI.js";
 import { statoGruppo, assegnazioneIniziale, NON_IMPORTARE } from "./statoGruppoDDT.js";
+import { filtra, decidiConferma, muoviEvidenziato, CONFERMA, AMBIGUO, VUOTO } from "./sceltaFiltrata.js";
 import { leggiToken, salvaToken, cancellaToken } from "./auth.js";
 
 /* ============================================================================
@@ -42,6 +43,23 @@ const fmtData = (iso) => {
   if (!iso) return "—";
   const [y, m, d] = iso.split("-");
   return `${d}/${m}/${y}`;
+};
+/**
+ * La data per esteso, con il giorno della settimana: "mercoledì 15 luglio 2026".
+ * Serve dove la giornata dev'essere IMPOSSIBILE da leggere male — sopra il
+ * modulo delle ore, che ne carica quaranta di fila sulla stessa data.
+ * "15/07" e "07/15" si somigliano troppo; "mercoledì" no.
+ *
+ * La data si costruisce con i pezzi separati e non da `new Date(iso)`: quella
+ * interpreta la stringa come UTC, e in un fuso a occidente stamperebbe il
+ * giorno prima.
+ */
+const fmtDataLunga = (iso) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(iso || ""))) return "—";
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("it-IT", {
+    weekday: "long", day: "numeric", month: "long", year: "numeric",
+  });
 };
 const MESI = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
 const fmtMese = (ym) => { const [y, m] = ym.split("-"); return `${MESI[+m - 1]} ${y}`; };
@@ -734,6 +752,173 @@ const Campo = ({ etichetta, children, errore }) => {
   );
 };
 const inputCls = "w-full px-3.5 py-2.5 text-sm outline-none campo";
+
+/**
+ * CAMPO CHE SI FILTRA SCRIVENDO — al posto di una tendina lunga.
+ *
+ * Nasce da una misura, non da un'idea: chi carica le ore cambia il dipendente
+ * nell'83% delle righe e la commessa nel 38%, e con una tendina nativa quel
+ * cambio si fa col mouse o cercando a tentoni, perché il <select> confronta
+ * solo dall'INIZIO dell'etichetta — "TARCENTO" non trovava "PN02 — TARCENTO".
+ * Qui si scrive un pezzo qualsiasi del nome e l'elenco si stringe.
+ *
+ * SI FA TUTTO CON LA TASTIERA, mai col mouse per obbligo:
+ *   si scrive per filtrare · frecce su/giù per scegliere · Invio o Tab per
+ *   confermare · Esc per annullare e tornare a quello di prima.
+ *
+ * E NON SCEGLIE MAI DA SOLO. Se quello che è scritto corrisponde a più voci,
+ * Invio e Tab NON confermano niente: restano qui e dicono quante sono. La
+ * decisione sta in sceltaFiltrata.js, provata a parte su tutti gli inizi
+ * possibili di tutte le etichette. Il motivo è in quel file, e vale la pena
+ * ripeterlo: un dipendente scelto dal software è un costo attribuito alla
+ * persona sbagliata, e nessuno se ne accorge mai.
+ *
+ * L'INVARIANTE DI QUESTO CAMPO: quello che si legge nella casella corrisponde
+ * SEMPRE a quello che è davvero selezionato. Se si esce con del testo a metà,
+ * il testo torna a essere quello della voce scelta — non si resta mai con
+ * "and" scritto e "Andrea Bianchi" selezionato di nascosto.
+ */
+const CampoScelta = React.forwardRef(function CampoScelta(
+  { etichetta, voci, valore, onCambia, errore, segnaposto, onAvanti, nome }, riferimento
+) {
+  const scelta = useMemo(() => voci.find((v) => v.id === valore) || null, [voci, valore]);
+  const [testo, setTesto] = useState(scelta ? scelta.etichetta : "");
+  const [aperto, setAperto] = useState(false);
+  const [evidenziato, setEvidenziato] = useState(null);
+  const [avviso, setAvviso] = useState(null);
+  const idElenco = useId();
+  const elencoRef = useRef(null);
+
+  // Quando la scelta cambia da fuori (il modulo si azzera, si carica un altro
+  // dato) la casella deve seguirla: è l'invariante detto sopra.
+  useEffect(() => { setTesto(scelta ? scelta.etichetta : ""); }, [scelta]);
+
+  const visibili = useMemo(() => filtra(voci, testo), [voci, testo]);
+  const elencoInVista = aperto && visibili.length > 0;
+
+  // La voce evidenziata deve restare SOTTO GLI OCCHI anche scorrendo con le
+  // frecce: senza questo, da tastiera si evidenzia qualcosa che non si vede.
+  useEffect(() => {
+    if (!aperto || evidenziato == null || !elencoRef.current) return;
+    elencoRef.current.children[evidenziato]?.scrollIntoView({ block: "nearest" });
+  }, [aperto, evidenziato]);
+
+  const applica = (voce) => {
+    onCambia(voce ? voce.id : "");
+    setTesto(voce ? voce.etichetta : "");
+    setAperto(false); setEvidenziato(null); setAvviso(null);
+  };
+
+  const suTasto = (e) => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      setAperto(true);
+      setEvidenziato((i) => muoviEvidenziato(i, e.key === "ArrowDown" ? +1 : -1, visibili.length));
+      setAvviso(null);
+      return;
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      setTesto(scelta ? scelta.etichetta : "");
+      setAperto(false); setEvidenziato(null); setAvviso(null);
+      return;
+    }
+    if (e.key !== "Enter" && e.key !== "Tab") return;
+    if (e.key === "Tab" && e.shiftKey) return;   // all'indietro si passa e basta
+
+    const d = decidiConferma({ testo, voci: visibili, evidenziato, sceltaCorrente: scelta });
+
+    if (d.esito === CONFERMA) {
+      applica(d.voce);
+      if (e.key === "Enter") { e.preventDefault(); onAvanti?.(); }
+      return;   // col Tab si lascia andare il fuoco da solo
+    }
+    if (d.esito === VUOTO) {
+      applica(null);
+      if (e.key === "Enter") { e.preventDefault(); onAvanti?.(); }
+      return;
+    }
+    /* Ambiguo o inesistente: qui il Tab si FERMA. È il punto in cui un campo
+       compiacente sceglierebbe la prima voce e manderebbe le ore sulla
+       persona sbagliata. */
+    e.preventDefault();
+    setAperto(true);
+    setAvviso(d.esito === AMBIGUO
+      ? `Sono in ${d.quante}: scegli con le frecce, o scrivi qualcosa in più.`
+      : "Nessuna corrispondenza.");
+  };
+
+  return (
+    <div>
+      <label className="block">
+        <span className="block t-micro mb-2">{etichetta}</span>
+        <div className="relative">
+          <input
+            ref={riferimento}
+            value={testo}
+            name={nome}
+            role="combobox"
+            aria-expanded={aperto}
+            aria-controls={idElenco}
+            aria-invalid={errore ? true : undefined}
+            autoComplete="off"
+            placeholder={segnaposto}
+            className={inputCls}
+            onChange={(e) => { setTesto(e.target.value); setAperto(true); setEvidenziato(null); setAvviso(null); }}
+            onFocus={(e) => { e.target.select(); setAperto(true); }}
+            onKeyDown={suTasto}
+            onBlur={() => {
+              /* Uscendo non si sceglie MAI: si rimette in casella quello che
+                 è davvero selezionato. Se si vuole cambiare, si torna qui. */
+              setTesto(scelta ? scelta.etichetta : "");
+              setAperto(false); setEvidenziato(null); setAvviso(null);
+            }}
+          />
+          {elencoInVista && (
+            <div className="absolute z-20 left-0 right-0 mt-1 overflow-hidden"
+              style={{
+                background: "var(--bg-elevato)", border: ".5px solid var(--bordo-input)",
+                borderRadius: "var(--r-sm)", boxShadow: "0 8px 24px rgba(0,0,0,.35)",
+              }}>
+            {/* L'avviso sta DENTRO l'elenco, non sotto la casella: sotto la
+                casella ci finiva esattamente dove l'elenco aperto lo copre, e
+                un messaggio che chiede all'utente di decidere ma non si vede
+                non chiede niente. Misurato nel browser: nascosto per intero. */}
+            {avviso && (
+              <p role="status" className="px-3.5 py-2 t-piccolo"
+                style={{ color: "var(--ambra)", background: "var(--ambra-bg)", borderBottom: ".5px solid var(--ambra-bordo)" }}>
+                {avviso}
+              </p>
+            )}
+            <ul ref={elencoRef} id={idElenco} role="listbox" className="overflow-y-auto" style={{ maxHeight: 240 }}>
+              {visibili.map((v, i) => (
+                <li key={v.id} role="option" aria-selected={i === evidenziato}
+                  // mousedown e non click: click arriva dopo il blur, che avrebbe già chiuso l'elenco.
+                  onMouseDown={(e) => { e.preventDefault(); applica(v); }}
+                  className="px-3.5 py-2 t-corpo cursor-pointer"
+                  style={{
+                    background: i === evidenziato ? "var(--velo)" : "transparent",
+                    color: i === evidenziato ? "var(--txt)" : "var(--txt-chiaro)",
+                  }}>
+                  {v.etichetta}
+                </li>
+              ))}
+            </ul>
+            </div>
+          )}
+        </div>
+      </label>
+      {/* Quando l'elenco non c'è (nessuna corrispondenza) l'avviso torna qui
+          sotto la casella, dove non lo copre niente. L'ambra è lo stesso colore
+          che l'importazione fatture usa per "tocca a te decidere": qui
+          significa la stessa cosa, e vale la pena che lo dica lo stesso colore. */}
+      {avviso && !errore && !elencoInVista && (
+        <span role="status" className="block t-piccolo mt-2" style={{ color: "var(--ambra)" }}>{avviso}</span>
+      )}
+      {errore && <span role="alert" className="block t-piccolo mt-2" style={{ color: "var(--errore)" }}>{errore}</span>}
+    </div>
+  );
+});
 
 /* Qui viveva `Valore`, il componente "etichetta + cifra grande + nota".
    È rimasto senza un solo posto che lo chiamasse quando la fascia dei KPI e i
@@ -5091,10 +5276,25 @@ function VistaDati({ dipendenti, commesse, registrazioni, setCommesse, aggiungi,
   const [filtro, setFiltro] = useState("");
   const [modifica, setModifica] = useState(null);
   const [rinomina, setRinomina] = useState(null); // commessa in corso di rinomina
-  const refExcel = useRef(); const refOre = useRef();
+  /* Le ultime righe messe dentro, in ordine di INSERIMENTO. La tabella qui
+     sotto ordina per data, quindi una riga appena salvata su un giorno vecchio
+     finisce in fondo: proprio quando serve vederla. Qui restano le ultime
+     cinque com'è successo, con la loro data bene in vista. */
+  const [ultime, setUltime] = useState([]);
+  const refExcel = useRef(); const refDip = useRef(); const refCom = useRef(); const refOre = useRef();
 
   const dipById = useMemo(() => new Map(dipendenti.map((d) => [d.id, d])), [dipendenti]);
   const comById = useMemo(() => new Map(commesse.map((c) => [c.id, c])), [commesse]);
+
+  /* Cosa si scrive per cercare. Per il dipendente il nome intero; per la
+     commessa il codice E il nome del cantiere, così "TARCENTO" trova PN02
+     — che con la tendina nativa non succedeva. */
+  const vociDipendenti = useMemo(
+    () => dipendenti.map((d) => ({ id: d.id, etichetta: `${d.nome} ${d.cognome}`.trim() })), [dipendenti]);
+  const vociCommesse = useMemo(
+    () => commesse.map((c) => ({ id: c.id, etichetta: `${c.codice} — ${c.descrizione}`, cerca: `${c.codice} ${c.descrizione}` })), [commesse]);
+
+  const vaiA = (rif) => () => { rif.current?.focus(); rif.current?.select?.(); };
 
   const registra = () => {
     const e = {};
@@ -5106,9 +5306,18 @@ function VistaDati({ dipendenti, commesse, registrazioni, setCommesse, aggiungi,
     setErroriForm(e);
     if (Object.keys(e).length) return;
     const doppione = registrazioni.some((r) => r.dipendenteId === form.dipendenteId && r.commessaId === form.commessaId && r.data === form.data);
-    aggiungi({ id: uid("r"), dipendenteId: form.dipendenteId, commessaId: form.commessaId, data: form.data, ore });
+    const riga = { id: uid("r"), dipendenteId: form.dipendenteId, commessaId: form.commessaId, data: form.data, ore };
+    aggiungi(riga);
+    setUltime((u) => [riga, ...u].slice(0, 5));
     setForm((f) => ({ ...f, ore: "" }));
-    refOre.current && refOre.current.focus();
+    /* Il fuoco torna al DIPENDENTE, non alle ore. Misurato sulle 318
+       transizioni di una giornata vera: fra una riga e la successiva il
+       dipendente cambia nell'83% dei casi, la commessa nel 38%, la data nel 9%
+       — e il caso per cui questo modulo era fatto, "cambiano solo le ore", non
+       è capitato NEMMENO UNA VOLTA. Lasciare il cursore sulle ore costava sei
+       Shift+Tab per risalire al primo campo, quattro dei quali dentro il campo
+       data (giorno, mese, anno e il bottoncino del calendario). */
+    vaiA(refDip)();
     notifica(doppione ? "Ore registrate. Nota: c'era già una registrazione per quel giorno, le ore si sommano." : "Ore registrate.", doppione ? "avviso" : "ok");
   };
 
@@ -5143,14 +5352,27 @@ function VistaDati({ dipendenti, commesse, registrazioni, setCommesse, aggiungi,
       </div>
 
       {/* ================= LA BANDA D'INSERIMENTO =================
-          Prima era la prima di quattro sezioni identiche, e la schermata
-          diceva che registrare un'ora conta quanto azzerare il database.
-          Non è vero: questa è la cosa che l'impiegata fa cento volte, e le
-          altre tre si usano una volta al mese. Quindi qui la banda ha un
-          fondo rialzato, sta appiccicata in alto quando si scorre, e i campi
-          stanno su una riga sola nell'ordine in cui si compilano — chi, dove,
-          quando, quante. L'ultimo campo è Ore perché è l'unico che cambia
-          davvero fra due inserimenti di fila.
+          Questa è la cosa che si fa cento volte; le altre tre sezioni della
+          schermata si usano una volta al mese. Quindi la banda ha un fondo
+          rialzato e i campi su una riga sola.
+
+          L'ORDINE DEI CAMPI LO DECIDE LA MISURA, non la logica della frase.
+          Prima era "chi, dove, quando, quante", con le Ore per ultime perché
+          si diceva fossero l'unica cosa che cambia fra due inserimenti di
+          fila. Contato sulle 318 transizioni di una giornata vera: il
+          dipendente cambia nell'83% dei casi, le ore nel 43%, la commessa nel
+          38% e la data nel 9%. Il caso "cambiano solo le ore" non è capitato
+          nemmeno una volta.
+
+          Perciò la DATA è uscita dal giro: non è un campo da compilare a ogni
+          riga, è la GIORNATA su cui si sta lavorando, sta in cima da sola,
+          scritta per esteso, e non si attraversa più tabulando. Costava sei
+          Shift+Tab per riga risalire dalle Ore al primo campo, quattro dei
+          quali dentro il campo data — misurati in un browser, uno per giorno,
+          mese, anno e bottoncino del calendario.
+
+          Il giro adesso è: Dipendente → Commessa → Ore → Invio, e l'Invio
+          riporta il fuoco sul Dipendente. Due tabulazioni invece di dodici.
 
           Nota: qui starebbe bene anche `sticky`, per averla sotto mano mentre
           si scorre l'elenco. Non c'è, perché l'altezza della testata non è
@@ -5164,33 +5386,99 @@ function VistaDati({ dipendenti, commesse, registrazioni, setCommesse, aggiungi,
             Per registrare ore servono almeno un dipendente e una commessa: creali qui sotto.
           </p>
         ) : (
-          <div className="px-6 py-5">
-            <div className="grid gap-4 items-end lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1.6fr)_150px_110px_auto]"
-              onKeyDown={(e) => e.key === "Enter" && registra()}>
-              <Campo etichetta="Dipendente" errore={erroriForm.dip}>
-                <select value={form.dipendenteId} onChange={(e) => setForm((f) => ({ ...f, dipendenteId: e.target.value }))} className={inputCls}>
-                  <option value="">—</option>
-                  {dipendenti.map((d) => <option key={d.id} value={d.id}>{d.nome} {d.cognome}</option>)}
-                </select>
-              </Campo>
-              <Campo etichetta="Commessa" errore={erroriForm.com}>
-                <select value={form.commessaId} onChange={(e) => setForm((f) => ({ ...f, commessaId: e.target.value }))} className={inputCls}>
-                  <option value="">—</option>
-                  {commesse.map((c) => <option key={c.id} value={c.id}>{c.codice} — {c.descrizione}</option>)}
-                </select>
-              </Campo>
-              <Campo etichetta="Data" errore={erroriForm.data}>
-                <input type="date" value={form.data} onChange={(e) => setForm((f) => ({ ...f, data: e.target.value }))} className={inputCls + " f-mono"} />
-              </Campo>
-              <Campo etichetta="Ore" errore={erroriForm.ore}>
-                <input ref={refOre} value={form.ore} onChange={(e) => setForm((f) => ({ ...f, ore: e.target.value }))} placeholder="8 o 0,5" className={inputCls + " f-mono text-right"} />
-              </Campo>
-              <Bottone onClick={registra}><Plus size={14} strokeWidth={1.75} /> Registra</Bottone>
+          <>
+            {/* --- LA GIORNATA --- Sta in cima e scritta per esteso, con il
+                giorno della settimana, perché è il dato che si sbaglia in
+                silenzio: quaranta righe di fila finiscono tutte qui sopra, e
+                accorgersene a fine mese vuol dire rifarle tutte. "15/07" e
+                "07/15" si somigliano; "Mercoledì" no.
+                Sta anche PRIMA dei tre campi nel documento, non solo alla
+                vista: così tabulando in avanti non ci si passa mai dentro, e
+                per cambiarla basta uno Shift+Tab dal Dipendente. */}
+            <div className="px-6 pt-5 pb-4" style={{ borderBottom: ".5px solid var(--bordo)" }}>
+              <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+                <div className="min-w-0">
+                  <span className="block t-micro mb-2">La giornata che stai caricando</span>
+                  <p style={{ fontSize: 19, fontWeight: 500, color: "var(--txt)", lineHeight: 1.25 }}>
+                    {(() => { const s = fmtDataLunga(form.data); return s.charAt(0).toUpperCase() + s.slice(1); })()}
+                  </p>
+                </div>
+                <div style={{ width: 170 }}>
+                  <label className="block">
+                    <span className="block t-micro mb-2">Cambia giorno</span>
+                    <input type="date" value={form.data} className={inputCls + " f-mono"}
+                      aria-invalid={erroriForm.data ? true : undefined}
+                      onChange={(e) => setForm((f) => ({ ...f, data: e.target.value }))}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); vaiA(refDip)(); } }} />
+                  </label>
+                </div>
+              </div>
+              {erroriForm.data && (
+                <span role="alert" className="block t-piccolo mt-2" style={{ color: "var(--errore)" }}>{erroriForm.data}</span>
+              )}
             </div>
-            <p className="t-piccolo mt-3.5" style={{ color: "var(--txt-tenue)" }}>
-              Il modulo resta impostato: cambia solo le ore e premi Invio per inserire una giornata dopo l'altra.
-            </p>
-          </div>
+
+            {/* --- IL GIRO CHE SI RIPETE --- */}
+            <div className="px-6 py-5">
+              <div className="grid gap-4 items-start lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1.6fr)_110px_auto]">
+                <CampoScelta etichetta="Dipendente" nome="dipendente"
+                  ref={refDip} voci={vociDipendenti} valore={form.dipendenteId}
+                  onCambia={(id) => setForm((f) => ({ ...f, dipendenteId: id }))}
+                  errore={erroriForm.dip} segnaposto="scrivi il nome"
+                  onAvanti={vaiA(refCom)} />
+                <CampoScelta etichetta="Commessa" nome="commessa"
+                  ref={refCom} voci={vociCommesse} valore={form.commessaId}
+                  onCambia={(id) => setForm((f) => ({ ...f, commessaId: id }))}
+                  errore={erroriForm.com} segnaposto="codice o nome del cantiere"
+                  onAvanti={vaiA(refOre)} />
+                <Campo etichetta="Ore" errore={erroriForm.ore}>
+                  <input ref={refOre} value={form.ore} placeholder="8 o 0,5"
+                    className={inputCls + " f-mono text-right"}
+                    onChange={(e) => setForm((f) => ({ ...f, ore: e.target.value }))}
+                    onFocus={(e) => e.target.select()}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); registra(); } }} />
+                </Campo>
+                {/* Lo spaziatore ha la stessa altezza delle etichette dei campi
+                    accanto, così il bottone si allinea agli input senza un
+                    margine indovinato a occhio che si scolla al primo
+                    cambio di tipografia. */}
+                <div>
+                  <span className="block t-micro mb-2" aria-hidden="true">&nbsp;</span>
+                  <Bottone onClick={registra}><Plus size={14} strokeWidth={1.75} /> Registra</Bottone>
+                </div>
+              </div>
+              <p className="t-piccolo mt-3.5" style={{ color: "var(--txt-tenue)" }}>
+                Tutto da tastiera: scrivi un pezzo del nome, frecce ↑↓ se ce n'è più d'uno,
+                Invio per confermare e passare al campo dopo. Dalle Ore, Invio registra e
+                riparte dal dipendente. La giornata resta quella lì sopra finché non la cambi.
+              </p>
+            </div>
+
+            {/* --- APPENA INSERITE --- La tabella qui sotto ordina per data,
+                quindi una riga salvata su un giorno passato ci finisce in
+                mezzo e non si vede. Queste sono le ultime cinque nell'ordine
+                in cui sono state battute, ognuna con la sua data: è il modo di
+                accorgersi SUBITO di aver caricato sul giorno sbagliato. */}
+            {ultime.length > 0 && (
+              <div className="px-6 py-4" style={{ borderTop: ".5px solid var(--bordo)" }}>
+                <span className="block t-micro mb-2.5">Appena inserite</span>
+                <ul className="flex flex-col gap-1.5">
+                  {ultime.map((r) => {
+                    const d = dipById.get(r.dipendenteId), c = comById.get(r.commessaId);
+                    return (
+                      <li key={r.id} className="t-piccolo flex flex-wrap items-baseline gap-x-2.5 gap-y-1"
+                        style={{ color: "var(--txt-tenue)" }}>
+                        <span className="f-mono" style={{ color: "var(--txt-chiaro)" }}>{fmtData(r.data)}</span>
+                        <span>{d ? `${d.nome} ${d.cognome}` : "—"}</span>
+                        <span className="badge-codice">{c ? c.codice : "—"}</span>
+                        <span className="f-mono">{fmtOre.format(r.ore)} h</span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+          </>
         )}
       </div>
 
