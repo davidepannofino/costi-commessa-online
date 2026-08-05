@@ -19,6 +19,23 @@ ALTER TABLE aziende ADD COLUMN IF NOT EXISTS stato_abbonamento TEXT NOT NULL DEF
 ALTER TABLE aziende ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT UNIQUE;
 ALTER TABLE aziende ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT UNIQUE;
 
+-- QUANDO FINISCE LA PROVA DI QUESTA AZIENDA. Si scrive UNA VOLTA, alla
+-- registrazione, e da quel momento e' un fatto sulla riga invece di un conto
+-- rifatto a ogni richiesta.
+--
+-- Prima la scadenza si ricavava da utenti.creato_il + GIORNI_PROVA, e siccome
+-- GIORNI_PROVA e' una costante del codice, cambiarla rimisurava la prova di
+-- tutti quelli gia' registrati: alzandola regalava giorni a chi era gia'
+-- scaduto, abbassandola toglieva l'accesso di colpo a chi stava lavorando.
+-- Adesso quella costante decide solo da quanti giorni parte chi si registra
+-- DOPO: chi e' gia' dentro ha la sua data scritta qui e non la sposta piu'
+-- nessuno.
+--
+-- Resta NULL-abile di proposito: se per qualsiasi motivo una riga non ce
+-- l'avesse, abbonamento.js ripiega sul vecchio conto invece di lasciare fuori
+-- qualcuno. Meglio un giorno di prova in piu' che una porta chiusa in faccia.
+ALTER TABLE aziende ADD COLUMN IF NOT EXISTS prova_fino_al TIMESTAMPTZ;
+
 CREATE TABLE IF NOT EXISTS utenti (
   id             SERIAL PRIMARY KEY,
   azienda_id     TEXT UNIQUE NOT NULL REFERENCES aziende(id),
@@ -26,6 +43,24 @@ CREATE TABLE IF NOT EXISTS utenti (
   password_hash  TEXT NOT NULL,
   creato_il      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- RIEMPITURA PER CHI ESISTEVA GIA'. Va qui e non sopra perche' legge da utenti,
+-- che sopra non esiste ancora.
+--
+-- L'intervallo e' scritto a mano, 30 giorni, e NON rimanda a GIORNI_PROVA: e'
+-- il valore in vigore il 6 agosto 2026, cioe' la scadenza che quelle aziende
+-- avevano gia' in quel momento. Congelare esattamente quella e' il punto — la
+-- migrazione non deve regalare ne' togliere un giorno a nessuno. Se qui ci
+-- fosse una lettura della costante, il giorno che qualcuno la cambia questa
+-- riga rifarebbe i conti in modo diverso, che e' proprio il difetto da cui si
+-- sta uscendo.
+--
+-- Tocca solo le righe ancora vuote, quindi rieseguirla non cambia niente.
+UPDATE aziende a
+   SET prova_fino_al = u.creato_il + INTERVAL '30 days'
+  FROM utenti u
+ WHERE u.azienda_id = a.id
+   AND a.prova_fino_al IS NULL;
 
 -- Token per "password dimenticata": si salva solo l'hash del token (mai il
 -- valore mandato via email), scade dopo 1 ora, "usato" blocca il riutilizzo.

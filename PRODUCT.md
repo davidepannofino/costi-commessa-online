@@ -33,7 +33,7 @@ Il successo è che a fine mese il numero sia lì senza che nessuno abbia dovuto
 ricostruirlo: aprire la commessa e vedere il costo, invece di riaprire il file
 Excel delle ore, la cartella dei DDT e la posta del commercialista.
 
-Commexa è un prodotto in abbonamento: 14 giorni di prova liberi, poi 29 €
+Commexa è un prodotto in abbonamento: 30 giorni di prova liberi, poi 29 €
 al mese, disdetta libera. Il pagamento passa da Stripe Checkout; alcune email
 possono essere esentate a mano.
 
@@ -100,7 +100,7 @@ Funzionalità confermate dall'implementazione:
   selezionabile; abbinamento automatico ai DDT archiviati; assegnazione per
   gruppo DDT o per singola riga; righe escludibili dall'importazione.
 - Autenticazione email/password con recupero password via email; abbonamento
-  Stripe con prova di 14 giorni; pannello di amministrazione per il gestore
+  Stripe con prova di 30 giorni; pannello di amministrazione per il gestore
   della piattaforma.
 - Esportazione CSV / XLSX e stampa.
 

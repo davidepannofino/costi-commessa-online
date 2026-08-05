@@ -62,7 +62,7 @@ export const adminRouter = Router();
 adminRouter.get("/aziende", async (req, res) => {
   try {
     const ris = await pool.query(
-      `SELECT a.id, a.nome, u.email, u.creato_il, a.stato_abbonamento
+      `SELECT a.id, a.nome, u.email, u.creato_il, a.stato_abbonamento, a.prova_fino_al
        FROM aziende a JOIN utenti u ON u.azienda_id = a.id
        ORDER BY u.creato_il DESC`
     );
@@ -71,6 +71,7 @@ adminRouter.get("/aziende", async (req, res) => {
         email: r.email,
         stato_abbonamento: r.stato_abbonamento,
         creato_il: r.creato_il,
+        prova_fino_al: r.prova_fino_al,
       });
       return {
         id: r.id,
@@ -94,7 +95,7 @@ adminRouter.get("/aziende", async (req, res) => {
 adminRouter.get("/statistiche", async (req, res) => {
   try {
     const ris = await pool.query(
-      `SELECT u.email, u.creato_il, a.stato_abbonamento
+      `SELECT u.email, u.creato_il, a.stato_abbonamento, a.prova_fino_al
        FROM aziende a JOIN utenti u ON u.azienda_id = a.id`
     );
     const settimanaFa = Date.now() - 7 * 24 * 60 * 60 * 1000;

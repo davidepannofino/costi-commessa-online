@@ -7,7 +7,7 @@ import { registroRichieste } from "./registroRichieste.js";
 import { cifraPassword, verificaPassword, generaToken, richiedeAuth } from "./auth.js";
 import { inviaEmailResetPassword } from "./email.js";
 import { stripe, PREZZO_MENSILE_CENTESIMI } from "./stripe.js";
-import { richiedeAbbonamentoAttivo, statoAbbonamentoDi } from "./abbonamento.js";
+import { richiedeAbbonamentoAttivo, statoAbbonamentoDi, GIORNI_PROVA } from "./abbonamento.js";
 import { adminRouter, richiedeAdmin, eAdmin } from "./admin.js";
 import {
   salvaFile, leggiFile, eliminaFile, eliminaFileInBlocco,
@@ -96,7 +96,18 @@ app.post("/api/registrazione", async (req, res) => {
     const hash = await cifraPassword(password);
 
     await client.query("BEGIN");
-    await client.query("INSERT INTO aziende (id, nome) VALUES ($1, $2)", [aziendaId, nome]);
+    /* La fine della prova si scrive QUI, adesso, e non si tocca più: da questo
+       momento è un dato dell'azienda e non un conto rifatto a ogni richiesta.
+       GIORNI_PROVA decide solo da quanto parte chi si registra oggi; chi si è
+       registrato ieri ha già la sua data e nessuna modifica al codice gliela
+       sposta.
+       `now()` e non una data calcolata in JavaScript: dentro la transazione è
+       lo stesso istante che finisce in utenti.creato_il, quindi le due colonne
+       raccontano la stessa storia anche a distanza di anni. */
+    await client.query(
+      "INSERT INTO aziende (id, nome, prova_fino_al) VALUES ($1, $2, now() + make_interval(days => $3::int))",
+      [aziendaId, nome, GIORNI_PROVA]
+    );
     await client.query(
       "INSERT INTO utenti (azienda_id, email, password_hash) VALUES ($1, $2, $3)",
       [aziendaId, mail, hash]

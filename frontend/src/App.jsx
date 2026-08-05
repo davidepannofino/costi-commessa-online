@@ -1552,7 +1552,7 @@ function SchermataAccesso({ alSuccesso, messaggio }) {
 
                 {modo === "registrati" && (
                   <Avviso tono="accento" icona={Gift} className="mb-6">
-                    <strong style={{ fontWeight: 600 }}>14 giorni di prova gratuita</strong>, poi 29 €/mese.
+                    <strong style={{ fontWeight: 600 }}>30 giorni di prova gratuita</strong>, poi 29 €/mese.
                     Nessuna carta richiesta per iniziare — disdici quando vuoi.
                   </Avviso>
                 )}
@@ -1681,7 +1681,7 @@ function PaginaResetPassword({ token, alSuccesso }) {
   );
 }
 
-/** Schermata mostrata quando la prova di 14 giorni è scaduta e non c'è un
+/** Schermata mostrata quando la prova di 30 giorni è scaduta e non c'è un
  *  abbonamento attivo: spiega il prezzo e porta a Stripe Checkout. Il login
  *  resta valido — solo l'accesso ai dati è bloccato (deciso lato server). */
 function PaginaAbbonamento({ onUscire }) {
@@ -1711,7 +1711,7 @@ function PaginaAbbonamento({ onUscire }) {
         <div className="text-center">
           <h2 className="t-sezione mb-3">Il periodo di prova è terminato</h2>
           <p className="t-corpo mb-9 mx-auto" style={{ color: "var(--muted)", maxWidth: "44ch" }}>
-            Hai usato liberamente Commexa per 14 giorni. Per continuare ad accedere ai tuoi dati, attiva l'abbonamento mensile.
+            Hai usato liberamente Commexa per 30 giorni. Per continuare ad accedere ai tuoi dati, attiva l'abbonamento mensile.
           </p>
 
           <div className="card px-6 py-7 mb-8">
@@ -3100,7 +3100,7 @@ export default function App() {
             <PartyPopper size={18} strokeWidth={1.75} style={{ color: "var(--accento-chiaro)" }} />
           </div>
           <p className="text-sm leading-relaxed mb-3" style={{ color: "var(--txt)" }}>
-            Il tuo account è pronto: hai <strong>14 giorni di prova gratuita</strong>, senza nessuna carta da inserire.
+            Il tuo account è pronto: hai <strong>30 giorni di prova gratuita</strong>, senza nessuna carta da inserire.
           </p>
           <p className="text-sm leading-relaxed mb-3" style={{ color: "var(--muted)" }}>
             In questo periodo puoi registrare ore per dipendente e commessa, vedere il costo del lavoro in tempo reale ed esportare i report in Excel.

@@ -8,39 +8,50 @@ const EMAIL_ESENTI = new Set([
 ]);
 
 /**
- * Quanto dura la prova libera, in giorni.
+ * Da quanti giorni parte la prova di chi si registra ADESSO.
  *
- * ATTENZIONE, QUESTO NUMERO È RETROATTIVO. La fine della prova non è scritta
- * da nessuna parte nel database: si ricalcola a ogni richiesta come
- * `utenti.creato_il + GIORNI_PROVA`. Cambiarlo quindi non vale solo per chi si
- * registra da domani — rimisura la prova di TUTTE le aziende che esistono già
- * e che non sono "attivo" né esenti, comprese quelle a cui era già scaduta.
+ * È solo il valore di partenza. La scadenza vera viene SCRITTA sulla riga
+ * dell'azienda (`aziende.prova_fino_al`) nel momento della registrazione, e da
+ * lì in poi è un fatto, non un conto: cambiare questo numero non tocca più
+ * nessuno che è già dentro.
  *
- * Portandolo da 14 a 30 il 6 agosto 2026, un'azienda registrata da 16 giorni è
- * passata da "scaduto, niente accesso" a "prova, 14 giorni rimasti". Nella
- * direzione opposta il conto è più brutto: abbassare questo numero toglierebbe
- * l'accesso, di colpo, a chi in quel momento sta lavorando.
- *
- * Se un giorno servirà che valga solo per le registrazioni nuove, la fine
- * della prova va SCRITTA sulla riga al momento della registrazione (una
- * colonna `prova_fino_al`), e questo numero resta solo il valore di partenza
- * per le prossime. Finché sta qui, è una leva che muove anche il passato.
+ * Prima non era così, e vale la pena ricordare perché è cambiato. La scadenza
+ * si ricavava a ogni richiesta da `utenti.creato_il + GIORNI_PROVA`, quindi la
+ * costante rimisurava anche il passato: portandola da 14 a 30 il 6 agosto 2026
+ * un'azienda registrata da 16 giorni è passata da "scaduto, niente accesso" a
+ * "prova, 14 giorni rimasti", senza che nessuno l'avesse chiesto. Nella
+ * direzione opposta sarebbe stato peggio: abbassarla avrebbe chiuso fuori, di
+ * colpo, chi in quel momento stava lavorando.
  */
-const GIORNI_PROVA = 30;
+export const GIORNI_PROVA = 30;
 const MS_GIORNO = 24 * 60 * 60 * 1000;
 
-/** Funzione pura: dati email/stato_abbonamento/creato_il, decide se l'azienda
- *  ha accesso ai dati in questo momento. Usata sia dal middleware sia dalla
- *  rotta che riporta lo stato al frontend. */
-export function calcolaStatoAccesso({ email, stato_abbonamento, creato_il }) {
+/**
+ * Quando finisce la prova di questa azienda, in millisecondi.
+ *
+ * La data scritta comanda. Il conto su `creato_il` resta solo come RETE, per
+ * le righe che per qualche motivo non hanno la data: è il caso di un database
+ * su cui la migrazione non è ancora passata. In quel caso si ripiega sul
+ * comportamento di prima invece di trattare la riga come scaduta — chiudere
+ * fuori qualcuno per una colonna vuota sarebbe il modo peggiore di sbagliare.
+ */
+function fineProvaDi({ prova_fino_al, creato_il }) {
+  const scritta = prova_fino_al ? new Date(prova_fino_al).getTime() : NaN;
+  if (!isNaN(scritta)) return scritta;
+  return new Date(creato_il).getTime() + GIORNI_PROVA * MS_GIORNO;
+}
+
+/** Funzione pura: dati email, stato_abbonamento e la scadenza della prova,
+ *  decide se l'azienda ha accesso ai dati in questo momento. Usata sia dal
+ *  middleware sia dalla rotta che riporta lo stato al frontend. */
+export function calcolaStatoAccesso({ email, stato_abbonamento, creato_il, prova_fino_al }) {
   if (EMAIL_ESENTI.has(String(email).trim().toLowerCase())) {
     return { haAccesso: true, stato: "esente", giorniProvaRestanti: null };
   }
   if (stato_abbonamento === "attivo") {
     return { haAccesso: true, stato: "attivo", giorniProvaRestanti: null };
   }
-  const fineProva = new Date(creato_il).getTime() + GIORNI_PROVA * MS_GIORNO;
-  const msRestanti = fineProva - Date.now();
+  const msRestanti = fineProvaDi({ prova_fino_al, creato_il }) - Date.now();
   if (msRestanti > 0) {
     return { haAccesso: true, stato: "prova", giorniProvaRestanti: Math.ceil(msRestanti / MS_GIORNO) };
   }
@@ -49,7 +60,8 @@ export function calcolaStatoAccesso({ email, stato_abbonamento, creato_il }) {
 
 async function leggiRigaAccesso(aziendaId) {
   const ris = await pool.query(
-    "SELECT a.stato_abbonamento, u.email, u.creato_il FROM aziende a JOIN utenti u ON u.azienda_id = a.id WHERE a.id = $1",
+    `SELECT a.stato_abbonamento, a.prova_fino_al, u.email, u.creato_il
+       FROM aziende a JOIN utenti u ON u.azienda_id = a.id WHERE a.id = $1`,
     [aziendaId]
   );
   return ris.rows[0] || null;
