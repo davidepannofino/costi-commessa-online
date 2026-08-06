@@ -33,7 +33,16 @@ const ATTESE = [
   { tipo: "colonna", tabella: "aziende", nome: "prova_fino_al" },
   { tipo: "colonna", tabella: "aziende", nome: "piano" },
   { tipo: "colonna", tabella: "aziende", nome: "fatturazione" },
+  { tipo: "colonna", tabella: "dipendenti", nome: "archiviato" },
+  /* Non basta che il vincolo esista: esisteva anche prima, con CASCADE. Quello
+     che si verifica è la REGOLA di cancellazione, perché è lì che sta la
+     differenza fra "le ore restano" e "le ore spariscono". */
+  { tipo: "vincolo", tabella: "registrazioni", nome: "registrazioni_dipendente_id_fkey", regola: "RESTRICT" },
 ];
+
+/* Le lettere che Postgres usa per la regola di cancellazione di una chiave
+   esterna, in pg_constraint.confdeltype. */
+const REGOLA_CANCELLAZIONE = { a: "NO ACTION", r: "RESTRICT", c: "CASCADE", n: "SET NULL", d: "SET DEFAULT" };
 
 async function main() {
   const dove = await pool.query("SELECT current_database() AS db, current_schema() AS schema");
@@ -47,6 +56,21 @@ async function main() {
         [a.nome]
       );
       esiti.push({ cosa: `tabella ${a.nome}`, presente: r.rows.length > 0 ? "SI" : "NO" });
+    } else if (a.tipo === "vincolo") {
+      /* to_regclass invece di ::regclass: se la tabella non c'è ancora
+         restituisce NULL, mentre il cast solleverebbe un errore e questo
+         comando deve poter girare anche PRIMA della migrazione. */
+      const r = await pool.query(
+        `SELECT confdeltype FROM pg_constraint
+          WHERE conrelid = to_regclass($1) AND conname = $2`,
+        [a.tabella, a.nome]
+      );
+      const trovata = REGOLA_CANCELLAZIONE[r.rows[0]?.confdeltype] ?? "—";
+      esiti.push({
+        cosa: `vincolo ${a.tabella}.${a.nome}`,
+        presente: trovata === a.regola ? "SI" : "NO",
+        tipo: `ON DELETE ${trovata}`,
+      });
     } else {
       const r = await pool.query(
         `SELECT data_type FROM information_schema.columns

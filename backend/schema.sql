@@ -105,6 +105,25 @@ CREATE TABLE IF NOT EXISTS dipendenti (
 );
 CREATE INDEX IF NOT EXISTS idx_dipendenti_azienda ON dipendenti(azienda_id);
 
+-- CHI NON LAVORA PIU' QUI. Sparisce dagli elenchi dove si inseriscono le ore,
+-- ma la riga resta e con lei tutte le sue registrazioni: i costi delle commesse
+-- passate non cambiano di un centesimo.
+--
+-- Prima esisteva solo la cancellazione, e cancellare una persona portava via
+-- tutte le sue ore. Chi voleva conti corretti era costretto a tenersi in
+-- elenco anche chi se n'era andato tre anni fa; chi voleva l'elenco pulito
+-- perdeva lo storico. Nessuna delle due e' una scelta che si puo' chiedere a
+-- qualcuno di fare su dati di costo del personale.
+--
+-- Il valore predefinito e' 'false' e nessun riempimento serve: tutti quelli
+-- gia' presenti sono, per definizione, attivi.
+--
+-- QUESTA COLONNA NON SI CONTA PER IL PIANO. La capienza si misura sul mese di
+-- punta delle registrazioni (vedi src/abbonamento.js), che non guarda questa
+-- tabella. Il motivo sta li' ed e' il ricambio, non la mancanza di un flag:
+-- adesso il flag c'e', e la ragione regge lo stesso.
+ALTER TABLE dipendenti ADD COLUMN IF NOT EXISTS archiviato BOOLEAN NOT NULL DEFAULT false;
+
 CREATE TABLE IF NOT EXISTS commesse (
   id          TEXT PRIMARY KEY,
   azienda_id  TEXT NOT NULL REFERENCES aziende(id),
@@ -113,14 +132,53 @@ CREATE TABLE IF NOT EXISTS commesse (
 );
 CREATE INDEX IF NOT EXISTS idx_commesse_azienda ON commesse(azienda_id);
 
+-- Il legame col DIPENDENTE e' RESTRICT: il database si rifiuta di cancellare
+-- una persona finche' ha ore registrate. Chi non lavora piu' si archivia
+-- (dipendenti.archiviato), non si cancella.
+--
+-- Quello con la COMMESSA resta CASCADE, e la differenza e' voluta: una
+-- commessa cancellata e' un lavoro che non c'e' mai stato, e le sue ore non
+-- vogliono dire piu' niente; un dipendente cancellato e' una persona che se
+-- n'e' andata, ma le ore che ha fatto restano il costo di lavori veri.
 CREATE TABLE IF NOT EXISTS registrazioni (
   id             TEXT PRIMARY KEY,
   azienda_id     TEXT NOT NULL REFERENCES aziende(id),
-  dipendente_id  TEXT NOT NULL REFERENCES dipendenti(id) ON DELETE CASCADE,
+  dipendente_id  TEXT NOT NULL REFERENCES dipendenti(id) ON DELETE RESTRICT,
   commessa_id    TEXT NOT NULL REFERENCES commesse(id) ON DELETE CASCADE,
   data           DATE NOT NULL,
   ore            NUMERIC NOT NULL
 );
+
+-- I database gia' esistenti hanno il vincolo con CASCADE: CREATE TABLE IF NOT
+-- EXISTS non tocca una tabella che c'e' gia', quindi va rifatto qui.
+-- Si guarda confdeltype ('c' = CASCADE, 'r' = RESTRICT) invece del solo nome,
+-- cosi' rieseguire la migrazione non fa niente e non serve ricordarsi se e'
+-- gia' stata data.
+--
+-- SI CONTA SU 'regclass' e non sul nome della tabella: cosi' la ricerca segue
+-- il search_path e uno schema di prova sistema il PROPRIO vincolo, non quello
+-- dello schema public.
+--
+-- COSA NON CAMBIA. Il salvataggio automatico cancella le registrazioni PRIMA
+-- dei dipendenti, quindi quando arriva a cancellare una persona non c'e' piu'
+-- niente che la citi e questo vincolo non scatta: "Svuota tutto" continua a
+-- svuotare. La rete e' per la prossima rotta che cancellera' un dipendente da
+-- solo, e per le DELETE scritte a mano sul database.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint
+     WHERE conrelid = 'registrazioni'::regclass
+       AND conname  = 'registrazioni_dipendente_id_fkey'
+       AND confdeltype = 'c'
+  ) THEN
+    ALTER TABLE registrazioni DROP CONSTRAINT registrazioni_dipendente_id_fkey;
+    ALTER TABLE registrazioni
+      ADD CONSTRAINT registrazioni_dipendente_id_fkey
+      FOREIGN KEY (dipendente_id) REFERENCES dipendenti(id) ON DELETE RESTRICT;
+  END IF;
+END $$;
+
 CREATE INDEX IF NOT EXISTS idx_registrazioni_azienda ON registrazioni(azienda_id);
 CREATE INDEX IF NOT EXISTS idx_registrazioni_dipendente ON registrazioni(dipendente_id);
 CREATE INDEX IF NOT EXISTS idx_registrazioni_commessa ON registrazioni(commessa_id);

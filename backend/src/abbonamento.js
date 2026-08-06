@@ -108,12 +108,23 @@ const MESI_FINESTRA = 12;
  * cresciuto — e sarebbe anche un numero indifendibile davanti al cliente. Il
  * picco misura la capienza vera.
  *
- * PERCHÉ NON SI PUÒ CONTARE LA TABELLA `dipendenti`. Là dentro non c'è niente
- * che distingua chi lavora da chi se n'è andato: nessun flag, nessuna data di
- * cessazione. E togliere una persona dall'elenco CANCELLA tutte le sue ore
- * (chiave esterna in cascata, e il frontend lo avvisa), quindi chi vuole
- * tenere lo storico è costretto a tenersi anche gli ex dipendenti. Contare
- * quelle righe vorrebbe dire far salire di piano chi conserva i propri dati.
+ * PERCHÉ NON SI CONTA LA TABELLA `dipendenti`, nemmeno adesso che si può.
+ * Da agosto 2026 quella tabella ha `archiviato`, quindi chi se n'è andato si
+ * riconosce: la vecchia obiezione ("non c'è nessun flag") è caduta. La
+ * ragione vera però non era quella ed è ancora intera — è il RICAMBIO scritto
+ * qui sopra. Contare le teste attive oggi direbbe quante persone ci sono in
+ * anagrafica in questo istante, non quante ne ha tenute insieme in cantiere:
+ * sono due numeri diversi, e quello che misura la capienza è il secondo.
+ *
+ * C'è anche un motivo pratico per non spostarsi: il conteggio sulle ore non
+ * dipende da un'abitudine. Chi archivia con cura e chi non archivia mai
+ * ottengono lo stesso picco, perché il picco lo fanno i giorni lavorati.
+ * Legarlo a un flag vorrebbe dire far pagare di più chi tiene l'elenco in
+ * disordine.
+ *
+ * Un archiviato che ha lavorato negli ultimi dodici mesi CONTA nel suo mese,
+ * ed è giusto: quel mese era in cantiere. Esce da solo quando il suo mese
+ * esce dalla finestra.
  *
  * SI GUARDA LA DATA DEL LAVORO, non quando le ore sono state battute. Qui le
  * ore di luglio si inseriscono ad agosto, e un conteggio sul momento

@@ -437,8 +437,12 @@ app.get("/api/stato", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) 
   try {
     const [azRes, dipRes, comRes, regRes, matRes, allRes, spazio] = await Promise.all([
       pool.query("SELECT nome FROM aziende WHERE id = $1", [aziendaId]),
+      /* Gli archiviati vengono fuori insieme a tutti gli altri, di proposito:
+         le loro ore restano nel calcolo dei costi, quindi il browser ha
+         bisogno del loro nome e del loro lordo per attribuirle. A nasconderli
+         ci pensa la schermata, dove si inseriscono le ore — mai la lettura. */
       pool.query(
-        "SELECT id, nome, cognome, lordo_mensile FROM dipendenti WHERE azienda_id = $1 ORDER BY nome, cognome",
+        "SELECT id, nome, cognome, lordo_mensile, archiviato FROM dipendenti WHERE azienda_id = $1 ORDER BY nome, cognome",
         [aziendaId]
       ),
       pool.query(
@@ -463,6 +467,7 @@ app.get("/api/stato", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) 
         nome: d.nome,
         cognome: d.cognome,
         lordoMensile: d.lordo_mensile || {},
+        archiviato: d.archiviato === true,
       })),
       commesse: comRes.rows.map((c) => ({ id: c.id, codice: c.codice, descrizione: c.descrizione })),
       registrazioni: regRes.rows.map((r) => ({
@@ -529,13 +534,46 @@ app.put("/api/stato", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) 
       "DELETE FROM commesse WHERE azienda_id = $1 AND NOT (id = ANY($2::text[]))",
       [aziendaId, idCommesse]
     );
-    await client.query("DELETE FROM dipendenti WHERE azienda_id = $1", [aziendaId]);
+    /* I dipendenti NON si cancellano tutti per poi riscriverli. Prima si
+       faceva così, ed è il motivo per cui cancellare una persona portava via
+       le sue ore: bastava che sparisse dall'elenco mandato dal browser.
+       Adesso, come per le commesse, si tolgono solo quelli davvero spariti e
+       gli altri si aggiornano.
+       In più una rete: chi è ancora CITATO dalle ore in arrivo non si tocca,
+       nemmeno se manca dall'elenco. Un elenco senza di lui e le sue ore
+       ancora dentro è una richiesta che si contraddice — oggi finirebbe in
+       violazione di chiave esterna, e domani, con un ordine diverso delle
+       operazioni, in ore attribuite al nulla. Nel dubbio la riga resta: la
+       lettura successiva la rimette al suo posto.
+       "Svuota tutto" manda entrambi gli elenchi vuoti, quindi nessuno è
+       citato e nessuno viene risparmiato: continua a svuotare davvero. */
+    const idDipendenti = dipendenti.map((d) => String(d.id));
+    const idCitatiDalleOre = [...new Set(registrazioni.map((r) => String(r.dipendenteId)))];
+    await client.query(
+      `DELETE FROM dipendenti
+        WHERE azienda_id = $1
+          AND NOT (id = ANY($2::text[]))
+          AND NOT (id = ANY($3::text[]))`,
+      [aziendaId, idDipendenti, idCitatiDalleOre]
+    );
 
     for (const d of dipendenti) {
-      await client.query(
-        "INSERT INTO dipendenti (id, azienda_id, nome, cognome, lordo_mensile) VALUES ($1, $2, $3, $4, $5)",
-        [d.id, aziendaId, d.nome, d.cognome || "", JSON.stringify(d.lordoMensile || {})]
+      /* "WHERE dipendenti.azienda_id = $2" ha lo stesso ruolo che ha sulle
+         commesse: un id di un'altra azienda non aggiorna niente e la
+         transazione si annulla subito sotto. */
+      const ris = await client.query(
+        `INSERT INTO dipendenti (id, azienda_id, nome, cognome, lordo_mensile, archiviato)
+         VALUES ($1, $2, $3, $4, $5, $6)
+           ON CONFLICT (id) DO UPDATE SET nome = EXCLUDED.nome, cognome = EXCLUDED.cognome,
+             lordo_mensile = EXCLUDED.lordo_mensile, archiviato = EXCLUDED.archiviato
+           WHERE dipendenti.azienda_id = $2
+         RETURNING id`,
+        /* Solo un true esplicito archivia. Un backup fatto prima che questa
+           colonna esistesse non ha il campo, e chi torna da un file vecchio
+           deve tornare attivo, non sparire dagli elenchi. */
+        [d.id, aziendaId, d.nome, d.cognome || "", JSON.stringify(d.lordoMensile || {}), d.archiviato === true]
       );
+      if (ris.rowCount === 0) throw new Error(`Il dipendente ${d.id} appartiene a un'altra azienda.`);
     }
     for (const c of commesse) {
       // "WHERE commesse.azienda_id = $2" impedisce che un id appartenente a
