@@ -9,11 +9,13 @@ import {
   Search, RotateCcw, Save, Eraser, Info, FileDown, LogOut, Mail, Lock, Building2, ArrowRight, Loader2, ChevronDown,
   Clock, Sparkles, Eye, EyeOff, CreditCard, Gift, PartyPopper, ShieldCheck, FileImage,
   ReceiptText, Link2, CheckCircle, Check, HelpCircle, CircleDot, CalendarDays, TrendingUp, TrendingDown, Layers,
+  Archive, ArchiveRestore,
 } from "lucide-react";
 import { datiAPI, suSessioneScaduta, suAbbonamentoRichiesto, API_BASE } from "./datiAPI.js";
 import { statoGruppo, assegnazioneIniziale, NON_IMPORTARE } from "./statoGruppoDDT.js";
 import { filtra, decidiConferma, muoviEvidenziato, CONFERMA, AMBIGUO, VUOTO } from "./sceltaFiltrata.js";
 import { descriviAbbonamento } from "./statoAbbonamento.js";
+import { soloAttivi, perModificaDi, perElenco, eArchiviato, azionePerTogliere } from "./dipendentiVisibili.js";
 import { leggiToken, salvaToken, cancellaToken } from "./auth.js";
 
 /* ============================================================================
@@ -478,6 +480,13 @@ function applicaImport(stato, piani, decisioni) {
     const k = (p.nome + "|" + p.cognome).toLowerCase();
     let dip = dipByNome.get(k);
     if (!dip) { dip = { id: uid("e"), nome: p.nome, cognome: p.cognome, lordoMensile: {} }; dipendenti.push(dip); dipByNome.set(k, dip); }
+    /* La ricerca per nome guarda TUTTI, archiviati compresi: cercare solo fra
+       gli attivi creerebbe un secondo Mario Rossi, e da quel momento le ore di
+       Mario Rossi sarebbero divise fra due schede senza che si veda.
+       E chi si ritrova con ore nuove è tornato a lavorare, quindi si riattiva:
+       lasciarlo archiviato vorrebbe dire che le sue ore ci sono ma il suo nome
+       non compare nella tendina dove le si inseriscono. */
+    if (dip.archiviato) dip.archiviato = false;
     if (decisioni[i] === "sostituisci") {
       registrazioni = registrazioni.filter((r) => !(r.dipendenteId === dip.id && r.data.slice(0, 7) === p.mese));
       sostituiti++;
@@ -2294,6 +2303,10 @@ export default function App() {
   const [idDettaglio, setIdDettaglio] = useState(() => leggiStatoDaURL().commessa);
   const [toasts, setToasts] = useState([]);
   const [conferma, setConferma] = useState(null);
+  /* L'icona del pulsante di conferma. Sta qui e non dentro il JSX perché un
+     componente React dev'essere una maiuscola: `<conferma.okIcona />` sarebbe
+     letto come un tag HTML sconosciuto e non disegnerebbe niente. */
+  const IconaConferma = conferma?.okIcona || Trash2;
   const [flussoImport, setFlussoImport] = useState(null); // {piani, avvisi, conflitti[], idx, decisioni{}}
 
   /** Una notifica può portare con sé un'azione (oggi: annullare). Quando c'è,
@@ -2545,6 +2558,23 @@ export default function App() {
     return registraEsitoSalvataggio(ris);
   }, [dipendenti, commesse, registrazioni, azienda, registraEsitoSalvataggio]);
 
+  /**
+   * DUE LISTE, E LA DIFFERENZA È IMPORTANTE.
+   *
+   * `dipendenti` è tutta l'anagrafica, archiviati compresi: è quella che va
+   * nei CONTI (le ore di un archiviato sono costo di commesse vere, e senza il
+   * suo lordo l'invariante dei costi non torna) e quella che va nel
+   * SALVATAGGIO (il salvataggio riscrive l'elenco dell'azienda: mandarne uno
+   * filtrato cancellerebbe gli archiviati dal database per davvero).
+   *
+   * `dipendentiAttivi` è quella che si MOSTRA dove si sceglie una persona a cui
+   * attribuire ore nuove, e dove si conta quanti siamo.
+   *
+   * Nel dubbio si usa `dipendenti`: mostrare una persona di troppo è un
+   * fastidio, perderne le ore no.
+   */
+  const dipendentiAttivi = useMemo(() => soloAttivi(dipendenti), [dipendenti]);
+
   const erroreIntervallo = dal && al && al < dal;
   const riep = useMemo(() => {
     if (!dal || !al || erroreIntervallo) return null;
@@ -2657,15 +2687,63 @@ export default function App() {
   }, [notifica]);
   const aggiornaRegistrazione = (id, patch) => setRegistrazioni((r) => r.map((x) => (x.id === id ? { ...x, ...patch } : x)));
 
-  const eliminaDipendente = (dip) => setConferma({
-    titolo: "Eliminare il dipendente?",
-    testo: `Verranno eliminate anche tutte le ore registrate da ${dip.nome} ${dip.cognome}. L'operazione non si può annullare.`,
-    onOk: () => {
-      setDipendenti((d) => d.filter((x) => x.id !== dip.id));
-      setRegistrazioni((r) => r.filter((x) => x.dipendenteId !== dip.id));
-      notifica(`Dipendente ${dip.nome} ${dip.cognome} eliminato.`);
-    },
-  });
+  /**
+   * Togliere un dipendente dagli elenchi.
+   *
+   * Chi ha ore registrate si ARCHIVIA: sparisce da dove si inseriscono le ore,
+   * ma la sua riga e le sue registrazioni restano dove sono. I costi delle
+   * commesse passate non si spostano di un centesimo, perché non viene tolto
+   * niente da cui quei costi sono calcolati.
+   *
+   * Chi non ha nessuna ora si cancella ancora davvero: non c'è niente da
+   * perdere, e tenere in giro una scheda mai usata sarebbe solo disordine.
+   *
+   * Prima c'era solo la cancellazione, e portava via tutte le ore. Il messaggio
+   * lo diceva pure — «l'operazione non si può annullare» — ma dirlo non basta:
+   * su dati di costo del personale un clic non deve poter distruggere anni di
+   * storico. E il prezzo di quella scelta lo pagava chi faceva la cosa giusta,
+   * che per non perdere i conti si teneva in elenco gli ex dipendenti.
+   */
+  const eliminaDipendente = (dip) => {
+    const chiSiChiama = `${dip.nome} ${dip.cognome}`.trim();
+    if (azionePerTogliere(registrazioni, dip.id) === "elimina") {
+      return setConferma({
+        titolo: "Eliminare il dipendente?",
+        testo: `${chiSiChiama} non ha nessuna ora registrata: non si perde niente.`,
+        /* I messaggi qui sotto NON fanno accordare un participio col nome di
+           una persona: «Anna Bianchi archiviato» è sbagliato, e il genere di
+           un nome non si indovina. Si gira la frase su un soggetto fisso
+           ("la scheda", "non compare più") e il problema non esiste. */
+        onOk: () => {
+          setDipendenti((d) => d.filter((x) => x.id !== dip.id));
+          notifica(`Scheda di ${chiSiChiama} eliminata.`);
+        },
+      });
+    }
+    const quante = registrazioni.filter((r) => r.dipendenteId === dip.id).length;
+    setConferma({
+      titolo: "Archiviare il dipendente?",
+      testo: `${chiSiChiama} sparisce dagli elenchi dove si inseriscono le ore. Le ${quante} registrazioni già inserite restano dove sono e i costi delle commesse non cambiano. Si può riattivare quando vuoi.`,
+      okEtichetta: "Archivia",
+      okIcona: Archive,
+      okVariante: "primario",
+      onOk: () => {
+        setDipendenti((d) => d.map((x) => (x.id === dip.id ? { ...x, archiviato: true } : x)));
+        notifica(`${chiSiChiama} non compare più negli elenchi: le sue ore restano.`, "ok", {
+          etichetta: "Annulla",
+          onAzione: () => {
+            setDipendenti((d) => d.map((x) => (x.id === dip.id ? { ...x, archiviato: false } : x)));
+            notifica(`${chiSiChiama} è di nuovo in servizio.`);
+          },
+        });
+      },
+    });
+  };
+
+  const riattivaDipendente = (dip) => {
+    setDipendenti((d) => d.map((x) => (x.id === dip.id ? { ...x, archiviato: false } : x)));
+    notifica(`${`${dip.nome} ${dip.cognome}`.trim()} è di nuovo in servizio.`);
+  };
   const eliminaCommessa = (com) => setConferma({
     titolo: "Eliminare la commessa?",
     testo: `Verranno eliminate anche tutte le ore registrate, i materiali e i documenti della commessa ${com.codice}. L'operazione non si può annullare.`,
@@ -3018,7 +3096,9 @@ export default function App() {
     { id: "abbonamento", nome: "Abbonamento", icona: CreditCard },
     ...(isAdmin ? [{ id: "admin", nome: "Amministrazione", icona: ShieldCheck }] : []),
   ];
-  const CONTEGGI = { commesse: commesse.length, dipendenti: dipendenti.length };
+  /* Il contatore della barra laterale risponde a "quanti siamo", non a "quante
+     schede ci sono in archivio": conta gli attivi. */
+  const CONTEGGI = { commesse: commesse.length, dipendenti: dipendentiAttivi.length };
   /* Iniziali e piano per il piede della barra laterale: due parole al massimo,
      ricavate da quello che già c'è. Nessuna chiamata nuova. */
   const inizialiAzienda = (azienda || "")
@@ -3317,12 +3397,12 @@ export default function App() {
             </div>
           )}
 
-          {vista === "dashboard" && <Dashboard riep={riep} costi={costi} dal={dal} al={al} dipendenti={dipendenti} serieMensile={serieMensile} vaiCommesse={() => setVista("commesse")} vaiDati={() => setVista("dati")} vaiDipendenti={() => setVista("dipendenti")} haDati={registrazioni.length > 0} apri={(riga) => setIdDettaglio(riga.commessa.id)} />}
+          {vista === "dashboard" && <Dashboard riep={riep} costi={costi} dal={dal} al={al} dipendentiAttivi={dipendentiAttivi} serieMensile={serieMensile} vaiCommesse={() => setVista("commesse")} vaiDati={() => setVista("dati")} vaiDipendenti={() => setVista("dipendenti")} haDati={registrazioni.length > 0} apri={(riga) => setIdDettaglio(riga.commessa.id)} />}
           {vista === "commesse" && <VistaCommesse riep={riep} costi={costi} dal={dal} al={al} apri={(riga) => setIdDettaglio(riga.commessa.id)} esportaCsv={() => riep && esportaCSV(costi.righe, costi, dal, al)} esportaXlsx={() => riep && esportaXLSX(costi.righe, costi, dal, al)} esportaTutto={() => esportaCompletoXLSX({ dipendenti, commesse, registrazioni, materiali }, dal, al)} stampa={stampaPDF} vaiDati={() => setVista("dati")} />}
-          {vista === "dipendenti" && <VistaDipendenti dipendenti={dipendenti} setDipendenti={setDipendenti} riep={riep} elimina={eliminaDipendente} notifica={notifica} />}
+          {vista === "dipendenti" && <VistaDipendenti dipendenti={dipendenti} setDipendenti={setDipendenti} registrazioni={registrazioni} riep={riep} elimina={eliminaDipendente} riattiva={riattivaDipendente} notifica={notifica} />}
           {vista === "dati" && (
             <VistaDati
-              dipendenti={dipendenti} commesse={commesse} registrazioni={registrazioni}
+              dipendenti={dipendenti} dipendentiAttivi={dipendentiAttivi} commesse={commesse} registrazioni={registrazioni}
               setDipendenti={setDipendenti} setCommesse={setCommesse}
               aggiungi={aggiungiRegistrazione} eliminaReg={eliminaRegistrazioneConAnnulla} aggiornaReg={aggiornaRegistrazione}
               eliminaCommessa={eliminaCommessa} rinominaCommessa={rinominaCommessa} caricaExcel={caricaExcel} backup={backupJSON} ripristina={ripristinaJSON}
@@ -3444,12 +3524,19 @@ export default function App() {
         </Modale>
       )}
 
+      {/* Il pulsante di conferma dice quello che fa. Rosso e cestino restano il
+          valore predefinito perché quasi tutte le conferme qui dentro sono
+          cancellazioni; ma archiviare non distrugge niente ed è reversibile, e
+          vestirlo da eliminazione insegnerebbe a temere l'unica azione sicura
+          che abbiamo dato a chi non lavora più qui. */}
       {conferma && (
         <Modale titolo={conferma.titolo} onChiudi={() => setConferma(null)}>
           <p className="text-sm mb-6 leading-relaxed" style={{ color: "var(--muted)" }}>{conferma.testo}</p>
           <div className="flex justify-end gap-2">
             <Bottone variante="fantasma" onClick={() => setConferma(null)}>Annulla</Bottone>
-            <Bottone variante="pericolo" onClick={() => { conferma.onOk(); setConferma(null); }}><Trash2 size={14} strokeWidth={1.75} /> Elimina</Bottone>
+            <Bottone variante={conferma.okVariante || "pericolo"} onClick={() => { conferma.onOk(); setConferma(null); }}>
+              <IconaConferma size={14} strokeWidth={1.75} /> {conferma.okEtichetta || "Elimina"}
+            </Bottone>
           </div>
         </Modale>
       )}
@@ -3717,7 +3804,10 @@ function BandaEroe({ costi, dal, al, titolo = "Costo del periodo", metriche = []
   );
 }
 
-function Dashboard({ riep, costi, dal, al, dipendenti, serieMensile, vaiCommesse, vaiDati, vaiDipendenti, haDati, apri }) {
+/* Riceve gli ATTIVI e non tutta l'anagrafica: l'unico posto dove usa questa
+   lista è il "su N in anagrafica" della metrica qui sotto. I costi e le ore li
+   prende da `riep`, che è calcolato su tutti — archiviati compresi. */
+function Dashboard({ riep, costi, dal, al, dipendentiAttivi, serieMensile, vaiCommesse, vaiDati, vaiDipendenti, haDati, apri }) {
   /* Questo useMemo stava DOPO il `return null` qui sotto: un hook dentro un
      ramo condizionale. Finché `riep` è già valorizzato al primo montaggio non
      si vede niente, ma se passasse da null a valorizzato con la Dashboard già
@@ -3769,7 +3859,10 @@ function Dashboard({ riep, costi, dal, al, dipendenti, serieMensile, vaiCommesse
     { e: "Ore del periodo", v: fmtOre.format(totOre), u: "h" },
     { e: "Costo medio orario", v: fmtNum.format(costoMedioOra), u: "€/h", sub: "solo manodopera" },
     { e: "Commesse attive", v: String(Math.max(righe.length, costi.righe.length)), sub: `più costosa ${piuCostosa.commessa.codice}` },
-    { e: "Dipendenti attivi", v: String(perDip.length), sub: `su ${dipendenti.length} in anagrafica`, muto: true },
+    /* "in anagrafica" sono le persone in servizio: un archiviato non è più in
+       anagrafica, è nello storico. Contarlo qui farebbe leggere "3 su 15"
+       a un'azienda che di gente ne ha 4, e il paragone perderebbe senso. */
+    { e: "Dipendenti attivi", v: String(perDip.length), sub: `su ${dipendentiAttivi.length} in anagrafica`, muto: true },
   ];
 
   /* La classifica si ferma a otto righe: la Dashboard risponde a "dove vanno i
@@ -5626,8 +5719,15 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
 /* ---------------------------------------------------------------------------
    DIPENDENTI
 --------------------------------------------------------------------------- */
-function VistaDipendenti({ dipendenti, setDipendenti, riep, elimina, notifica }) {
+function VistaDipendenti({ dipendenti, setDipendenti, registrazioni, riep, elimina, riattiva, notifica }) {
   const [editor, setEditor] = useState(null);
+  /* Spento all'apertura: la domanda normale è "chi lavora qui", e chi cerca un
+     ex dipendente sa di cercarlo. Ma l'interruttore si vede sempre, anche a
+     zero archiviati, altrimenti comparirebbe dal nulla il giorno che se ne
+     archivia uno e nessuno saprebbe dove sono finiti. */
+  const [mostraArchiviati, setMostraArchiviati] = useState(false);
+  const inElenco = useMemo(() => perElenco(dipendenti, mostraArchiviati), [dipendenti, mostraArchiviati]);
+  const quantiArchiviati = dipendenti.length - soloAttivi(dipendenti).length;
 
   const salva = (dip) => {
     setDipendenti((ds) => {
@@ -5660,12 +5760,32 @@ function VistaDipendenti({ dipendenti, setDipendenti, riep, elimina, notifica })
             Il lordo di ogni mese diviso per le ore di quel mese: da qui esce la tariffa.
           </p>
         </div>
-        <Bottone onClick={() => setEditor({ nuovo: true })}><Plus size={14} strokeWidth={1.75} /> Nuovo dipendente</Bottone>
+        <div className="flex items-center gap-3">
+          {/* Il numero sta nell'etichetta perché senza di lui l'interruttore
+              non dice quanto c'è dietro, e uno spento su zero archiviati
+              sembrerebbe nascondere qualcosa. */}
+          <label className="flex items-center gap-2 t-piccolo cursor-pointer select-none" style={{ color: "var(--txt-tenue)" }}>
+            <input type="checkbox" checked={mostraArchiviati} onChange={(e) => setMostraArchiviati(e.target.checked)} />
+            {quantiArchiviati === 0
+              ? "Mostra archiviati"
+              : `Mostra archiviati (${quantiArchiviati})`}
+          </label>
+          <Bottone onClick={() => setEditor({ nuovo: true })}><Plus size={14} strokeWidth={1.75} /> Nuovo dipendente</Bottone>
+        </div>
       </div>
 
-      {dipendenti.length === 0 ? (
-        <StatoVuoto icona={Users} titolo="Nessun dipendente" testo="Aggiungi il primo dipendente con il suo lordo mensile per iniziare a registrare le ore."
-          azione={<Bottone onClick={() => setEditor({ nuovo: true })}><Plus size={14} strokeWidth={1.75} /> Nuovo dipendente</Bottone>} />
+      {inElenco.length === 0 ? (
+        dipendenti.length === 0 ? (
+          <StatoVuoto icona={Users} titolo="Nessun dipendente" testo="Aggiungi il primo dipendente con il suo lordo mensile per iniziare a registrare le ore."
+            azione={<Bottone onClick={() => setEditor({ nuovo: true })}><Plus size={14} strokeWidth={1.75} /> Nuovo dipendente</Bottone>} />
+        ) : (
+          /* Ci sono dipendenti, ma sono tutti archiviati. Dire "Nessun
+             dipendente" qui sarebbe falso e farebbe temere una perdita di
+             dati: si dice dove sono e come rivederli. */
+          <StatoVuoto icona={Archive} titolo="Nessuno in servizio"
+            testo={`${quantiArchiviati === 1 ? "L'unica scheda è in archivio" : `Tutte e ${quantiArchiviati} le schede sono in archivio`}: le ore registrate e i costi delle commesse restano al loro posto.`}
+            azione={<Bottone variante="fantasma" onClick={() => setMostraArchiviati(true)}><Archive size={14} strokeWidth={1.75} /> Mostra archiviati</Bottone>} />
+        )
       ) : (
         /* Prima ogni dipendente era una card in una griglia a due colonne, con
            dentro la sua tabellina dei mesi: contenitori uguali ripetuti, e la
@@ -5675,31 +5795,61 @@ function VistaDipendenti({ dipendenti, setDipendenti, riep, elimina, notifica })
            i lordi si incolonnano davvero. */
         <div className="card overflow-hidden">
           <ul>
-            {dipendenti.map((dip, idx) => {
+            {inElenco.map((dip, idx) => {
               const mesi = new Set(Object.keys(dip.lordoMensile || {}));
               if (riep) for (const k of riep.oreMensili.keys()) { const [id, m] = k.split("|"); if (id === dip.id) mesi.add(m); }
               const elenco = [...mesi].sort().reverse();
               const iniziali = ((dip.nome[0] || "") + (dip.cognome[0] || "")).toUpperCase();
               const nel = nellIntervallo.get(dip.id);
+              const archiviato = eArchiviato(dip);
+              /* Il pulsante dice quello che farà davvero, prima di premerlo:
+                 cestino per chi non ha ore, archivio per chi ne ha. Un cestino
+                 che apre una finestra intitolata "Archiviare?" farebbe
+                 esitare, e l'esitazione su questo pulsante è il motivo per cui
+                 la gente si teneva in elenco gli ex dipendenti. */
+              const azione = azionePerTogliere(registrazioni, dip.id);
+              const nomeIntero = `${dip.nome} ${dip.cognome}`.trim();
               return (
                 <li key={dip.id} className="px-6 py-6" style={{ borderTop: idx > 0 ? ".5px solid var(--bordo)" : "none" }}>
                   <div className="flex items-center gap-3.5">
                     <span className="flex items-center justify-center shrink-0 box f-mono t-piccolo"
                       style={{ width: 32, height: 32, color: "var(--txt-attenuato)" }}>{iniziali}</span>
                     <div className="min-w-0">
-                      <p className="t-sotto truncate">{dip.nome} {dip.cognome}</p>
+                      <p className="t-sotto truncate" style={archiviato ? { color: "var(--txt-tenue)" } : undefined}>
+                        {dip.nome} {dip.cognome}
+                        {/* L'etichetta è una parola, non un colore: un archiviato
+                            reso solo più pallido si legge come "disabilitato"
+                            o come un difetto dello schermo. */}
+                        {archiviato && (
+                          <span className="t-micro ml-2 px-1.5 py-0.5 box align-middle" style={{ color: "var(--txt-attenuato)" }}>
+                            in archivio
+                          </span>
+                        )}
+                      </p>
                       <p className="t-piccolo f-mono mt-1" style={{ color: "var(--txt-tenue)" }}>
                         {nel ? `${fmtOre.format(nel.ore)} h nell'intervallo · ` : "nessuna ora nell'intervallo"}
                         {nel && <span style={{ color: "var(--verde)" }}>{euro(nel.costo)}</span>}
                       </p>
                     </div>
                     <div className="ml-auto flex gap-2 shrink-0">
-                      <button onClick={() => setEditor({ dip })} aria-label={`Modifica ${dip.nome} ${dip.cognome}`}
+                      <button onClick={() => setEditor({ dip })} aria-label={`Modifica ${nomeIntero}`}
                         className="inline-flex items-center justify-center btn btn-fantasma"
                         style={{ width: 32, height: 32, borderRadius: "var(--r-sm)" }}><Pencil size={13} strokeWidth={1.75} /></button>
-                      <button onClick={() => elimina(dip)} aria-label={`Elimina ${dip.nome} ${dip.cognome}`}
-                        className="inline-flex items-center justify-center btn btn-riga-elimina"
-                        style={{ width: 32, height: 32, borderRadius: "var(--r-sm)" }}><Trash2 size={13} strokeWidth={1.75} /></button>
+                      {archiviato ? (
+                        <button onClick={() => riattiva(dip)} aria-label={`Riattiva ${nomeIntero}`} title="Riattiva"
+                          className="inline-flex items-center justify-center btn btn-fantasma"
+                          style={{ width: 32, height: 32, borderRadius: "var(--r-sm)" }}><ArchiveRestore size={13} strokeWidth={1.75} /></button>
+                      ) : (
+                        <button onClick={() => elimina(dip)}
+                          aria-label={azione === "elimina" ? `Elimina ${nomeIntero}` : `Archivia ${nomeIntero}`}
+                          title={azione === "elimina" ? "Elimina" : "Archivia"}
+                          className={`inline-flex items-center justify-center btn ${azione === "elimina" ? "btn-riga-elimina" : "btn-fantasma"}`}
+                          style={{ width: 32, height: 32, borderRadius: "var(--r-sm)" }}>
+                          {azione === "elimina"
+                            ? <Trash2 size={13} strokeWidth={1.75} />
+                            : <Archive size={13} strokeWidth={1.75} />}
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -5812,7 +5962,13 @@ function EditorDipendente({ iniziale, onSalva, onChiudi }) {
 /* ---------------------------------------------------------------------------
    DATI — inserimento, registrazioni, import/export, impostazioni
 --------------------------------------------------------------------------- */
-function VistaDati({ dipendenti, commesse, registrazioni, setCommesse, aggiungi, eliminaReg, aggiornaReg, eliminaCommessa, rinominaCommessa, caricaExcel, backup, ripristina, svuota, esempio, azienda, setAzienda, notifica, esportaTutto }) {
+/* Riceve TUTTE E DUE le liste, e le usa per cose diverse:
+   - `dipendenti` (archiviati compresi) per LEGGERE: il nome accanto a una riga
+     di ore già inserita, e le opzioni quando quella riga si modifica;
+   - `dipendentiAttivi` per SCEGLIERE: il campo con cui si registrano ore nuove.
+   Sono due domande diverse — "di chi erano queste ore" e "a chi le sto dando
+   adesso" — e una lista sola risponderebbe male a una delle due. */
+function VistaDati({ dipendenti, dipendentiAttivi, commesse, registrazioni, setCommesse, aggiungi, eliminaReg, aggiornaReg, eliminaCommessa, rinominaCommessa, caricaExcel, backup, ripristina, svuota, esempio, azienda, setAzienda, notifica, esportaTutto }) {
   const [form, setForm] = useState({ dipendenteId: "", commessaId: "", data: oggiISO(), ore: "" });
   const [erroriForm, setErroriForm] = useState({});
   const [nuovaCom, setNuovaCom] = useState({ codice: "", descrizione: "" });
@@ -5835,8 +5991,12 @@ function VistaDati({ dipendenti, commesse, registrazioni, setCommesse, aggiungi,
   /* Cosa si scrive per cercare. Per il dipendente il nome intero; per la
      commessa il codice E il nome del cantiere, così "TARCENTO" trova PN02
      — che con la tendina nativa non succedeva. */
+  /* Qui si REGISTRANO ORE NUOVE, quindi si sceglie solo fra chi lavora: gli
+     archiviati non compaiono. Attribuire ore di oggi a chi se n'è andato non è
+     una cosa che vogliamo rendere facile — e chi torna si riattiva in un clic
+     dalla schermata Dipendenti. */
   const vociDipendenti = useMemo(
-    () => dipendenti.map((d) => ({ id: d.id, etichetta: `${d.nome} ${d.cognome}`.trim() })), [dipendenti]);
+    () => dipendentiAttivi.map((d) => ({ id: d.id, etichetta: `${d.nome} ${d.cognome}`.trim() })), [dipendentiAttivi]);
   const vociCommesse = useMemo(
     () => commesse.map((c) => ({ id: c.id, etichetta: `${c.codice} — ${c.descrizione}`, cerca: `${c.codice} ${c.descrizione}` })), [commesse]);
 
@@ -5926,10 +6086,17 @@ function VistaDati({ dipendenti, commesse, registrazioni, setCommesse, aggiungi,
           una riga) e un offset fisso sbagliato la fa finire sotto la testata.
           Si mette quando l'altezza della testata diventa una misura vera. */}
       <div className="card" style={{ background: "var(--bg-elevato)", borderColor: "var(--bordo-input)" }}>
-        {dipendenti.length === 0 || commesse.length === 0 ? (
+        {/* Si guardano gli ATTIVI: un'azienda con quindici archiviati e nessuno
+            in servizio non può registrare niente, e mostrarle un modulo con la
+            tendina vuota sarebbe una porta finta. Il testo cambia in quel caso,
+            perché "creali qui sotto" sarebbe un consiglio sbagliato: i
+            dipendenti ci sono già, vanno riattivati. */}
+        {dipendentiAttivi.length === 0 || commesse.length === 0 ? (
           <p className="px-6 py-5 t-corpo flex items-center gap-2" style={{ color: "var(--txt-attenuato)" }}>
             <Info size={14} strokeWidth={1.75} className="shrink-0" />
-            Per registrare ore servono almeno un dipendente e una commessa: creali qui sotto.
+            {dipendentiAttivi.length === 0 && dipendenti.length > 0 && commesse.length > 0
+              ? "Tutti i dipendenti sono archiviati: riattivane uno dalla schermata Dipendenti per registrare ore."
+              : "Per registrare ore servono almeno un dipendente e una commessa: creali qui sotto."}
           </p>
         ) : (
           <>
@@ -6259,8 +6426,24 @@ function VistaDati({ dipendenti, commesse, registrazioni, setCommesse, aggiungi,
   );
 }
 
+/**
+ * Modifica di una riga di ore già registrata.
+ *
+ * RICEVE TUTTA L'ANAGRAFICA, non i soli attivi, e la filtra qui dentro con
+ * `perModificaDi`. Il motivo è il punto più pericoloso dell'archiviazione: un
+ * <select> il cui valore non corrisponde a nessuna opzione non dà errore né
+ * avviso, mostra la prima della lista. Aprendo le ore di un archiviato con la
+ * lista dei soli attivi si leggerebbe il nome di un'altra persona, e premendo
+ * Salva quelle ore passerebbero davvero a lei: nessun messaggio, conti che
+ * tornano, costo attribuito a chi non ha lavorato. Il tipo di errore peggiore
+ * che questo prodotto possa fare, perché è silenzioso e sembra giusto.
+ */
 function EditorRegistrazione({ reg, dipendenti, commesse, onSalva, onAnnulla }) {
   const [f, setF] = useState({ dipendenteId: reg.dipendenteId, commessaId: reg.commessaId, data: reg.data, ore: String(reg.ore).replace(".", ",") });
+  /* Si tiene fermo il dipendente della RIGA, non quello scelto adesso nel
+     campo: se ci si sposta su un attivo e poi si cambia idea, l'archiviato
+     dev'essere ancora lì. Sparirebbe da sotto le dita. */
+  const scelte = useMemo(() => perModificaDi(dipendenti, reg.dipendenteId), [dipendenti, reg.dipendenteId]);
   const [err, setErr] = useState({});
   const invia = () => {
     const e = {};
@@ -6275,7 +6458,11 @@ function EditorRegistrazione({ reg, dipendenti, commesse, onSalva, onAnnulla }) 
     <div className="space-y-4">
       <Campo etichetta="Dipendente">
         <select value={f.dipendenteId} onChange={(e) => setF((x) => ({ ...x, dipendenteId: e.target.value }))} className={inputCls}>
-          {dipendenti.map((d) => <option key={d.id} value={d.id}>{d.nome} {d.cognome}</option>)}
+          {scelte.map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.nome} {d.cognome}{eArchiviato(d) ? " (in archivio)" : ""}
+            </option>
+          ))}
         </select>
       </Campo>
       <Campo etichetta="Commessa">
