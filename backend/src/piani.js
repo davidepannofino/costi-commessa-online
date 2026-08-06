@@ -95,6 +95,58 @@ export function prezzoDi(idPiano, fatturazione) {
     : p.prezzoMensile;
 }
 
+/**
+ * LA CHIAVE DI LISTINO: come si chiama, su Stripe, il prezzo di questo piano
+ * con questa periodicità. "cantiere_mensile", "impresa_annuale", e così via.
+ *
+ * È il `lookup_key` dei Price su Stripe, e serve a non copiare a mano nessun
+ * identificatore. Gli id veri (`price_1Abc…`) non compaiono da nessuna parte
+ * nel codice: si chiede a Stripe «dammi il prezzo che si chiama così» e si
+ * ottiene quello giusto, in test come in produzione, senza sei variabili
+ * d'ambiente da tenere allineate.
+ *
+ * Si costruisce da qui e si rilegge da qui: `piani.js` resta l'unica fonte,
+ * e una chiave che non si sa ricostruire è una chiave che non esiste.
+ */
+export function chiaveListino(idPiano, fatturazione) {
+  return `${pianoDi(idPiano).id}_${fatturazioneDi(fatturazione)}`;
+}
+
+/**
+ * Il contrario: da "impresa_annuale" a { piano, fatturazione }.
+ *
+ * Serve al webhook, che deve capire QUALE piano è stato comprato guardando il
+ * prezzo della sottoscrizione. Il prezzo c'è sempre; i metadati possono
+ * mancare, e infatti restano solo una cintura di sicurezza.
+ *
+ * Davanti a una chiave che non riconosce restituisce `null` e NON prova a
+ * indovinare — nessun ripiego che afferma, come dice PRODUCT.md. Un piano
+ * indovinato qui vorrebbe dire scrivere nel database che un'azienda ha comprato
+ * qualcosa che non ha comprato.
+ */
+export function daChiaveListino(chiave) {
+  const pezzi = String(chiave ?? "").trim().toLowerCase().split("_");
+  if (pezzi.length !== 2) return null;
+  const [piano, fatturazione] = pezzi;
+  if (!ORDINE.includes(piano)) return null;
+  if (!FATTURAZIONI.includes(fatturazione)) return null;
+  return { piano, fatturazione };
+}
+
+/** Tutte e sei le combinazioni, per lo script che crea i prezzi su Stripe. */
+export function tutteLeCombinazioni() {
+  return ORDINE.flatMap((piano) =>
+    FATTURAZIONI.map((fatturazione) => ({
+      piano,
+      fatturazione,
+      chiave: chiaveListino(piano, fatturazione),
+      nome: PIANI[piano].nome,
+      euro: prezzoDi(piano, fatturazione),
+      intervallo: fatturazione === "annuale" ? "year" : "month",
+    }))
+  );
+}
+
 /** Il catalogo in forma di elenco ordinato, per chi deve mostrarlo. */
 export function elencoPiani() {
   return ORDINE.map((id) => ({

@@ -1688,20 +1688,96 @@ function PaginaResetPassword({ token, alSuccesso }) {
  *  Quanto sia durata quella prova qui non si dice, e non è una svista: la
  *  scadenza è congelata per account su aziende.prova_fino_al, quindi non c'è
  *  UNA durata da nominare. */
-function PaginaAbbonamento({ onUscire }) {
+/**
+ * SCELTA DELLA PERIODICITÀ, con il prezzo che ne risulta.
+ *
+ * Uno solo, usato sia dalla schermata bloccante sia dal pannello: gli importi
+ * arrivano dal server dentro `capienza` e non si scrivono da nessuna parte qui,
+ * così restano quelli di piani.js e non se ne creano copie.
+ */
+function ScegliPeriodicita({ capienza, valore, onCambia }) {
+  const prezzo = valore === "annuale" ? capienza.prezzoAnnuale : capienza.prezzoMensile;
+  const risparmio = capienza.prezzoMensile * 12 - capienza.prezzoAnnuale;
+  return (
+    <div>
+      <div className="flex gap-2 mb-5" role="group" aria-label="Periodicità">
+        {[
+          { id: "mensile", testo: "Mensile" },
+          { id: "annuale", testo: "Annuale" },
+        ].map((o) => {
+          const scelto = valore === o.id;
+          return (
+            <button key={o.id} type="button" onClick={() => onCambia(o.id)} aria-pressed={scelto}
+              className="flex-1 px-4 t-corpo btn"
+              style={{
+                minHeight: 48, borderRadius: "var(--r-sm)", fontWeight: 500,
+                background: scelto ? "var(--bg-elevato)" : "transparent",
+                border: `.5px solid ${scelto ? "var(--accento-bordo)" : "var(--bordo-input)"}`,
+                color: scelto ? "var(--txt)" : "var(--muted)",
+              }}>
+              {o.testo}
+            </button>
+          );
+        })}
+      </div>
+      <div className="card px-6 py-7">
+        <p className="t-micro mb-2">Piano {capienza.pianoNome}</p>
+        <p className="cifra-grande" style={{ fontSize: 40, lineHeight: 1, letterSpacing: "-.035em" }}>
+          {prezzo} €
+          <span className="t-corpo" style={{ fontWeight: 400, color: "var(--tenue)", letterSpacing: 0 }}>
+            {valore === "annuale" ? " / anno" : " / mese"}
+          </span>
+        </p>
+        {/* "+ IVA" e nient'altro: come si espone e come si emette l'IVA non è
+            deciso, e inventarlo qui vorrebbe dire scrivere un numero fiscale
+            che nessuno ha confermato. */}
+        <p className="t-piccolo mt-2" style={{ color: "var(--tenue)" }}>al netto dell'IVA</p>
+        <p className="t-piccolo mt-3" style={{ color: "var(--muted)" }}>
+          {valore === "annuale"
+            ? `Dieci mensilità invece di dodici: ${risparmio} € risparmiati in un anno.`
+            : "Disdici quando vuoi, senza vincoli."}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Schermata che sostituisce l'app quando l'accesso ai dati è bloccato.
+ *
+ * Ha DUE facce, e la seconda è il motivo per cui questo componente è stato
+ * riscritto: chi ha pagato e non ha ancora la conferma NON deve leggere «il
+ * periodo di prova è terminato». È la cosa peggiore che il prodotto possa
+ * fare — prendere dei soldi e poi comportarsi come se non fosse successo
+ * niente. Finché la conferma non c'è si dice apertamente che si sta
+ * aspettando, e si offre un modo per ricontrollare subito.
+ */
+function PaginaAbbonamento({ onUscire, info, inAttesaDiConferma, onRicontrolla }) {
   const [caricando, setCaricando] = useState(false);
   const [errore, setErrore] = useState(null);
+  const [fatturazione, setFatturazione] = useState("mensile");
+  const [ricontrollando, setRicontrollando] = useState(false);
+  const [ancoraNiente, setAncoraNiente] = useState(false);
+  const capienza = info?.capienza;
 
   const abbonati = async () => {
     setErrore(null);
     setCaricando(true);
     try {
-      const url = await datiAPI.avviaCheckout();
+      const url = await datiAPI.avviaCheckout(fatturazione);
       window.location.href = url;
     } catch (e) {
       setErrore("Non è stato possibile avviare il pagamento. Riprova tra poco.");
       setCaricando(false);
     }
+  };
+
+  const ricontrolla = async () => {
+    setAncoraNiente(false);
+    setRicontrollando(true);
+    const ok = await onRicontrolla?.();
+    setRicontrollando(false);
+    if (!ok) setAncoraNiente(true);
   };
 
   return (
@@ -1710,42 +1786,71 @@ function PaginaAbbonamento({ onUscire }) {
       <div className="w-full" style={{ maxWidth: 420 }}>
         <div className="mb-10"><Marchio centrato /></div>
 
-        {/* Il prezzo è il protagonista della schermata: grande, calmo, con
-            accanto la cosa che rassicura di più (si disdice quando si vuole). */}
-        <div className="text-center">
-          <h2 className="t-sezione mb-3">Il periodo di prova è terminato</h2>
-          <p className="t-corpo mb-9 mx-auto" style={{ color: "var(--muted)", maxWidth: "44ch" }}>
-            {/* Qui c'era scritto "Hai usato liberamente Commexa per 30 giorni".
-                Non ci sta più un numero: da quando la scadenza è congelata su
-                aziende.prova_fino_al, due account possono aver avuto prove di
-                lunghezza diversa, e il giorno che GIORNI_PROVA cambia questa
-                frase diventerebbe falsa per tutti quelli di prima. Una frase
-                che non promette un numero non può invecchiare.
-                E il numero non manca a nessuno: il titolo qui sopra dice già
-                che la prova è finita, il riquadro sotto dice già il prezzo.
-                Quello che a questo punto non è scritto da nessuna parte è
-                l'unica cosa che uno si chiede davvero — «i miei dati ci sono
-                ancora?». Ci sono: bloccare l'accesso non cancella niente. */}
-            I tuoi dati sono rimasti tutti dove li hai lasciati. Per tornare a vederli, attiva l'abbonamento mensile.
-          </p>
-
-          <div className="card px-6 py-7 mb-8">
-            <p className="cifra-grande" style={{ fontSize: 44, lineHeight: 1, letterSpacing: "-.035em" }}>
-              29 €<span className="t-corpo" style={{ fontWeight: 400, color: "var(--tenue)", letterSpacing: 0 }}> / mese</span>
+        {inAttesaDiConferma ? (
+          <div className="text-center">
+            <h2 className="t-sezione mb-3">Stiamo aspettando la conferma del pagamento</h2>
+            <p className="t-corpo mb-8 mx-auto" style={{ color: "var(--muted)", maxWidth: "44ch" }}>
+              Il pagamento risulta inviato, ma la conferma della banca non è ancora arrivata.
+              Può metterci qualche minuto. <strong style={{ color: "var(--txt)" }}>Non pagare una seconda volta</strong>:
+              se l'addebito è andato a buon fine, l'accesso si riapre da solo.
             </p>
-            <p className="t-piccolo mt-3" style={{ color: "var(--muted)" }}>Disdici quando vuoi, senza vincoli.</p>
+            <p className="t-piccolo mb-8 mx-auto" style={{ color: "var(--tenue)", maxWidth: "44ch" }}>
+              I tuoi dati sono al loro posto e non è stato toccato niente.
+            </p>
+
+            {ancoraNiente && (
+              <div className="mb-6 text-left">
+                <Avviso tono="avviso">
+                  Ancora nessuna conferma. Se fra qualche minuto non cambia niente, scrivici:
+                  il pagamento risulterà nel tuo estratto conto e lo sistemiamo noi.
+                </Avviso>
+              </div>
+            )}
+
+            <Bottone variante="primario" className="w-full" onClick={ricontrolla} disabled={ricontrollando}>
+              {ricontrollando ? <Loader2 size={15} strokeWidth={1.75} className="animate-spin" /> : <RotateCcw size={15} strokeWidth={1.75} />}
+              {ricontrollando ? "Sto controllando…" : "Ricontrolla adesso"}
+            </Bottone>
+            <button type="button" onClick={onUscire} className="t-piccolo mt-6 btn" style={{ color: "var(--muted)" }}>
+              Esci e torna più tardi
+            </button>
           </div>
+        ) : (
+          <div className="text-center">
+            <h2 className="t-sezione mb-3">Il periodo di prova è terminato</h2>
+            <p className="t-corpo mb-8 mx-auto" style={{ color: "var(--muted)", maxWidth: "44ch" }}>
+              {/* Nessun numero di giorni: la scadenza è congelata per account su
+                  aziende.prova_fino_al, quindi non esiste UNA durata da nominare.
+                  Al suo posto l'unica cosa che uno si chiede davvero davanti a
+                  questa schermata — «i miei dati ci sono ancora?». Ci sono:
+                  bloccare l'accesso non cancella niente. */}
+              I tuoi dati sono rimasti tutti dove li hai lasciati. Per tornare a vederli, attiva l'abbonamento.
+            </p>
 
-          {errore && <div className="mb-5 text-left"><Avviso tono="errore">{errore}</Avviso></div>}
+            {capienza ? (
+              <div className="mb-8 text-left">
+                <ScegliPeriodicita capienza={capienza} valore={fatturazione} onCambia={setFatturazione} />
+              </div>
+            ) : (
+              /* Senza i dati del piano non si inventa un prezzo: si lascia
+                 comunque il bottone, e il prezzo lo dirà Stripe nella sua
+                 pagina, che è comunque il posto dove si conferma. */
+              <p className="t-piccolo mb-8" style={{ color: "var(--tenue)" }}>
+                Il prezzo del tuo piano è indicato nella pagina di pagamento.
+              </p>
+            )}
 
-          <Bottone variante="primario" className="w-full" onClick={abbonati} disabled={caricando}>
-            {caricando ? <Loader2 size={15} strokeWidth={1.75} className="animate-spin" /> : <ArrowRight size={15} strokeWidth={1.75} />}
-            {caricando ? "Un attimo…" : "Abbonati ora"}
-          </Bottone>
-          <button type="button" onClick={onUscire} className="t-piccolo mt-6 btn" style={{ color: "var(--muted)" }}>
-            Esci e torna più tardi
-          </button>
-        </div>
+            {errore && <div className="mb-5 text-left"><Avviso tono="errore">{errore}</Avviso></div>}
+
+            <Bottone variante="primario" className="w-full" onClick={abbonati} disabled={caricando}>
+              {caricando ? <Loader2 size={15} strokeWidth={1.75} className="animate-spin" /> : <ArrowRight size={15} strokeWidth={1.75} />}
+              {caricando ? "Un attimo…" : "Abbonati ora"}
+            </Bottone>
+            <button type="button" onClick={onUscire} className="t-piccolo mt-6 btn" style={{ color: "var(--muted)" }}>
+              Esci e torna più tardi
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1777,20 +1882,33 @@ const ICONE_STATO = {
   scaduto: AlertTriangle,
 };
 
-function VistaAbbonamento({ info }) {
+function VistaAbbonamento({ info, inAttesaDiConferma, onRicontrolla }) {
   const [caricando, setCaricando] = useState(false);
   const [errore, setErrore] = useState(null);
+  /* Si parte dalla periodicità che l'azienda ha già: se paga annuale, la
+     schermata non deve proporre il mensile come se fosse la normalità. */
+  const [fatturazione, setFatturazione] = useState(info?.capienza?.fatturazione || "mensile");
+  const [ricontrollando, setRicontrollando] = useState(false);
+  const [ancoraNiente, setAncoraNiente] = useState(false);
 
   const vai = async (azione) => {
     setErrore(null);
     setCaricando(true);
     try {
-      const url = azione === "portale" ? await datiAPI.avviaPortale() : await datiAPI.avviaCheckout();
+      const url = azione === "portale" ? await datiAPI.avviaPortale() : await datiAPI.avviaCheckout(fatturazione);
       window.location.href = url;
     } catch (e) {
       setErrore("Non è stato possibile completare l'operazione. Riprova tra poco.");
       setCaricando(false);
     }
+  };
+
+  const ricontrolla = async () => {
+    setAncoraNiente(false);
+    setRicontrollando(true);
+    const ok = await onRicontrolla?.();
+    setRicontrollando(false);
+    if (!ok) setAncoraNiente(true);
   };
 
   /* Le etichette NON stanno più qui. Stanno in statoAbbonamento.js, e da lì le
@@ -1824,12 +1942,39 @@ function VistaAbbonamento({ info }) {
               )}
             </div>
 
-            <div className="px-6 py-6 mb-6" style={{ background: "var(--tela-alt)", borderRadius: "var(--r-sm)" }}>
-              <p className="cifra-grande" style={{ fontSize: 34, lineHeight: 1 }}>
-                29 €<span className="t-corpo" style={{ fontWeight: 400, color: "var(--tenue)", letterSpacing: 0 }}> / mese</span>
-              </p>
-              <p className="t-piccolo mt-3" style={{ color: "var(--muted)" }}>Fatturazione mensile ricorrente. Disdici quando vuoi.</p>
-            </div>
+            {/* PAGATO MA NON CONFERMATO. Sta in cima a tutto, perché è la sola
+                cosa che conta finché dura: qualcuno ha speso dei soldi e il
+                software non gliene ha dato atto. Prima qui non compariva
+                niente e l'utente restava a chiedersi se fosse andata a buon
+                fine. */}
+            {inAttesaDiConferma && (
+              <div className="mb-7">
+                <Avviso tono="avviso" icona={Clock}>
+                  <strong style={{ fontWeight: 600 }}>Il pagamento risulta inviato, ma non ne abbiamo ancora la conferma.</strong>
+                  {" "}Può metterci qualche minuto. Non pagare una seconda volta: se l'addebito è andato a buon fine,
+                  l'abbonamento si attiva da solo.
+                </Avviso>
+                <div className="mt-3 flex items-center gap-3">
+                  <Bottone variante="fantasma" onClick={ricontrolla} disabled={ricontrollando}>
+                    {ricontrollando ? <Loader2 size={14} strokeWidth={1.75} className="animate-spin" /> : <RotateCcw size={14} strokeWidth={1.75} />}
+                    {ricontrollando ? "Sto controllando…" : "Ricontrolla adesso"}
+                  </Bottone>
+                  {ancoraNiente && (
+                    <span className="t-piccolo" style={{ color: "var(--muted)" }}>Ancora nessuna conferma.</span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Il prezzo è quello del PIANO dell'azienda, mandato dal server:
+                qui dentro non è scritto nessun importo. Agli esenti `capienza`
+                non arriva affatto, e infatti non si mostra nessun prezzo — non
+                pagano niente. */}
+            {info.capienza && info.stato !== "esente" && (
+              <div className="mb-6">
+                <ScegliPeriodicita capienza={info.capienza} valore={fatturazione} onCambia={setFatturazione} />
+              </div>
+            )}
 
             {errore && <div className="mb-6"><Avviso tono="errore">{errore}</Avviso></div>}
 
@@ -2052,6 +2197,11 @@ export default function App() {
   const [verificandoPagamento, setVerificandoPagamento] = useState(
     () => new URLSearchParams(window.location.search).get("abbonamento") === "successo"
   );
+  /* Ha pagato, ma di quel pagamento non abbiamo ancora conferma. È lo stato
+     che esiste per non lasciare nessuno in silenzio dopo aver speso dei soldi:
+     finché è acceso, l'app dice apertamente che sta aspettando invece di
+     mostrare "prova terminata" a chi ha appena pagato. */
+  const [pagamentoNonConfermato, setPagamentoNonConfermato] = useState(false);
   const [abbonamentoInfo, setAbbonamentoInfo] = useState(null); // { stato, giorniProvaRestanti, haAccesso, admin }
   const [bloccatoAbbonamento, setBloccatoAbbonamento] = useState(false);
   const [versioneAccesso, setVersioneAccesso] = useState(0); // incrementato per forzare un ricaricamento dati
@@ -2098,6 +2248,30 @@ export default function App() {
     setAbbonamentoInfo(info);
     setIsAdmin(!!info?.admin);
   }, []);
+
+  /**
+   * Ricontrolla il pagamento chiedendo al server di interrogare STRIPE.
+   *
+   * Non è un "riprova" che spera: il server va a vedere da Stripe — l'unica
+   * autorità sul fatto che un pagamento sia avvenuto — e se trova un
+   * abbonamento vivo scrive quello che il webhook avrebbe scritto. Serve al
+   * caso in cui il webhook si perde: senza questa, uno che ha pagato resta a
+   * leggere "prova terminata" finché non se ne accorge una persona.
+   *
+   * @returns true se adesso l'accesso c'è.
+   */
+  const ricontrollaPagamento = useCallback(async () => {
+    await datiAPI.riconciliaAbbonamento();
+    const info = await datiAPI.statoAbbonamento();
+    if (info) applicaStatoAbbonamento(info);
+    if (info?.haAccesso) {
+      setBloccatoAbbonamento(false);
+      setPagamentoNonConfermato(false);
+      setVersioneAccesso((v) => v + 1);
+      return true;
+    }
+    return false;
+  }, [applicaStatoAbbonamento]);
 
   /* ---------------------------------------------------------------------
      PERSISTENZA VIA BACKEND (src/datiAPI.js → GET/PUT /api/stato)
@@ -2188,15 +2362,42 @@ export default function App() {
         applicaStatoAbbonamento(info);
         setBloccatoAbbonamento(false);
         setVerificandoPagamento(false);
+        setPagamentoNonConfermato(false);
         setVersioneAccesso((v) => v + 1);
         return;
       }
-      if (tentativi >= 7) { setVerificandoPagamento(false); return; }
+      if (tentativi >= 7) {
+        /* Dieci secondi e il webhook non è arrivato. PRIMA di arrendersi si
+           chiede direttamente a Stripe: se il pagamento c'è stato, il webhook
+           era solo perso o in ritardo, e questa chiamata rimette a posto lo
+           stato invece di limitarsi a descrivere il guasto.
+           Se nemmeno Stripe conferma, si accende pagamentoNonConfermato e lo
+           si DICE. Il silenzio dopo un pagamento è la cosa peggiore che questo
+           software possa fare a qualcuno: prima qui si spegneva la schermata
+           di attesa e basta, e chi aveva appena pagato si ritrovava a leggere
+           "il periodo di prova è terminato". */
+        const rimesso = await ricontrollaPagamento();
+        if (annullato) return;
+        if (!rimesso) setPagamentoNonConfermato(true);
+        setVerificandoPagamento(false);
+        return;
+      }
       setTimeout(controlla, 1500);
     };
     controlla();
     return () => { annullato = true; };
-  }, [token, verificandoPagamento]);
+  }, [token, verificandoPagamento, ricontrollaPagamento, applicaStatoAbbonamento]);
+
+  /* Chi annulla il pagamento torna nell'app senza che succeda niente, e senza
+     un cenno sembra che qualcosa sia andato storto. Si legge una volta sola e
+     si toglie dall'indirizzo. */
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("abbonamento") !== "annullato") return;
+    const u = new URL(window.location.href);
+    u.searchParams.delete("abbonamento");
+    window.history.replaceState({}, "", u.pathname + u.search);
+    notifica("Pagamento annullato: non è stato addebitato niente.", "avviso");
+  }, [notifica]);
 
   useEffect(() => {
     if (!token || verificandoPagamento) return;
@@ -2805,7 +3006,8 @@ export default function App() {
   }
 
   if (bloccatoAbbonamento) {
-    return <PaginaAbbonamento onUscire={uscire} />;
+    return <PaginaAbbonamento onUscire={uscire} info={abbonamentoInfo}
+      inAttesaDiConferma={pagamentoNonConfermato} onRicontrolla={ricontrollaPagamento} />;
   }
 
   if (caricamento) {
@@ -3071,7 +3273,10 @@ export default function App() {
             <VistaFatture commesse={commesse} onCarica={caricaFattura} onImporta={importaFattura}
               notifica={notifica} vaiCommesse={() => setVista("commesse")} />
           )}
-          {vista === "abbonamento" && <VistaAbbonamento info={abbonamentoInfo} />}
+          {vista === "abbonamento" && (
+            <VistaAbbonamento info={abbonamentoInfo}
+              inAttesaDiConferma={pagamentoNonConfermato} onRicontrolla={ricontrollaPagamento} />
+          )}
           {vista === "admin" && isAdmin && <VistaAdmin />}
         </main>
       </div>

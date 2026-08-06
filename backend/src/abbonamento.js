@@ -163,6 +163,10 @@ export async function capienzaDi(aziendaId) {
     tetto: piano.tetto,
     fatturazione,
     prezzo: prezzoDi(piano.id, fatturazione),
+    /* Tutti e due i prezzi, così la schermata può far scegliere la periodicità
+       senza ricopiarsi nessun importo: gli euro stanno solo in piani.js. */
+    prezzoMensile: prezzoDi(piano.id, "mensile"),
+    prezzoAnnuale: prezzoDi(piano.id, "annuale"),
     mesePunta: punta.mese,
     personeMesePunta: punta.persone,
     pianoConsigliato: consigliato.id,

@@ -6,7 +6,9 @@ import { pool } from "./db.js";
 import { registroRichieste } from "./registroRichieste.js";
 import { cifraPassword, verificaPassword, generaToken, richiedeAuth } from "./auth.js";
 import { inviaEmailResetPassword } from "./email.js";
-import { stripe, PREZZO_MENSILE_CENTESIMI } from "./stripe.js";
+import { stripe, prezzoStripeDi } from "./stripe.js";
+import { chiaveListinoDellaSottoscrizione, letturaSottoscrizione } from "./sottoscrizioneStripe.js";
+import { pianoDi, fatturazioneDi, daChiaveListino } from "./piani.js";
 import { richiedeAbbonamentoAttivo, statoAbbonamentoDi, capienzaDi, GIORNI_PROVA } from "./abbonamento.js";
 import { adminRouter, richiedeAdmin, eAdmin } from "./admin.js";
 import {
@@ -54,13 +56,32 @@ app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async
   try {
     const tipiSottoscrizione = ["customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted"];
     if (tipiSottoscrizione.includes(event.type)) {
-      const subscription = event.data.object;
-      const statoStripe = event.type === "customer.subscription.deleted" ? "canceled" : subscription.status;
-      const nuovoStato = ["active", "trialing"].includes(statoStripe) ? "attivo" : "scaduto";
-      await pool.query(
-        "UPDATE aziende SET stato_abbonamento = $1, stripe_subscription_id = $2 WHERE stripe_customer_id = $3",
-        [nuovoStato, subscription.id, subscription.customer]
-      );
+      /* Cosa scrivere lo decide una funzione pura in stripe.js, provata a
+         parte: qui resta solo la scrittura. */
+      const { stato, sottoscrizioneId, clienteId, acquisto } = letturaSottoscrizione(event);
+
+      if (acquisto) {
+        await pool.query(
+          `UPDATE aziende SET stato_abbonamento = $1, stripe_subscription_id = $2,
+                              piano = $4, fatturazione = $5
+            WHERE stripe_customer_id = $3`,
+          [stato, sottoscrizioneId, clienteId, acquisto.piano, acquisto.fatturazione]
+        );
+      } else {
+        /* Non si è capito quale piano: si scrive lo STATO e non si tocca il
+           piano. Il log resta rumoroso apposta — è una cosa che qualcuno deve
+           andare a guardare, non un caso da assorbire in silenzio. */
+        console.error(
+          `Webhook Stripe: sottoscrizione ${sottoscrizioneId} senza un piano riconoscibile ` +
+          `(lookup_key "${chiaveListinoDellaSottoscrizione(event.data.object)}", ` +
+          `metadati "${event.data.object?.metadata?.piano}"/"${event.data.object?.metadata?.fatturazione}"). ` +
+          "Stato aggiornato, piano lasciato com'era."
+        );
+        await pool.query(
+          "UPDATE aziende SET stato_abbonamento = $1, stripe_subscription_id = $2 WHERE stripe_customer_id = $3",
+          [stato, sottoscrizioneId, clienteId]
+        );
+      }
     }
     res.json({ received: true });
   } catch (e) {
@@ -254,16 +275,38 @@ app.get("/api/abbonamento/stato", richiedeAuth, async (req, res) => {
   }
 });
 
-/** Crea una sessione di Stripe Checkout (pagina ospitata da Stripe: il numero
- *  di carta non passa mai dal nostro backend) per l'abbonamento mensile. */
+/**
+ * Crea una sessione di Stripe Checkout (pagina ospitata da Stripe: il numero
+ * di carta non passa mai dal nostro backend).
+ *
+ * IL PIANO LO DECIDE IL SERVER, leggendolo da `aziende.piano`. Dal client
+ * arriva solo la periodicità, mensile o annuale. Così non c'è nessun modo di
+ * chiedere un piano diverso da quello che si ha, e non c'è niente da validare
+ * sul piano: quello che non arriva dal client non può essere manomesso.
+ *
+ * Il prezzo si cerca su Stripe per NOME (lookup_key), non per identificatore:
+ * gli importi restano solo in piani.js. Se il prezzo non esiste la sessione
+ * non parte — meglio un errore chiaro che una cifra improvvisata.
+ */
 app.post("/api/abbonamento/checkout", richiedeAuth, async (req, res) => {
   try {
     const ris = await pool.query(
-      "SELECT stripe_customer_id, u.email FROM aziende a JOIN utenti u ON u.azienda_id = a.id WHERE a.id = $1",
+      "SELECT a.stripe_customer_id, a.piano, u.email FROM aziende a JOIN utenti u ON u.azienda_id = a.id WHERE a.id = $1",
       [req.aziendaId]
     );
     const riga = ris.rows[0];
     if (!riga) return res.status(404).json({ errore: "Azienda non trovata." });
+
+    const piano = pianoDi(riga.piano);
+    const fatturazione = fatturazioneDi(req.body?.fatturazione);
+
+    let prezzo;
+    try {
+      prezzo = await prezzoStripeDi(piano.id, fatturazione);
+    } catch (e) {
+      console.error("Prezzo Stripe mancante:", e.message);
+      return res.status(503).json({ errore: "Il pagamento non è disponibile in questo momento. Riprova più tardi." });
+    }
 
     let customerId = riga.stripe_customer_id;
     if (!customerId) {
@@ -275,26 +318,69 @@ app.post("/api/abbonamento/checkout", richiedeAuth, async (req, res) => {
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer: customerId,
-      line_items: [
-        {
-          price_data: {
-            currency: "eur",
-            product_data: { name: "Abbonamento Commexa" },
-            unit_amount: PREZZO_MENSILE_CENTESIMI,
-            recurring: { interval: "month" },
-          },
-          quantity: 1,
-        },
-      ],
+      line_items: [{ price: prezzo.id, quantity: 1 }],
       success_url: `${FRONTEND_URL}/?abbonamento=successo`,
       cancel_url: `${FRONTEND_URL}/?abbonamento=annullato`,
       metadata: { aziendaId: req.aziendaId },
+      /* I metadati vanno su subscription_data e non solo sulla sessione: quelli
+         della sessione restano sulla sessione, e il webhook riceve la
+         SOTTOSCRIZIONE. Restano comunque la cintura di sicurezza — la fonte
+         vera è il prezzo. */
+      subscription_data: { metadata: { aziendaId: req.aziendaId, piano: piano.id, fatturazione } },
     });
 
     res.json({ url: session.url });
   } catch (e) {
     console.error(e);
     res.status(500).json({ errore: "Impossibile avviare il pagamento." });
+  }
+});
+
+/**
+ * RICONCILIAZIONE: chiede a Stripe come stanno davvero le cose.
+ *
+ * È la rete per il caso peggiore del prodotto: uno paga, il webhook non arriva
+ * (perso, in ritardo, endpoint mal configurato) e l'applicazione continua a
+ * dirgli che la prova è finita. Un silenzio dopo un pagamento è la cosa
+ * peggiore che questo software possa fare a qualcuno.
+ *
+ * Qui NON si dà accesso a nessuno sulla fiducia: si interroga Stripe, che è
+ * l'unica autorità sul fatto che un pagamento sia andato a buon fine, e si
+ * scrive esattamente quello che avrebbe scritto il webhook. Se Stripe dice che
+ * non c'è nessuna sottoscrizione attiva, non cambia niente.
+ */
+app.post("/api/abbonamento/riconcilia", richiedeAuth, async (req, res) => {
+  try {
+    const ris = await pool.query("SELECT stripe_customer_id FROM aziende WHERE id = $1", [req.aziendaId]);
+    const customerId = ris.rows[0]?.stripe_customer_id;
+    if (!customerId) return res.json({ trovata: false, motivo: "nessun pagamento mai avviato" });
+
+    const abbonamenti = await stripe.subscriptions.list({ customer: customerId, status: "all", limit: 10 });
+    const viva = abbonamenti.data.find((s) => ["active", "trialing"].includes(s.status));
+
+    if (!viva) return res.json({ trovata: false, motivo: "Stripe non risulta nessun abbonamento attivo" });
+
+    const acquisto =
+      daChiaveListino(chiaveListinoDellaSottoscrizione(viva)) ||
+      daChiaveListino(`${viva.metadata?.piano}_${viva.metadata?.fatturazione}`);
+
+    if (acquisto) {
+      await pool.query(
+        `UPDATE aziende SET stato_abbonamento = 'attivo', stripe_subscription_id = $2,
+                            piano = $3, fatturazione = $4 WHERE id = $1`,
+        [req.aziendaId, viva.id, acquisto.piano, acquisto.fatturazione]
+      );
+    } else {
+      console.error(`Riconciliazione: sottoscrizione ${viva.id} senza piano riconoscibile. Stato aggiornato, piano lasciato com'era.`);
+      await pool.query(
+        "UPDATE aziende SET stato_abbonamento = 'attivo', stripe_subscription_id = $2 WHERE id = $1",
+        [req.aziendaId, viva.id]
+      );
+    }
+    res.json({ trovata: true, ...(acquisto || {}) });
+  } catch (e) {
+    console.error("Errore riconciliando con Stripe:", e);
+    res.status(502).json({ errore: "Non è stato possibile interrogare Stripe. Riprova fra poco." });
   }
 });
 

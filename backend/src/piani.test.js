@@ -11,6 +11,7 @@
 import {
   PIANI, ORDINE, PIANO_PREDEFINITO, MESI_PAGATI_ANNUALE,
   pianoDi, pianoPerDipendenti, bastaIlPiano, prezzoDi, fatturazioneDi, elencoPiani,
+  chiaveListino, daChiaveListino, tutteLeCombinazioni,
 } from "./piani.js";
 
 let passati = 0, falliti = 0;
@@ -132,6 +133,55 @@ prova("elencoPiani è ordinato dal più piccolo e porta anche il prezzo annuale"
   uguale(e.map((p) => p.id), ORDINE);
   uguale(e.map((p) => p.prezzoAnnuale), [490, 990, 1790]);
   uguale(e.map((p) => p.tetto), [10, 30, null]);
+});
+
+/* ------------------------------------------------------------------ */
+
+console.log("\nLA CHIAVE DI LISTINO (il lookup_key su Stripe)");
+
+prova("si scrive piano_periodicità", () => {
+  uguale(chiaveListino("cantiere", "mensile"), "cantiere_mensile");
+  uguale(chiaveListino("impresa", "annuale"), "impresa_annuale");
+  uguale(chiaveListino("struttura", "mensile"), "struttura_mensile");
+});
+
+prova("le sei chiavi sono sei, tutte diverse", () => {
+  const c = tutteLeCombinazioni();
+  uguale(c.length, 6);
+  uguale(new Set(c.map((x) => x.chiave)).size, 6, "chiavi distinte");
+});
+
+prova("andata e ritorno: ogni chiave si rilegge esattamente com'è stata scritta", () => {
+  /* È la proprietà che tiene in piedi tutto: il webhook capisce quale piano è
+     stato comprato SOLO se questa funzione sa rileggere quello che l'altra ha
+     scritto. Se qualcuno cambia il formato da una parte sola, qui cade. */
+  for (const { piano, fatturazione, chiave } of tutteLeCombinazioni()) {
+    uguale(daChiaveListino(chiave), { piano, fatturazione }, `andata e ritorno su ${chiave}`);
+  }
+});
+
+prova("la chiave porta con sé il prezzo giusto e l'intervallo giusto", () => {
+  const c = tutteLeCombinazioni();
+  const impresaAnno = c.find((x) => x.chiave === "impresa_annuale");
+  uguale(impresaAnno.euro, 990);
+  uguale(impresaAnno.intervallo, "year");
+  const cantiereMese = c.find((x) => x.chiave === "cantiere_mensile");
+  uguale(cantiereMese.euro, 49);
+  uguale(cantiereMese.intervallo, "month");
+});
+
+prova("una chiave che non si riconosce NON diventa un piano", () => {
+  /* Nessun ripiego che afferma (PRODUCT.md). Qui un'ipotesi vorrebbe dire
+     scrivere nel database che un'azienda ha comprato una cosa che non ha
+     comprato. */
+  for (const storta of ["", "cantiere", "cantiere_", "_mensile", "vip_mensile",
+                        "cantiere_trimestrale", "cantiere_mensile_extra", null, undefined, 42]) {
+    uguale(daChiaveListino(storta), null, `con ${JSON.stringify(storta)}`);
+  }
+});
+
+prova("maiuscole e spazi non impediscono di riconoscere una chiave", () => {
+  uguale(daChiaveListino("  IMPRESA_ANNUALE  "), { piano: "impresa", fatturazione: "annuale" });
 });
 
 console.log(`\n${passati} prove passate, ${falliti} fallite\n`);

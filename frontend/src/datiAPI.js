@@ -385,15 +385,34 @@ export const datiAPI = {
     }
   },
 
-  /** Avvia il pagamento: ritorna l'URL di Stripe Checkout a cui reindirizzare. */
-  async avviaCheckout() {
+  /** Avvia il pagamento: ritorna l'URL di Stripe Checkout a cui reindirizzare.
+   *  Si manda solo la periodicità — il PIANO lo decide il server leggendolo dal
+   *  database, così non c'è modo di chiederne uno diverso dal proprio. */
+  async avviaCheckout(fatturazione) {
     const res = await fetch(`${API_BASE}/api/abbonamento/checkout`, {
       method: "POST",
-      headers: headerAuth(),
+      headers: { "Content-Type": "application/json", ...headerAuth() },
+      body: JSON.stringify({ fatturazione }),
     });
     if (!res.ok) throw new Error("Impossibile avviare il pagamento.");
     const dati = await res.json();
     return dati.url;
+  },
+
+  /** Chiede al server di ricontrollare su Stripe se il pagamento è andato a
+   *  buon fine. Serve quando il webhook tarda o si perde: senza questa, chi ha
+   *  pagato resterebbe a leggere "prova terminata". */
+  async riconciliaAbbonamento() {
+    try {
+      const res = await fetch(`${API_BASE}/api/abbonamento/riconcilia`, {
+        method: "POST",
+        headers: headerAuth(),
+      });
+      if (!res.ok) return { trovata: false };
+      return await res.json();
+    } catch (e) {
+      return { trovata: false };
+    }
   },
 
   /** Apre il portale Stripe per gestire un abbonamento già attivo (metodo di
