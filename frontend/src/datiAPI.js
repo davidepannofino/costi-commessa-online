@@ -173,6 +173,23 @@ export const datiAPI = {
     }
     if (res.status === 401) { gestoreSessioneScaduta?.(); return { ok: false, motivo: "sessione scaduta", gestito: true }; }
     if (res.status === 402) { gestoreAbbonamentoRichiesto?.(); return { ok: false, motivo: "abbonamento richiesto", gestito: true }; }
+    /* IL SERVER HA RIFIUTATO PERCHÉ CANCELLEREBBE TROPPO. È un caso a sé e non
+       un errore qualunque, perché la cura è opposta a quella di tutti gli
+       altri: negli altri casi ricaricare la pagina PERDE il lavoro non
+       salvato, qui ricaricare è esattamente ciò che va fatto — sul server i
+       dati sono intatti, ed è la copia nel browser a essere sbagliata.
+       Si porta su i numeri veri, così il messaggio può dirli invece di
+       spaventare con un errore generico. */
+    if (res.status === 409) {
+      const d = await res.json().catch(() => null);
+      return {
+        ok: false,
+        rifiutatoPerCancellazioni: true,
+        cancellerebbe: d?.cancellerebbe ?? null,
+        esistenti: d?.esistenti ?? null,
+        motivo: "il server ha rifiutato: cancellerebbe troppe registrazioni",
+      };
+    }
     if (!res.ok) {
       const dettaglio = await res.json().catch(() => null);
       console.error("Salvataggio non riuscito:", res.status, dettaglio);

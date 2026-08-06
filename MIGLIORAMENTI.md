@@ -27,49 +27,98 @@ miglioramenti diventa una lista dei desideri.
 
 ---
 
-## 1. Il salvataggio riscrive tutto a partire da quello che ha il browser
+## 1. Oltre 600 istruzioni verso il database per aver cambiato una cifra
 
-**Cosa manca.** `PUT /api/stato` cancella e riscrive l'intero dataset
-dell'azienda — dipendenti, commesse, registrazioni — con quello che gli manda
-la scheda del browser. Il browser tiene il mondo; il database ne è la copia.
-Una lettura incompleta, una scheda aperta da ieri, una rete caduta a metà: il
-salvataggio successivo scrive quella versione sopra i dati veri. **È il rischio
-più serio dell'applicazione.**
+**Cosa manca.** `PUT /api/stato` cancella tutte le registrazioni dell'azienda e
+le reinserisce **una per una**: per PIEMME sono una `DELETE` più 624 `INSERT`,
+ognuna con il suo viaggio fino a Neon, a ogni salvataggio. E il salvataggio
+scatta a ogni modifica, 600 ms dopo l'ultimo tasto.
 
-**Chi ne soffre.** Chiunque, senza accorgersene, e in un modo che non lascia
-tracce: il salvataggio riesce, risponde `{ok:true}`, e i dati di prima non ci
-sono più.
+Dipendenti e commesse non si fanno più così: si toccano solo le righe davvero
+cambiate. Le registrazioni sono rimaste indietro perché sono le uniche senza
+figli, quindi cancellarle e riscriverle non rompeva nessun vincolo — comodo,
+finché le righe erano poche.
 
-**Cosa c'è oggi.** Solo `pronto` (`App.jsx`), che impedisce di salvare nella
-finestra fra il primo disegno della pagina e l'arrivo dei dati. Ha un buco:
-`pronto.current = true` si esegue **anche quando la lettura è fallita**, fuori
-dal `if (dati)`. Dopo un errore di rete lo stato resta agli array vuoti e il
-salvataggio è armato; basta una modifica qualsiasi. Non esiste nessun controllo
-sul crollo del numero di righe, né lato browser né lato server (il server
-verifica solo che siano array), e non esiste nessuna versione confrontata: fra
-due schede vince l'ultima che scrive.
+**Chi ne soffre.** Chi inserisce ore, cioè l'uso principale del prodotto. Ogni
+riga battuta costa più di seicento istruzioni, e il costo cresce con lo storico:
+più anni di lavoro ci sono dentro, più lento diventa aggiungere una riga. È un
+prodotto che rallenta man mano che lo si usa bene.
 
-**E `salvaSubitoConBackup` non fa nessun backup.** Passa `{forzaBackup: true}` a
-una funzione che accetta due parametri: il terzo viene buttato via in silenzio.
-È un residuo della versione Electron, dove `store.js` faceva le istantanee su
-disco. Sul server non c'è nessuna tabella di istantanee. Il nome promette una
-rete di sicurezza che non esiste, e lo fa proprio nei tre punti che fanno più
-danno: svuota, import, ripristino.
+**Perché non è stato fatto.** Perché la protezione contro la perdita di dati
+(la soglia sulle cancellazioni) andava fatta prima, ed è stata fatta senza
+toccare questo: la soglia conta le righe che sparirebbero e funziona identica
+con o senza il confronto.
+
+**E va detto chiaro che il confronto riga per riga NON è una protezione.** Le
+righe presenti nel database e assenti nell'elenco in arrivo verrebbero
+cancellate lo stesso: è la stessa decisione, con lo stesso esito. Una scheda
+vecchia distrugge le stesse righe in tutti e due i modi. Questo è un lavoro
+sulle prestazioni, e chiamarlo sicurezza sarebbe la peggiore delle illusioni —
+sentirsi protetti da un cambiamento che non protegge.
+
+**Da fare:** confrontare per id come già si fa per dipendenti e commesse,
+scrivendo solo le righe nuove, quelle cambiate e quelle sparite. Con
+`INSERT … ON CONFLICT DO UPDATE` in blocco invece di un giro per riga.
+
+---
+
+## 2. Fra due schede aperte vince l'ultima che scrive
+
+**Cosa manca.** Il salvataggio non porta nessuna versione: se la stessa azienda
+ha due schede aperte, ognuna riscrive sopra l'altra e nessuna se ne accorge.
+Non c'è un `updated_at` confrontato, non c'è un `If-Match`, non c'è niente che
+possa dire «questi dati sono cambiati da quando li hai letti».
+
+**Chi ne soffre.** Chiunque lavori da due posti — l'ufficio e casa, il
+computer e il telefono — o semplicemente lasci una scheda aperta.
+
+**Cosa c'è oggi, e cosa copre.** Da agosto 2026 il server rifiuta un
+salvataggio che **cancellerebbe** più di 10 registrazioni (o più di un quarto,
+sopra le 20) senza una dichiarazione esplicita, e il rifiuto dice i numeri e
+invita a ricaricare. Copre il caso grave — il lavoro che sparisce — e copre
+anche buona parte del conflitto fra schede, perché una scheda vecchia di
+solito cancella molto.
+
+**Cosa NON copre.** Due schede che si sovrascrivono a vicenda **senza
+cancellare**: due modifiche allo stesso lordo mensile, due rinomine, righe
+aggiunte da una e non viste dall'altra sotto la soglia. Lì l'ultima scrittura
+vince ancora, in silenzio.
 
 **Perché non è stato fatto.** Perché non è una toppa, è un cambio di modello:
 o si passa a scritture per singola operazione (come già fanno materiali e
 allegati), o si aggiunge una versione all'azienda e il salvataggio rifiuta di
 sovrascrivere una versione più recente della propria. La prima strada è la
 giusta e la più lunga; la seconda è più corta ma va decisa insieme al
-comportamento da mostrare in caso di conflitto.
-
-**Il primo passo, piccolo e a sé:** spostare `pronto.current = true` dentro il
-ramo che ha ricevuto i dati, e rinominare `salvaSubitoConBackup` in modo che
-non prometta un backup che non fa.
+comportamento da mostrare in caso di conflitto — e «hai perso» non è una
+risposta accettabile da mostrare a qualcuno che ha appena scritto.
 
 ---
 
-## 2. Con abbonamento attivo il piano non si può cambiare
+## 3. Nessun backup automatico prima delle operazioni distruttive
+
+**Cosa manca.** Svuota tutto, ripristino di un backup e import con
+«sostituisci» cambiano molti dati in un colpo, e non ne resta nessuna copia. Se
+qualcuno conferma per sbaglio, l'unico rimedio è un backup JSON che si è
+ricordato di scaricare prima.
+
+**Cosa c'era prima, e che non c'era.** La funzione che gestisce quei tre
+percorsi si chiamava `salvaSubitoConBackup` e passava `{forzaBackup: true}` a
+una funzione con due parametri: il terzo veniva buttato via in silenzio. Era un
+residuo della versione Electron, dove `store.js` faceva le istantanee su disco.
+Il nome prometteva una rete che non esisteva, proprio nei tre punti che fanno
+più danno. Ad agosto 2026 è stata rinominata `salvaSubitoDichiarando`, che è
+quello che fa davvero: **il nome non mente più, ma il backup continua a non
+esserci.**
+
+**Perché non è stato fatto.** Perché un backup vero vuole decisioni che non si
+prendono di fretta: dove si tiene (una tabella di istantanee? l'archivio
+esterno?), per quanto tempo si conserva, chi lo può ripescare e da dove. Farne
+uno approssimativo mentre si sistemava il nome avrebbe ricreato lo stesso
+problema di prima: una seconda rete finta, stavolta con le prove a coprirla.
+
+---
+
+## 4. Con abbonamento attivo il piano non si può cambiare
 
 **Cosa manca.** Chi ha già un abbonamento attivo non ha nessun modo, dentro
 l'applicazione, di passare a un piano superiore. Nella schermata Abbonamento i
@@ -95,7 +144,7 @@ PRODUCT.md, «Non deciso»).
 
 ---
 
-## 3. Chi se ne va non può portare via i file dei documenti archiviati
+## 5. Chi se ne va non può portare via i file dei documenti archiviati
 
 **Cosa manca.** L'esportazione dà tutto: ore, dipendenti, commesse, materiali, e
 l'**inventario** dei documenti — nome, data, fornitore, a quale commessa sono
@@ -127,3 +176,20 @@ che succede quando un prodotto funziona — smetterebbe di esserlo.
   nessuna. La chiave esterna delle registrazioni è passata da `ON DELETE
   CASCADE` a `RESTRICT`, e il salvataggio non cancella più tutti i dipendenti
   per riscriverli. Vedi PRODUCT.md, principio 6.
+
+- **Un salvataggio poteva cancellare il lavoro di una giornata** (7 agosto
+  2026). Il server adesso conta quante registrazioni sparirebbero e **rifiuta**
+  se sono più di 10 (o più di un quarto, sopra le 20) senza una dichiarazione
+  esplicita: risponde 409, non apre nemmeno la transazione, e la pagina dice i
+  numeri veri e invita a ricaricare. Le quattro operazioni che cancellano in
+  blocco dopo una conferma — svuota, ripristino, import con «sostituisci»,
+  eliminazione di una commessa — dichiarano quante righe si aspettano di
+  perdere; **il salvataggio automatico non lo dichiara mai**, ed è quella
+  l'asimmetria che protegge. In più `pronto.current` è rientrato nel ramo che
+  ha ricevuto i dati, così una lettura fallita non arma più il salvataggio.
+
+- **Verificato che il salvataggio sia una transazione sola** (7 agosto 2026).
+  `BEGIN` … `COMMIT` su una connessione sola, e nessuna query che esca dal
+  client: una connessione che cade a metà non lascia il database mezzo
+  cancellato, Postgres annulla tutto. Non era un cambiamento, era un dubbio
+  legittimo — e ora è una cosa verificata invece che sperata.

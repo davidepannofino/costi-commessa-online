@@ -2602,8 +2602,17 @@ export default function App() {
         setAllegati(Array.isArray(dati.allegati) ? dati.allegati : []);
         if (dati.spazioAllegati) setSpazioAllegati(dati.spazioAllegati);
         if (typeof dati.azienda === "string") setAzienda(dati.azienda);
+        /* SI SALVA SOLO DOPO AVER CARICATO DAVVERO.
+           Questa riga stava fuori dall'if, e quindi il salvataggio si armava
+           anche quando la lettura era FALLITA: lo stato restava agli array
+           vuoti iniziali, e la prima modifica qualsiasi mandava quel vuoto
+           sopra i dati veri. Dentro l'if, una lettura non riuscita lascia il
+           salvataggio disarmato e non si scrive niente.
+           NON è la difesa principale — quella sta sul server, che è l'unico a
+           sapere quante righe possiede. Questa chiude il modo più probabile
+           di arrivarci. */
+        pronto.current = true;
       }
-      pronto.current = true;
       setCaricamento(false);
       // I fornitori già visti servono solo a riempire una tendina: si chiedono
       // dopo, e se non arrivano non cambia niente di quello che si può fare.
@@ -2623,6 +2632,9 @@ export default function App() {
    */
   const salvataggioKO = useRef(false);
   const [salvataggioNonRiuscito, setSalvataggioNonRiuscito] = useState(null);
+  /* Il rifiuto del server per troppe cancellazioni: {cancellerebbe, esistenti}.
+     Separato dall'altro perche' il consiglio da dare e' opposto. */
+  const [salvataggioRifiutato, setSalvataggioRifiutato] = useState(null);
 
   const registraEsitoSalvataggio = useCallback((ris) => {
     if (!ris || ris.gestito) return ris; // sessione scaduta o abbonamento: hanno già la loro schermata
@@ -2630,8 +2642,21 @@ export default function App() {
       if (salvataggioKO.current) {
         salvataggioKO.current = false;
         setSalvataggioNonRiuscito(null);
+        setSalvataggioRifiutato(null);
         notifica("Collegamento ristabilito: le modifiche sono state salvate.");
       }
+      return ris;
+    }
+    /* IL RIFIUTO PER TROPPE CANCELLAZIONI HA UN SUO MESSAGGIO, e non può usare
+       quello degli altri guasti. Là si dice «le modifiche restano solo su
+       questo schermo», che invita a NON ricaricare per non perderle; qui
+       ricaricare è la cura, perché sul server i dati ci sono tutti ed è la
+       copia in questa pagina a essere sbagliata. Dare il consiglio opposto in
+       questo caso vorrebbe dire tenere l'utente attaccato allo stato rotto. */
+    if (ris.rifiutatoPerCancellazioni) {
+      salvataggioKO.current = true;
+      setSalvataggioRifiutato({ cancellerebbe: ris.cancellerebbe, esistenti: ris.esistenti });
+      setSalvataggioNonRiuscito(null);
       return ris;
     }
     if (!salvataggioKO.current) {
@@ -2650,18 +2675,38 @@ export default function App() {
     return () => clearTimeout(t);
   }, [dipendenti, commesse, registrazioni, azienda, registraEsitoSalvataggio]);
 
-  /** Salvataggio immediato + snapshot di sicurezza forzato, per le operazioni
-   *  che cambiano molti dati in un colpo (import, svuota, ripristino).
-   *  I materiali si mandano SOLO se presenti nella patch: ometterli significa
-   *  "lasciali come stanno" (li gestiscono le rotte /api/materiali). */
-  const salvaSubitoConBackup = useCallback(async (patch) => {
+  /**
+   * IL CANALE ESPLICITO. Salvataggio immediato per le operazioni che cancellano
+   * in blocco DOPO una conferma dell'utente: svuota tutto, ripristino di un
+   * backup, import con «sostituisci», eliminazione di una commessa.
+   *
+   * Si chiamava `salvaSubitoConBackup` e non faceva nessun backup: passava
+   * `{ forzaBackup: true }` a una funzione con due parametri, e quel terzo
+   * argomento veniva buttato via in silenzio. Era un residuo della versione
+   * Electron, dove store.js faceva le istantanee su disco. Un nome che promette
+   * una rete di sicurezza inesistente è peggio di nessun nome, e prometteva
+   * proprio nei tre punti che fanno più danno.
+   *
+   * `cancellazioniPreviste` è quello che rende questo canale diverso
+   * dall'altro: dice al server quante registrazioni ci si aspetta di perdere.
+   * Il SALVATAGGIO AUTOMATICO non lo manda mai — è quella l'asimmetria che
+   * protegge. È un numero e non un "sì" perché chi cancella apposta sa quante
+   * righe sta togliendo, mentre uno stato svuotato per sbaglio non lo sa.
+   *
+   * I materiali si mandano SOLO se presenti nella patch: ometterli significa
+   * "lasciali come stanno" (li gestiscono le rotte /api/materiali).
+   */
+  const salvaSubitoDichiarando = useCallback(async (patch) => {
+    const restanti = new Set((patch.registrazioni ?? registrazioni).map((r) => r.id));
+    const previste = registrazioni.filter((r) => !restanti.has(r.id)).length;
     const ris = await datiAPI.salva(null, {
       dipendenti: patch.dipendenti ?? dipendenti,
       commesse: patch.commesse ?? commesse,
       registrazioni: patch.registrazioni ?? registrazioni,
       azienda: patch.azienda ?? azienda,
+      cancellazioniPreviste: previste,
       ...(Array.isArray(patch.materiali) ? { materiali: patch.materiali } : {}),
-    }, { forzaBackup: true });
+    });
     return registraEsitoSalvataggio(ris);
   }, [dipendenti, commesse, registrazioni, azienda, registraEsitoSalvataggio]);
 
@@ -2854,15 +2899,26 @@ export default function App() {
   const eliminaCommessa = (com) => setConferma({
     titolo: "Eliminare la commessa?",
     testo: `Verranno eliminate anche tutte le ore registrate, i materiali e i documenti della commessa ${com.codice}. L'operazione non si può annullare.`,
-    onOk: () => {
-      setCommesse((c) => c.filter((x) => x.id !== com.id));
-      setRegistrazioni((r) => r.filter((x) => x.commessaId !== com.id));
+    /* PASSA DAL CANALE ESPLICITO, e non dal salvataggio automatico.
+       Eliminare una commessa porta via tutte le sue ore — la più grossa di
+       PIEMME ne ha 86 — e finché quel salvataggio era indistinguibile da uno
+       automatico, il server non poteva sapere se fosse una volontà o un
+       incidente. Adesso la cancellazione viene dichiarata, e tutto il resto
+       che cancella in blocco senza dichiararlo può essere rifiutato.
+       È anche più corretto di suo: un'azione distruttiva confermata merita un
+       salvataggio immediato, non uno differito di 600 ms. */
+    onOk: async () => {
+      const commesseDopo = commesse.filter((x) => x.id !== com.id);
+      const registrazioniDopo = registrazioni.filter((x) => x.commessaId !== com.id);
+      setCommesse(commesseDopo);
+      setRegistrazioni(registrazioniDopo);
       // Materiali e documenti della commessa spariscono anche sul server
       // (cascata sulla chiave esterna): qui si allinea subito la copia locale.
       setMateriali((m) => m.filter((x) => x.commessaId !== com.id));
       setAllegati((a) => a.filter((x) => x.commessaId !== com.id));
       setIdDettaglio(null);
-      notifica(`Commessa ${com.codice} eliminata.`);
+      const esito = await salvaSubitoDichiarando({ commesse: commesseDopo, registrazioni: registrazioniDopo });
+      if (esito?.ok) notifica(`Commessa ${com.codice} eliminata.`);
     },
   });
 
@@ -3095,7 +3151,7 @@ export default function App() {
     testo: "Dipendenti, commesse, registrazioni, materiali e documenti allegati verranno cancellati. Prima di procedere puoi scaricare un backup dalla sezione Dati.",
     onOk: () => {
       setDipendenti([]); setCommesse([]); setRegistrazioni([]); setMateriali([]); setAllegati([]); setIdDettaglio(null);
-      salvaSubitoConBackup({ dipendenti: [], commesse: [], registrazioni: [], materiali: [] })
+      salvaSubitoDichiarando({ dipendenti: [], commesse: [], registrazioni: [], materiali: [] })
         .then((r) => r?.ok && notifica("Tutti i dati sono stati cancellati."));
     },
   });
@@ -3105,7 +3161,7 @@ export default function App() {
     const d = creaDatiEsempio();
     setDipendenti(d.dipendenti); setCommesse(d.commesse); setRegistrazioni(d.registrazioni);
     setDal("2026-07-01"); setAl("2026-07-31");
-    const ris = await salvaSubitoConBackup({ dipendenti: d.dipendenti, commesse: d.commesse, registrazioni: d.registrazioni });
+    const ris = await salvaSubitoDichiarando({ dipendenti: d.dipendenti, commesse: d.commesse, registrazioni: d.registrazioni });
     if (ris?.ok) notifica("Dati d'esempio (luglio 2026) ricaricati.");
   };
 
@@ -3137,7 +3193,7 @@ export default function App() {
     setDipendenti(d.dipendenti); setCommesse(d.commesse); setRegistrazioni(d.registrazioni);
     if (materialiBackup) setMateriali(materialiBackup);
     if (typeof d.azienda === "string") setAzienda(d.azienda);
-    const esito = await salvaSubitoConBackup({
+    const esito = await salvaSubitoDichiarando({
       dipendenti: d.dipendenti, commesse: d.commesse, registrazioni: d.registrazioni,
       azienda: d.azienda, ...(materialiBackup ? { materiali: materialiBackup } : {}),
     });
@@ -3170,7 +3226,7 @@ export default function App() {
   const concludiImport = async (piani, decisioni, avvisi) => {
     const ris = applicaImport({ dipendenti, commesse, registrazioni }, piani, decisioni);
     setDipendenti(ris.dipendenti); setCommesse(ris.commesse); setRegistrazioni(ris.registrazioni);
-    const esito = await salvaSubitoConBackup({ dipendenti: ris.dipendenti, commesse: ris.commesse, registrazioni: ris.registrazioni });
+    const esito = await salvaSubitoDichiarando({ dipendenti: ris.dipendenti, commesse: ris.commesse, registrazioni: ris.registrazioni });
     avvisi.forEach((a) => notifica(a, "avviso"));
     if (esito?.ok) notifica(`Import completato: ${piani.length} fogli letti · ${ris.aggiunte} registrazioni aggiunte · ${ris.sostituiti} mesi sostituiti · ${ris.saltati} saltati.`);
     const applicati = piani.filter((_, i) => decisioni[i] !== "salta");
@@ -3505,6 +3561,37 @@ export default function App() {
                 <button type="button" onClick={() => setVista("abbonamento")}
                   className="t-piccolo mt-2.5 btn" style={{ fontWeight: 600, textDecoration: "underline" }}>
                   Vai all'abbonamento
+                </button>
+              </Avviso>
+            </div>
+          )}
+
+          {/* IL SERVER HA RIFIUTATO PERCHÉ CANCELLEREBBE TROPPO.
+              Prima cosa che deve leggere chi arriva qui: i dati ci sono
+              ancora. Poi il numero, perché «troppe» non vuol dire niente e
+              «319 su 624» sì. Infine la cura, che qui è ricaricare — il
+              contrario di quello che dice l'altra fascia, ed è per questo che
+              sono due messaggi separati e non uno con un se dentro. */}
+          {salvataggioRifiutato && (
+            <div className="mb-9">
+              <Avviso tono="errore">
+                <span style={{ fontWeight: 600 }}>
+                  Il server ha rifiutato il salvataggio: i tuoi dati sono al sicuro.
+                </span>
+                <span className="block mt-1.5" style={{ opacity: .9 }}>
+                  Questa pagina voleva cancellare{" "}
+                  <strong>
+                    {salvataggioRifiutato.cancellerebbe} registrazioni
+                    {salvataggioRifiutato.esistenti != null && <> su {salvataggioRifiutato.esistenti}</>}
+                  </strong>, e il server non l'ha eseguito. Vuol dire che quello che vedi qui non
+                  corrisponde più a quello che c'è salvato — succede con una scheda rimasta aperta
+                  a lungo o con un caricamento andato storto.
+                  <strong style={{ color: "var(--txt)" }}> Ricarica la pagina</strong> per rileggere i dati veri:
+                  sul server non è stato toccato niente.
+                </span>
+                <button type="button" onClick={() => window.location.reload()}
+                  className="t-piccolo mt-2.5 btn" style={{ fontWeight: 600, textDecoration: "underline" }}>
+                  Ricarica adesso
                 </button>
               </Avviso>
             </div>

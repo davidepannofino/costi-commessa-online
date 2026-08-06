@@ -9,6 +9,7 @@ import { inviaEmailResetPassword } from "./email.js";
 import { stripe, prezzoStripeDi } from "./stripe.js";
 import { chiaveListinoDellaSottoscrizione, letturaSottoscrizione, letturaFattura } from "./sottoscrizioneStripe.js";
 import { decidiTolleranza } from "./tolleranza.js";
+import { troppeCancellazioni } from "./sogliaCancellazioni.js";
 import { pianoDi, fatturazioneDi, daChiaveListino, elencoPiani, PIANI, ORDINE } from "./piani.js";
 import { richiedeAbbonamentoAttivo, richiedeAccessoAiPropriDati, statoAbbonamentoDi, capienzaDi, GIORNI_PROVA } from "./abbonamento.js";
 import { adminRouter, richiedeAdmin, eAdmin } from "./admin.js";
@@ -635,12 +636,56 @@ app.get("/api/stato", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) 
  */
 app.put("/api/stato", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) => {
   const aziendaId = req.aziendaId;
-  const { dipendenti = [], commesse = [], registrazioni = [], materiali = null, azienda = "" } = req.body || {};
+  const {
+    dipendenti = [], commesse = [], registrazioni = [], materiali = null, azienda = "",
+    /* Quante registrazioni chi salva SI ASPETTA di perdere. Lo mandano solo i
+       quattro percorsi che cancellano in blocco dopo una conferma dell'utente;
+       il salvataggio automatico non lo manda mai. Vedi sogliaCancellazioni.js. */
+    cancellazioniPreviste = 0,
+  } = req.body || {};
   if (!Array.isArray(dipendenti) || !Array.isArray(commesse) || !Array.isArray(registrazioni)) {
     return res.status(400).json({ errore: "Struttura dati non valida." });
   }
   if (materiali !== null && !Array.isArray(materiali)) {
     return res.status(400).json({ errore: "Struttura dati non valida." });
+  }
+
+  /* ---------------------------------------------------------------------
+     IL CANCELLO. Si conta PRIMA di aprire la transazione quante righe
+     sparirebbero, e se sono troppe non si comincia nemmeno.
+     Questo controllo non serve a proteggere dalla transazione a metà — quella
+     non esiste, il salvataggio è già tutto-o-niente. Serve contro un
+     salvataggio perfettamente riuscito che cancella il lavoro di una
+     giornata perché il browser aveva in pancia uno stato vecchio o vuoto.
+     Sta sul server perché è il server a possedere i dati: qualunque
+     protezione nel browser vale finché il browser sta bene, ed è proprio
+     quello il caso che non regge. */
+  const idInArrivo = registrazioni.map((r) => String(r.id));
+  const sparirebbero = Number((await pool.query(
+    `SELECT count(*)::int AS n FROM registrazioni
+      WHERE azienda_id = $1 AND NOT (id = ANY($2::text[]))`,
+    [aziendaId, idInArrivo]
+  )).rows[0].n);
+  const quante = Number((await pool.query(
+    "SELECT count(*)::int AS n FROM registrazioni WHERE azienda_id = $1", [aziendaId]
+  )).rows[0].n);
+
+  const verdetto = troppeCancellazioni({
+    esistenti: quante, cancellate: sparirebbero, dichiarate: cancellazioniPreviste,
+  });
+  if (verdetto.rifiuta) {
+    /* Rumoroso apposta: è la traccia da cercare il giorno che qualcuno dice
+       "mi sono spariti i dati". Qui invece NON sono spariti. */
+    console.error(
+      `SALVATAGGIO RIFIUTATO per ${aziendaId}: ${verdetto.motivo}. ` +
+      `Righe nel database: ${quante}, in arrivo: ${registrazioni.length}. Niente è stato toccato.`
+    );
+    return res.status(409).json({
+      errore: "Salvataggio rifiutato: cancellerebbe troppe registrazioni.",
+      cancellerebbe: sparirebbero,
+      esistenti: quante,
+      soglia: verdetto.soglia,
+    });
   }
 
   const client = await pool.connect();
