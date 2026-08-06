@@ -26,7 +26,7 @@ function vero(c, m) { if (!c) throw new Error(m); }
    backend/src/abbonamento.js. Scritti a mano perché il frontend non può
    importare il backend: se là ne nasce un quinto, questa lista va aggiornata
    e la prova qui sotto lo pretende. */
-const STATI_DAL_SERVER = ["esente", "attivo", "prova", "scaduto"];
+const STATI_DAL_SERVER = ["esente", "attivo", "prova", "scaduto", "in_ritardo"];
 
 /* ------------------------------------------------------------------ */
 

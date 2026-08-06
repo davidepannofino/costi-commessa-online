@@ -14,7 +14,7 @@
  * sveglia: un piano indovinato significa registrare che un'azienda ha comprato
  * una cosa che non ha comprato.
  */
-import { letturaSottoscrizione, chiaveListinoDellaSottoscrizione } from "./sottoscrizioneStripe.js";
+import { letturaSottoscrizione, letturaFattura, chiaveListinoDellaSottoscrizione } from "./sottoscrizioneStripe.js";
 
 let passati = 0, falliti = 0;
 function prova(nome, fn) {
@@ -106,11 +106,24 @@ prova("una lookup_key inventata non diventa un piano", () => {
 
 console.log("\nLO STATO");
 
-prova("active e trialing danno accesso, il resto no", () => {
+prova("ogni stato Stripe ha la SUA traduzione", () => {
   uguale(letturaSottoscrizione(evento({ stato: "active" })).stato, "attivo");
   uguale(letturaSottoscrizione(evento({ stato: "trialing" })).stato, "attivo");
-  for (const s of ["past_due", "unpaid", "incomplete", "incomplete_expired", "paused", "canceled"]) {
+  /* past_due sta da solo: vuol dire che Stripe STA ANCORA RIPROVANDO. Prima
+     finiva insieme a canceled in "scaduto", ed è per quello che un'impresa con
+     la carta scaduta si trovava chiusa fuori mentre stava lavorando. */
+  uguale(letturaSottoscrizione(evento({ stato: "past_due" })).stato, "in_ritardo");
+  for (const s of ["unpaid", "incomplete", "incomplete_expired", "paused", "canceled"]) {
     uguale(letturaSottoscrizione(evento({ stato: s })).stato, "scaduto", `con status "${s}"`);
+  }
+});
+
+prova("uno stato che non conosciamo NON viene tradotto", () => {
+  /* null vuol dire "non so": chi chiama deve lasciare stare la riga e far
+     rumore. Un ramo finale "altrimenti scaduto" declasserebbe un'azienda per
+     una parola che Stripe ha aggiunto e noi non abbiamo ancora imparato. */
+  for (const s of ["qualcosa_di_nuovo", "PAST_DUE", "", 42]) {
+    uguale(letturaSottoscrizione(evento({ stato: s })).stato, null, `con status ${JSON.stringify(s)}`);
   }
 });
 
@@ -122,9 +135,25 @@ prova("la cancellazione porta a scaduto anche se lo status dice ancora active", 
 });
 
 prova("un abbonamento non pagato NON risulta attivo", () => {
-  /* La regola: mai un abbonamento che sembra attivo e non lo è. */
-  uguale(letturaSottoscrizione(evento({ stato: "past_due" })).stato, "scaduto");
-  uguale(letturaSottoscrizione(evento({ stato: "unpaid" })).stato, "scaduto");
+  /* La regola resta quella: mai un abbonamento che sembra attivo e non lo è.
+     Si afferma la PROPRIETÀ — "non è attivo" — e non un valore preciso, così
+     la prova continua a proteggere la regola anche quando gli stati cambiano
+     nome o se ne aggiunge un altro. */
+  for (const s of ["past_due", "unpaid", "incomplete", "incomplete_expired", "paused", "canceled"]) {
+    const l = letturaSottoscrizione(evento({ stato: s }));
+    vero(l.stato !== "attivo", `"${s}" non deve risultare attivo, risulta "${l.stato}"`);
+  }
+});
+
+prova("in_ritardo da solo NON dà accesso: lo dà la data scritta", () => {
+  /* Questo file traduce e basta. Che l'accesso resti aperto lo decide
+     calcolaStatoAccesso guardando tolleranza_fino_al, e quella data la
+     concede tolleranza.js solo a chi ha già pagato. Se un giorno bastasse
+     "in_ritardo" per entrare, chi si iscrive con una carta rotta avrebbe
+     accesso libero. */
+  const l = letturaSottoscrizione(evento({ stato: "past_due" }));
+  uguale(l.stato, "in_ritardo");
+  vero(!("haAccesso" in l), "questa funzione non deve decidere l'accesso");
 });
 
 /* ------------------------------------------------------------------ */
@@ -135,7 +164,51 @@ prova("un evento vuoto non lancia e non inventa", () => {
   for (const e of [undefined, null, {}, { type: "x" }, { data: {} }, { data: { object: {} } }]) {
     const l = letturaSottoscrizione(e);
     uguale(l.acquisto, null, `con ${JSON.stringify(e)}`);
-    uguale(l.stato, "scaduto", "senza informazioni non si concede accesso");
+    /* Prima qui l'atteso era "scaduto". Adesso è null, ed è meglio: senza
+       informazioni non si conclude NIENTE, invece di concludere la cosa
+       peggiore. Chi chiama non scrive e fa rumore — un evento malformato non
+       deve poter togliere l'accesso a un cliente che ha pagato. */
+    uguale(l.stato, null, "senza informazioni non si conclude niente");
+  }
+});
+
+/* ------------------------------------------------------------------ */
+
+console.log("\nLE FATTURE: fino a quando Stripe riproverà");
+
+const fattura = ({ tipo = "invoice.payment_failed", ...campi } = {}) =>
+  ({ type: tipo, data: { object: { customer: "cus_1", subscription: "sub_1", ...campi } } });
+
+prova("next_payment_attempt diventa una data", () => {
+  const quando = Math.floor(Date.parse("2026-08-10T09:00:00Z") / 1000);
+  const f = letturaFattura(fattura({ next_payment_attempt: quando }));
+  uguale(f.prossimoTentativo.toISOString(), "2026-08-10T09:00:00.000Z");
+});
+
+prova("SENZA next_payment_attempt vuol dire che Stripe ha smesso", () => {
+  for (const v of [null, undefined, 0]) {
+    uguale(letturaFattura(fattura({ next_payment_attempt: v })).prossimoTentativo, null,
+      `next_payment_attempt ${JSON.stringify(v)}`);
+  }
+});
+
+prova("billing_reason distingue il rinnovo dalla prima fattura", () => {
+  vero(letturaFattura(fattura({ billing_reason: "subscription_cycle" })).eRinnovo, "subscription_cycle è un rinnovo");
+  vero(!letturaFattura(fattura({ billing_reason: "subscription_create" })).eRinnovo, "subscription_create NON lo è");
+  vero(!letturaFattura(fattura({ billing_reason: "subscription_update" })).eRinnovo, "subscription_update nemmeno");
+  vero(!letturaFattura(fattura({})).eRinnovo, "senza billing_reason non è un rinnovo");
+});
+
+prova("riconosce il pagamento riuscito", () => {
+  vero(letturaFattura(fattura({ tipo: "invoice.payment_succeeded" })).riuscita, "riuscita");
+  vero(!letturaFattura(fattura({ tipo: "invoice.payment_failed" })).riuscita, "fallita");
+});
+
+prova("una fattura vuota non fa esplodere niente", () => {
+  for (const e of [undefined, null, {}, { data: {} }, { data: { object: {} } }]) {
+    const f = letturaFattura(e);
+    uguale(f.prossimoTentativo, null, `con ${JSON.stringify(e)}`);
+    uguale(f.eRinnovo, false, "senza dati non è un rinnovo");
   }
 });
 

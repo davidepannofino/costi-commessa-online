@@ -40,10 +40,16 @@
  * QUI, e la prova in statoAbbonamento.test.js lo pretende.
  */
 export const STATI_ABBONAMENTO = {
-  esente:  { etichetta: "Accesso illimitato", tono: "euro",    icona: "illimitato" },
-  attivo:  { etichetta: "Abbonamento attivo", tono: "euro",    icona: "attivo" },
-  prova:   { etichetta: "Prova gratuita",     tono: "accento", icona: "prova" },
-  scaduto: { etichetta: "Prova terminata",    tono: "errore",  icona: "scaduto" },
+  esente:  { etichetta: "Accesso illimitato",   tono: "euro",    icona: "illimitato" },
+  attivo:  { etichetta: "Abbonamento attivo",   tono: "euro",    icona: "attivo" },
+  prova:   { etichetta: "Prova gratuita",       tono: "accento", icona: "prova" },
+  scaduto: { etichetta: "Prova terminata",      tono: "errore",  icona: "scaduto" },
+  /* Rinnovo fallito, con Stripe che sta ancora riprovando. L'etichetta dice
+     cos'è successo — «Pagamento non riuscito» — e non cosa si rischia: chi
+     legge sta lavorando, e in quel momento serve sapere il fatto, non una
+     minaccia. Il tono è d'avviso e non d'errore perché l'accesso c'è ancora e
+     nella maggior parte dei casi si risolve da solo. */
+  in_ritardo: { etichetta: "Pagamento non riuscito", tono: "accento", icona: "ritardo" },
 };
 
 /**

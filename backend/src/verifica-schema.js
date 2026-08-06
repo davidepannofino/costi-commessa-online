@@ -34,6 +34,8 @@ const ATTESE = [
   { tipo: "colonna", tabella: "aziende", nome: "piano" },
   { tipo: "colonna", tabella: "aziende", nome: "fatturazione" },
   { tipo: "colonna", tabella: "dipendenti", nome: "archiviato" },
+  { tipo: "colonna", tabella: "aziende", nome: "tolleranza_fino_al" },
+  { tipo: "colonna", tabella: "aziende", nome: "primo_fallimento_il" },
   /* Non basta che il vincolo esista: esisteva anche prima, con CASCADE. Quello
      che si verifica è la REGOLA di cancellazione, perché è lì che sta la
      differenza fra "le ore restano" e "le ore spariscono". */

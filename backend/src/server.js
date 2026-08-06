@@ -7,7 +7,8 @@ import { registroRichieste } from "./registroRichieste.js";
 import { cifraPassword, verificaPassword, generaToken, richiedeAuth } from "./auth.js";
 import { inviaEmailResetPassword } from "./email.js";
 import { stripe, prezzoStripeDi } from "./stripe.js";
-import { chiaveListinoDellaSottoscrizione, letturaSottoscrizione } from "./sottoscrizioneStripe.js";
+import { chiaveListinoDellaSottoscrizione, letturaSottoscrizione, letturaFattura } from "./sottoscrizioneStripe.js";
+import { decidiTolleranza } from "./tolleranza.js";
 import { pianoDi, fatturazioneDi, daChiaveListino, elencoPiani, PIANI, ORDINE } from "./piani.js";
 import { richiedeAbbonamentoAttivo, richiedeAccessoAiPropriDati, statoAbbonamentoDi, capienzaDi, GIORNI_PROVA } from "./abbonamento.js";
 import { adminRouter, richiedeAdmin, eAdmin } from "./admin.js";
@@ -41,8 +42,16 @@ const SCADENZA_RESET_MS = 60 * 60 * 1000; // 1 ora
  * Webhook Stripe: DEVE stare prima di express.json() perché la verifica della
  * firma richiede il corpo grezzo (byte per byte), non il JSON già parsato.
  * Aggiorna stato_abbonamento in base allo stato reale dell'abbonamento su
- * Stripe: Stripe stessa riflette qui i tentativi di riaddebito falliti,
- * quindi non serve ascoltare separatamente gli eventi di pagamento.
+ * Stripe, e ascolta DUE famiglie di eventi.
+ *
+ * Le sottoscrizioni dicono in che stato è l'abbonamento. Le fatture dicono
+ * quando Stripe riproverà a incassare, e quel dato non sta da nessun'altra
+ * parte: `next_payment_attempt` è un campo della fattura, non della
+ * sottoscrizione. Qui c'era scritto che ascoltare gli eventi di pagamento non
+ * serviva, "perché la sottoscrizione già li riflette" — vero per lo STATO,
+ * falso per la scadenza. Senza le fatture sapremmo che un rinnovo è fallito e
+ * non fino a quando aspettare, e la tolleranza tornerebbe a essere un numero
+ * scelto da noi invece che il tempo vero di Stripe.
  */
 app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async (req, res) => {
   let event;
@@ -54,11 +63,101 @@ app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async
   }
 
   try {
+    /* --- FATTURE: da qui si sa se Stripe sta ancora riprovando -----------
+       `customer.subscription.updated` dice CHE è in ritardo, ma non fino a
+       quando: `next_payment_attempt` sta sulla fattura, non sulla
+       sottoscrizione. Senza questi due eventi sapremmo del ritardo e non
+       della sua fine, e la tolleranza sarebbe di nuovo un numero inventato. */
+    if (event.type === "invoice.payment_failed" || event.type === "invoice.payment_succeeded") {
+      const f = letturaFattura(event);
+
+      if (f.riuscita) {
+        /* Pagato: il ritardo non lascia strascichi. */
+        await pool.query(
+          `UPDATE aziende SET stato_abbonamento = 'attivo',
+                              tolleranza_fino_al = NULL, primo_fallimento_il = NULL
+            WHERE stripe_customer_id = $1`,
+          [f.clienteId]
+        );
+        return res.json({ received: true });
+      }
+
+      /* I DUE CANCELLI. Si guarda com'era l'azienda PRIMA di questo evento:
+         `invoice.payment_failed` arriva anche sulla prima fattura di un
+         abbonamento nuovo e su chi finisce la prova con una carta che non
+         passa — cioè su chi non ha mai pagato niente. Senza questo controllo
+         basterebbe iscriversi con una carta che non funziona per avere tre
+         settimane gratis. `billing_reason` dice la stessa cosa dal lato di
+         Stripe: i due si controllano a vicenda. */
+      const riga = (await pool.query(
+        "SELECT id, stato_abbonamento, primo_fallimento_il FROM aziende WHERE stripe_customer_id = $1",
+        [f.clienteId]
+      )).rows[0];
+      if (!riga) {
+        console.error(`Webhook Stripe: fattura fallita per un cliente sconosciuto (${f.clienteId}).`);
+        return res.json({ received: true });
+      }
+
+      const decisione = decidiTolleranza({
+        eraAttivo: riga.stato_abbonamento === "attivo",
+        eRinnovo: f.eRinnovo,
+        prossimoTentativo: f.prossimoTentativo,
+        primoFallimento: riga.primo_fallimento_il ? new Date(riga.primo_fallimento_il) : null,
+      });
+
+      if (decisione.concessa) {
+        await pool.query(
+          `UPDATE aziende SET stato_abbonamento = 'in_ritardo', tolleranza_fino_al = $2,
+                              primo_fallimento_il = COALESCE(primo_fallimento_il, now())
+            WHERE id = $1`,
+          [riga.id, decisione.fino]
+        );
+        console.log(
+          `Rinnovo fallito per ${riga.id}: accesso tenuto aperto fino al ` +
+          `${decisione.fino.toISOString()} (${decisione.motivo}).`
+        );
+      } else {
+        /* Niente tolleranza. Non si SCADE qui però: lo stato lo decidono gli
+           eventi della sottoscrizione. Qui si toglie solo la tolleranza, così
+           una riga non resta aperta per una data vecchia. */
+        await pool.query(
+          "UPDATE aziende SET tolleranza_fino_al = NULL WHERE id = $1",
+          [riga.id]
+        );
+        console.log(
+          `Pagamento fallito per ${riga.id}, nessuna tolleranza: ${decisione.motivo} ` +
+          `(stato "${riga.stato_abbonamento}", motivo fatturazione "${f.motivoFatturazione}").`
+        );
+      }
+      return res.json({ received: true });
+    }
+
     const tipiSottoscrizione = ["customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted"];
     if (tipiSottoscrizione.includes(event.type)) {
       /* Cosa scrivere lo decide una funzione pura in stripe.js, provata a
          parte: qui resta solo la scrittura. */
-      const { stato, sottoscrizioneId, clienteId, acquisto } = letturaSottoscrizione(event);
+      const { stato, statoStripe, sottoscrizioneId, clienteId, acquisto } = letturaSottoscrizione(event);
+
+      /* Uno stato Stripe che non conosciamo NON si traduce. Declassare
+         un'azienda per una parola che Stripe ha aggiunto e noi non abbiamo
+         ancora imparato sarebbe chiudere fuori qualcuno per ignoranza nostra. */
+      if (stato === null) {
+        console.error(
+          `Webhook Stripe: stato "${statoStripe}" non riconosciuto sulla sottoscrizione ` +
+          `${sottoscrizioneId}. Riga lasciata com'era: va aggiunto a STATI_STRIPE.`
+        );
+        return res.json({ received: true });
+      }
+
+      /* Tornando attivi, o uscendo di scena, la tolleranza non ha più senso:
+         si azzera insieme allo stato, altrimenti resterebbe una data aperta
+         su una riga che non ne ha più bisogno. */
+      if (stato !== "in_ritardo") {
+        await pool.query(
+          "UPDATE aziende SET tolleranza_fino_al = NULL, primo_fallimento_il = NULL WHERE stripe_customer_id = $1",
+          [clienteId]
+        );
+      }
 
       if (acquisto) {
         await pool.query(
@@ -372,7 +471,46 @@ app.post("/api/abbonamento/riconcilia", richiedeAuth, async (req, res) => {
     const abbonamenti = await stripe.subscriptions.list({ customer: customerId, status: "all", limit: 10 });
     const viva = abbonamenti.data.find((s) => ["active", "trialing"].includes(s.status));
 
-    if (!viva) return res.json({ trovata: false, motivo: "Stripe non risulta nessun abbonamento attivo" });
+    /* IN RITARDO NON È "NIENTE". Chi preme «Ricontrolla» durante un rinnovo
+       fallito si sentiva rispondere che su Stripe non risulta niente: falso, e
+       allarmante nel momento sbagliato. Se c'è una sottoscrizione past_due si
+       dice com'è messa, e si chiede a Stripe fino a quando riproverà —
+       ricostruendo la tolleranza anche se il webhook si fosse perso. */
+    if (!viva) {
+      const inRitardo = abbonamenti.data.find((s) => s.status === "past_due");
+      if (inRitardo) {
+        const fatture = await stripe.invoices.list({ subscription: inRitardo.id, limit: 1 });
+        const f = fatture.data[0];
+        const prossimo = f?.next_payment_attempt ? new Date(f.next_payment_attempt * 1000) : null;
+        const riga = (await pool.query(
+          "SELECT stato_abbonamento, primo_fallimento_il FROM aziende WHERE id = $1", [req.aziendaId]
+        )).rows[0];
+        const decisione = decidiTolleranza({
+          /* "attivo" oppure "in_ritardo": in tutti e due i casi l'azienda ha
+             gia' pagato almeno una volta. Chi non ha mai pagato non arriva
+             qui con uno di questi due stati. */
+          eraAttivo: ["attivo", "in_ritardo"].includes(riga?.stato_abbonamento),
+          eRinnovo: f?.billing_reason === "subscription_cycle",
+          prossimoTentativo: prossimo,
+          primoFallimento: riga?.primo_fallimento_il ? new Date(riga.primo_fallimento_il) : null,
+        });
+        if (decisione.concessa) {
+          await pool.query(
+            `UPDATE aziende SET stato_abbonamento = 'in_ritardo', tolleranza_fino_al = $2,
+                                primo_fallimento_il = COALESCE(primo_fallimento_il, now())
+              WHERE id = $1`,
+            [req.aziendaId, decisione.fino]
+          );
+        }
+        return res.json({
+          trovata: false,
+          inRitardo: true,
+          tolleranzaFinoAl: decisione.concessa ? decisione.fino.toISOString() : null,
+          motivo: "il rinnovo non è ancora andato a buon fine",
+        });
+      }
+      return res.json({ trovata: false, motivo: "Stripe non risulta nessun abbonamento attivo" });
+    }
 
     const acquisto =
       daChiaveListino(chiaveListinoDellaSottoscrizione(viva)) ||
@@ -381,13 +519,15 @@ app.post("/api/abbonamento/riconcilia", richiedeAuth, async (req, res) => {
     if (acquisto) {
       await pool.query(
         `UPDATE aziende SET stato_abbonamento = 'attivo', stripe_subscription_id = $2,
-                            piano = $3, fatturazione = $4 WHERE id = $1`,
+                            piano = $3, fatturazione = $4,
+                            tolleranza_fino_al = NULL, primo_fallimento_il = NULL WHERE id = $1`,
         [req.aziendaId, viva.id, acquisto.piano, acquisto.fatturazione]
       );
     } else {
       console.error(`Riconciliazione: sottoscrizione ${viva.id} senza piano riconoscibile. Stato aggiornato, piano lasciato com'era.`);
       await pool.query(
-        "UPDATE aziende SET stato_abbonamento = 'attivo', stripe_subscription_id = $2 WHERE id = $1",
+        `UPDATE aziende SET stato_abbonamento = 'attivo', stripe_subscription_id = $2,
+                            tolleranza_fino_al = NULL, primo_fallimento_il = NULL WHERE id = $1`,
         [req.aziendaId, viva.id]
       );
     }

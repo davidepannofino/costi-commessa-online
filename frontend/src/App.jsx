@@ -48,6 +48,22 @@ const fmtData = (iso) => {
   return `${d}/${m}/${y}`;
 };
 /**
+ * Un istante preciso, per esteso: "10 agosto alle 11:00".
+ *
+ * Con l'ORA e non solo il giorno, perché serve dove una scadenza decide se si
+ * può continuare a lavorare: «fino al 10 agosto» lascia aperta la domanda se
+ * il 10 sia dentro o fuori, e quella domanda non deve esistere. Si legge
+ * nell'ora locale di chi guarda, che è l'unica che possa confrontare con
+ * l'orologio che ha davanti.
+ */
+const fmtDataOra = (iso) => {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d)) return "—";
+  return `${d.getDate()} ${MESI[d.getMonth()].toLowerCase()} alle ` +
+    `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+};
+/**
  * La data per esteso, con il giorno della settimana: "mercoledì 15 luglio 2026".
  * Serve dove la giornata dev'essere IMPOSSIBILE da leggere male — sopra il
  * modulo delle ore, che ne carica quaranta di fila sulla stessa data.
@@ -1900,6 +1916,7 @@ const ICONE_STATO = {
   attivo: CheckCircle2,
   prova: Clock,
   scaduto: AlertTriangle,
+  ritardo: CreditCard,
 };
 
 /**
@@ -3467,6 +3484,32 @@ export default function App() {
           {/* Finché il salvataggio non riesce, questa fascia resta lì: è
               l'unico modo perché nessuno continui a lavorare credendo che i
               dati vengano registrati mentre non lo sono. */}
+          {/* RINNOVO FALLITO. Fissa e non richiudibile, come l'avviso del
+              salvataggio: non è una notifica che si può perdere di vista, è una
+              cosa che va risolta entro una data. E la data si scrive — «entro
+              il …» — perché senza, «riproveremo» è una promessa vaga davanti a
+              un accesso che dipende da lei.
+              Non si nomina la chiusura: chi legge sta lavorando e nella grande
+              maggioranza dei casi il tentativo successivo va a buon fine.
+              Minacciare uno che sta già pagando sarebbe il modo peggiore di
+              usare l'unico spazio che abbiamo per parlargli. */}
+          {abbonamentoInfo?.stato === "in_ritardo" && (
+            <div className="mb-9">
+              <Avviso tono="accento">
+                <span style={{ fontWeight: 600 }}>Il rinnovo dell'abbonamento non è andato a buon fine.</span>
+                <span className="block mt-1.5" style={{ opacity: .9 }}>
+                  Succede spesso per una carta scaduta o un plafond esaurito. La banca riproverà da sola
+                  {abbonamentoInfo.tolleranzaFinoAl && <> e puoi continuare a lavorare <strong>fino al {fmtDataOra(abbonamentoInfo.tolleranzaFinoAl)}</strong></>}.
+                  Per sistemarlo subito, aggiorna il metodo di pagamento.
+                </span>
+                <button type="button" onClick={() => setVista("abbonamento")}
+                  className="t-piccolo mt-2.5 btn" style={{ fontWeight: 600, textDecoration: "underline" }}>
+                  Vai all'abbonamento
+                </button>
+              </Avviso>
+            </div>
+          )}
+
           {salvataggioNonRiuscito && (
             <div className="mb-9">
               <Avviso tono="errore">

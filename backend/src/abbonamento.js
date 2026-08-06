@@ -1,5 +1,6 @@
 import { pool } from "./db.js";
 import { pianoDi, fatturazioneDi, pianoPerDipendenti, bastaIlPiano, prezzoDi } from "./piani.js";
+import { tolleranzaInCorso } from "./tolleranza.js";
 
 // Email con accesso completo e illimitato, senza prova né abbonamento.
 // Per aggiungerne altre in futuro basta inserire la stringa qui: nessun'altra
@@ -45,12 +46,27 @@ function fineProvaDi({ prova_fino_al, creato_il }) {
 /** Funzione pura: dati email, stato_abbonamento e la scadenza della prova,
  *  decide se l'azienda ha accesso ai dati in questo momento. Usata sia dal
  *  middleware sia dalla rotta che riporta lo stato al frontend. */
-export function calcolaStatoAccesso({ email, stato_abbonamento, creato_il, prova_fino_al }) {
+export function calcolaStatoAccesso({ email, stato_abbonamento, creato_il, prova_fino_al, tolleranza_fino_al }) {
   if (EMAIL_ESENTI.has(String(email).trim().toLowerCase())) {
     return { haAccesso: true, stato: "esente", giorniProvaRestanti: null };
   }
   if (stato_abbonamento === "attivo") {
     return { haAccesso: true, stato: "attivo", giorniProvaRestanti: null };
+  }
+  /* RINNOVO FALLITO, MA STRIPE STA ANCORA RIPROVANDO. L'accesso resta finché
+     dura la data scritta sulla riga — e finisce da solo quando quella data
+     passa, senza che serva nessun webhook. Chi arriva qui ha già pagato
+     almeno una volta: chi non ha mai pagato non riceve mai questo stato,
+     perché la tolleranza non gli viene proprio concessa (tolleranza.js).
+     La data si guarda SEMPRE, anche se lo stato dicesse altro: è la data che
+     comanda, non l'etichetta. */
+  if (tolleranzaInCorso(tolleranza_fino_al)) {
+    return {
+      haAccesso: true,
+      stato: "in_ritardo",
+      giorniProvaRestanti: null,
+      tolleranzaFinoAl: new Date(tolleranza_fino_al).toISOString(),
+    };
   }
   const msRestanti = fineProvaDi({ prova_fino_al, creato_il }) - Date.now();
   if (msRestanti > 0) {
@@ -61,7 +77,7 @@ export function calcolaStatoAccesso({ email, stato_abbonamento, creato_il, prova
 
 async function leggiRigaAccesso(aziendaId) {
   const ris = await pool.query(
-    `SELECT a.stato_abbonamento, a.prova_fino_al, u.email, u.creato_il
+    `SELECT a.stato_abbonamento, a.prova_fino_al, a.tolleranza_fino_al, u.email, u.creato_il
        FROM aziende a JOIN utenti u ON u.azienda_id = a.id WHERE a.id = $1`,
     [aziendaId]
   );
@@ -96,7 +112,7 @@ export async function richiedeAbbonamentoAttivo(req, res, next) {
  * solo, senza che nessuno l'abbia deciso. Così invece non passa, e chi lo
  * aggiunge deve venire qui e scegliere.
  */
-const STATI_CHE_POSSONO_ESPORTARE = new Set(["esente", "attivo", "prova", "scaduto"]);
+const STATI_CHE_POSSONO_ESPORTARE = new Set(["esente", "attivo", "prova", "scaduto", "in_ritardo"]);
 
 /**
  * Da applicare dopo richiedeAuth, SOLO alle rotte che leggono e non scrivono.

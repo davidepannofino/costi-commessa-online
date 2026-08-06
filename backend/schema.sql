@@ -93,6 +93,30 @@ ALTER TABLE aziende ADD COLUMN IF NOT EXISTS prova_fino_al TIMESTAMPTZ;
 ALTER TABLE aziende ADD COLUMN IF NOT EXISTS piano TEXT;
 ALTER TABLE aziende ADD COLUMN IF NOT EXISTS fatturazione TEXT;
 
+-- LA TOLLERANZA SUL RINNOVO FALLITO. Fino a quando si tiene aperto a chi ha
+-- un pagamento non riuscito mentre Stripe riprova da sola, e quando e'
+-- cominciata la serie di fallimenti.
+--
+-- Perche' la scadenza e' SCRITTA e non calcolata. Quando la data passa,
+-- l'accesso si chiude senza bisogno che arrivi nessun webhook: il silenzio
+-- chiude, non apre. Se la tolleranza avesse bisogno di un messaggio da fuori
+-- per terminare, chiunque sapesse far cadere un webhook non pagherebbe mai
+-- piu'. Vale lo stesso ragionamento di prova_fino_al, qui sopra.
+--
+-- Il valore lo decide src/tolleranza.js a partire da
+-- invoice.next_payment_attempt, cioe' dal momento in cui Stripe riprovera'
+-- davvero: non e' una durata scelta da noi, e non sta scritta qui ne' altrove
+-- come numero di giorni.
+--
+-- primo_fallimento_il serve al tetto massimo, che si misura dall'inizio della
+-- serie e non da ogni singolo tentativo: altrimenti ogni fallimento
+-- allungherebbe la corda e chi non paga mai resterebbe dentro per sempre.
+--
+-- Tutte e due tornano NULL appena un pagamento riesce: un ritardo risolto non
+-- deve lasciare strascichi sulla riga.
+ALTER TABLE aziende ADD COLUMN IF NOT EXISTS tolleranza_fino_al   TIMESTAMPTZ;
+ALTER TABLE aziende ADD COLUMN IF NOT EXISTS primo_fallimento_il  TIMESTAMPTZ;
+
 CREATE TABLE IF NOT EXISTS utenti (
   id             SERIAL PRIMARY KEY,
   azienda_id     TEXT UNIQUE NOT NULL REFERENCES aziende(id),
