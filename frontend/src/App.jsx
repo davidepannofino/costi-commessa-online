@@ -1869,9 +1869,6 @@ function VerificaPagamento() {
 }
 
 /** Sezione "Abbonamento", raggiungibile in ogni momento dalla sidebar: stato
- *  attuale, giorni di prova rimanenti, prezzo, e un pulsante che porta al
- *  checkout (se non attivo) o al portale Stripe per gestire il pagamento
- *  (se già attivo). */
 /** Da chiave a icona. statoAbbonamento.js dice quale icona serve con una
  *  stringa e non con un componente, così resta un file puro che si collauda
  *  senza React; la traduzione la fa qui chi disegna davvero. */
@@ -1882,23 +1879,85 @@ const ICONE_STATO = {
   scaduto: AlertTriangle,
 };
 
+/**
+ * LA SCHERMATA ABBONAMENTO: i tre piani, confrontabili, in un registro.
+ *
+ * Non tre card affiancate. DESIGN.md lo vieta due volte — «Se stai per
+ * ripetere la stessa card N volte, quella è una lista» e, fra i Don't,
+ * «costruire una schermata come una pila di card della stessa larghezza» — e
+ * la stella polare dice cosa mettere al suo posto: il registro di cantiere,
+ * righe e colonne, le cifre incolonnate, e un solo inchiostro colorato per la
+ * voce che conta più delle altre.
+ *
+ * Quindi UN contenitore e TRE RIGHE. I prezzi cadono in colonna e il confronto
+ * si legge scorrendo quella, invece di saltare fra tre riquadri. Sotto i 640px
+ * le righe diventano blocchi impilati: è la Regola della Tabella che si Arrende.
+ *
+ * Il bronzo pieno compare UNA volta sola su questa schermata — il bottone del
+ * piano consigliato — come vuole la Regola dell'Unico in Evidenza. La riga
+ * consigliata si distingue col velo bronzo, che pieno non è.
+ *
+ * I prezzi NON sono verdi. La Regola del Verde Denaro riserva quel colore agli
+ * importi in euro, ma in questo prodotto vuol dire «quanto ti costa una
+ * commessa»: colorare il canone lo metterebbe nella stessa famiglia dei costi
+ * di cantiere, che è un'altra cosa.
+ *
+ * E non c'è nessun numero-eroe: qui i prezzi sono tre, nessuno è IL numero, e
+ * DESIGN.md riserva la scala display alle schermate di riepilogo.
+ */
 function VistaAbbonamento({ info, inAttesaDiConferma, onRicontrolla }) {
   const [caricando, setCaricando] = useState(false);
   const [errore, setErrore] = useState(null);
-  /* Si parte dalla periodicità che l'azienda ha già: se paga annuale, la
-     schermata non deve proporre il mensile come se fosse la normalità. */
   const [fatturazione, setFatturazione] = useState(info?.capienza?.fatturazione || "mensile");
   const [ricontrollando, setRicontrollando] = useState(false);
   const [ancoraNiente, setAncoraNiente] = useState(false);
+  /* Il piano che l'utente ha scelto pur essendo più piccolo della sua
+     capienza: prima di mandarlo a pagare glielo si dice. Non è un blocco — si
+     procede lo stesso — è che deve essere una scelta fatta sapendo. */
+  const [daConfermare, setDaConfermare] = useState(null);
 
-  const vai = async (azione) => {
+  const cap = info?.capienza;
+  const piani = info?.piani || [];
+  const desc = descriviAbbonamento(info);
+  const Icona = desc ? ICONE_STATO[desc.icona] : null;
+  const abbonato = info?.stato === "attivo";
+
+  /* Si consiglia SOLO se c'è una prova su cui fondarlo. Con zero ore
+     registrate il calcolo risponderebbe comunque "Cantiere", ma sarebbe un
+     consiglio senza dati — e DESIGN.md vieta di riempire un vuoto con un
+     numero inventato. In quel caso nessuna riga viene segnalata. */
+  const consigliato = cap?.mesePunta ? cap.pianoConsigliato : null;
+
+  const vaiA = async (url) => { window.location.href = url; };
+
+  const compra = async (idPiano) => {
+    setErrore(null);
+    setDaConfermare(null);
+    setCaricando(true);
+    try {
+      vaiA(await datiAPI.avviaCheckout(fatturazione, idPiano));
+    } catch (e) {
+      setErrore("Non è stato possibile avviare il pagamento. Riprova tra poco.");
+      setCaricando(false);
+    }
+  };
+
+  const scegli = (p) => {
+    /* Un piano più piccolo della capienza si può comprare — niente blocchi —
+       ma va detto ADESSO, non scoperto il giorno dopo davanti a un avviso che
+       non se ne va. */
+    const troppoPiccolo = cap?.mesePunta && p.tetto !== null && cap.personeMesePunta > p.tetto;
+    if (troppoPiccolo) { setDaConfermare(p.id); return; }
+    compra(p.id);
+  };
+
+  const gestisci = async () => {
     setErrore(null);
     setCaricando(true);
     try {
-      const url = azione === "portale" ? await datiAPI.avviaPortale() : await datiAPI.avviaCheckout(fatturazione);
-      window.location.href = url;
+      vaiA(await datiAPI.avviaPortale());
     } catch (e) {
-      setErrore("Non è stato possibile completare l'operazione. Riprova tra poco.");
+      setErrore("Non è stato possibile aprire la gestione dell'abbonamento. Riprova tra poco.");
       setCaricando(false);
     }
   };
@@ -1911,147 +1970,207 @@ function VistaAbbonamento({ info, inAttesaDiConferma, onRicontrolla }) {
     if (!ok) setAncoraNiente(true);
   };
 
-  /* Le etichette NON stanno più qui. Stanno in statoAbbonamento.js, e da lì le
-     legge anche la barra laterale: erano due liste indipendenti, e sono
-     divergute — la barra scriveva «Abbonamento scaduto» mentre questo pannello,
-     nello stesso istante, diceva «Accesso illimitato».
-     Sparito anche il ripiego `|| STATI.prova`: uno stato sconosciuto diventava
-     in silenzio «Prova gratuita». Adesso descriviAbbonamento restituisce null e
-     la pillola non si disegna — un buco si vede, un'etichetta sbagliata no. */
-  const desc = descriviAbbonamento(info);
-  const Icona = desc ? ICONE_STATO[desc.icona] : null;
+  const annuale = fatturazione === "annuale";
+  const prezzoDelPiano = (p) => (annuale ? p.prezzoAnnuale : p.prezzoMensile);
 
   return (
-    <div style={{ maxWidth: 560 }}>
-      <div className="mb-8">
+    <div style={{ maxWidth: 720 }}>
+      {/* Titolo nudo, senza occhiello in maiuscoletto: Regola del Titolo Nudo. */}
+      <div className="mb-6">
         <h1 className="t-titolo">Abbonamento</h1>
+        {/* Lo stato sta sotto il titolo e NON dentro una card: è una riga di
+            contesto, e un contenitore per una riga sarebbe un contenitore di
+            troppo su una schermata che ne vuole uno solo. */}
+        {desc && (
+          <div className="flex flex-wrap items-center gap-3 mt-3">
+            <Pillola tono={desc.tono}><Icona size={13} strokeWidth={1.75} /> {desc.etichetta}</Pillola>
+            {info.stato === "prova" && (
+              <span className="t-piccolo" style={{ color: "var(--muted)" }}>
+                {info.giorniProvaRestanti === 1 ? "ultimo giorno" : `${info.giorniProvaRestanti} giorni rimanenti`}
+              </span>
+            )}
+          </div>
+        )}
       </div>
-      <Sezione titolo="Stato">
-        {!info ? (
-          <p className="t-piccolo" style={{ color: "var(--muted)" }}>Caricamento…</p>
-        ) : (
-          <>
-            {/* Lo stato si legge da una pillola, non da un'icona colorata in un
-                quadrato: è la stessa forma usata per gli stati altrove. */}
-            <div className="flex items-center gap-3 mb-7">
-              {desc && <Pillola tono={desc.tono}><Icona size={13} strokeWidth={1.75} /> {desc.etichetta}</Pillola>}
-              {info.stato === "prova" && (
-                <span className="t-piccolo" style={{ color: "var(--muted)" }}>
-                  {info.giorniProvaRestanti === 1 ? "ultimo giorno" : `${info.giorniProvaRestanti} giorni rimanenti`}
-                </span>
-              )}
-            </div>
 
-            {/* PAGATO MA NON CONFERMATO. Sta in cima a tutto, perché è la sola
-                cosa che conta finché dura: qualcuno ha speso dei soldi e il
-                software non gliene ha dato atto. Prima qui non compariva
-                niente e l'utente restava a chiedersi se fosse andata a buon
-                fine. */}
-            {inAttesaDiConferma && (
-              <div className="mb-7">
-                <Avviso tono="avviso" icona={Clock}>
-                  <strong style={{ fontWeight: 600 }}>Il pagamento risulta inviato, ma non ne abbiamo ancora la conferma.</strong>
-                  {" "}Può metterci qualche minuto. Non pagare una seconda volta: se l'addebito è andato a buon fine,
-                  l'abbonamento si attiva da solo.
-                </Avviso>
-                <div className="mt-3 flex items-center gap-3">
-                  <Bottone variante="fantasma" onClick={ricontrolla} disabled={ricontrollando}>
-                    {ricontrollando ? <Loader2 size={14} strokeWidth={1.75} className="animate-spin" /> : <RotateCcw size={14} strokeWidth={1.75} />}
-                    {ricontrollando ? "Sto controllando…" : "Ricontrolla adesso"}
-                  </Bottone>
-                  {ancoraNiente && (
-                    <span className="t-piccolo" style={{ color: "var(--muted)" }}>Ancora nessuna conferma.</span>
+      {!info ? (
+        <p className="t-piccolo" style={{ color: "var(--muted)" }}>Caricamento…</p>
+      ) : (
+        <>
+          {/* PAGATO MA NON CONFERMATO: sta in cima a tutto, perché finché dura
+              è la sola cosa che conta. */}
+          {inAttesaDiConferma && (
+            <div className="mb-7">
+              <Avviso tono="avviso" icona={Clock}>
+                <strong style={{ fontWeight: 600 }}>Il pagamento risulta inviato, ma non ne abbiamo ancora la conferma.</strong>
+                {" "}Può metterci qualche minuto. Non pagare una seconda volta: se l'addebito è andato a buon fine,
+                l'abbonamento si attiva da solo.
+              </Avviso>
+              <div className="mt-3 flex items-center gap-3">
+                <Bottone variante="fantasma" onClick={ricontrolla} disabled={ricontrollando}>
+                  {ricontrollando ? <Loader2 size={14} strokeWidth={1.75} className="animate-spin" /> : <RotateCcw size={14} strokeWidth={1.75} />}
+                  {ricontrollando ? "Sto controllando…" : "Ricontrolla adesso"}
+                </Bottone>
+                {ancoraNiente && <span className="t-piccolo" style={{ color: "var(--muted)" }}>Ancora nessuna conferma.</span>}
+              </div>
+            </div>
+          )}
+
+          {errore && <div className="mb-6"><Avviso tono="errore">{errore}</Avviso></div>}
+
+          {info.stato === "esente" ? (
+            /* Agli esenti il listino non arriva nemmeno dal server: niente
+               piani, niente prezzi, niente consigli. Non pagano. */
+            <p className="t-corpo" style={{ color: "var(--muted)" }}>
+              Il tuo account ha accesso completo e illimitato, senza bisogno di abbonamento.
+            </p>
+          ) : piani.length === 0 ? (
+            <p className="t-piccolo" style={{ color: "var(--muted)" }}>Caricamento dei piani…</p>
+          ) : (
+            <>
+              {/* LO SCAMBIO, sopra il listino e valido per tutte e tre le righe. */}
+              <div className="flex gap-2 mb-6" role="group" aria-label="Periodicità">
+                {[
+                  { id: "mensile", testo: "Mensile", nota: null },
+                  { id: "annuale", testo: "Annuale", nota: "2 mesi in regalo" },
+                ].map((o) => {
+                  const scelto = fatturazione === o.id;
+                  return (
+                    <button key={o.id} type="button" onClick={() => setFatturazione(o.id)} aria-pressed={scelto}
+                      className="px-4 t-corpo btn text-left"
+                      style={{
+                        minHeight: 48, borderRadius: "var(--r-sm)", fontWeight: 500,
+                        background: scelto ? "var(--bg-elevato)" : "transparent",
+                        border: `.5px solid ${scelto ? "var(--accento-bordo)" : "var(--bordo-input)"}`,
+                        color: scelto ? "var(--txt)" : "var(--muted)",
+                      }}>
+                      {o.testo}
+                      {o.nota && (
+                        <span className="t-piccolo" style={{ fontWeight: 400, color: scelto ? "var(--accento-chiaro)" : "var(--tenue)" }}>
+                          {" · "}{o.nota}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* IL REGISTRO: un contenitore, tre righe, un piede. */}
+              <div className="card overflow-hidden">
+                {piani.map((p, i) => {
+                  const eConsigliato = p.id === consigliato;
+                  const eIlMio = p.id === cap?.piano;
+                  const prezzo = prezzoDelPiano(p);
+                  const seMensile = p.prezzoMensile * 12;
+                  const inConferma = daConfermare === p.id;
+                  return (
+                    <div key={p.id}
+                      style={{
+                        borderTop: i > 0 ? ".5px solid var(--bordo-tenue)" : "none",
+                        background: eConsigliato ? "var(--velo-accento)" : "transparent",
+                      }}>
+                      <div className="px-6 py-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
+                        {/* NOME E CAPIENZA */}
+                        <div className="min-w-0 sm:flex-1">
+                          <div className="flex flex-wrap items-center gap-2.5">
+                            <span className="t-sotto" style={{ color: "var(--txt)" }}>{p.nome}</span>
+                            {eIlMio && <span className="badge-codice">Il tuo piano</span>}
+                            {eConsigliato && (
+                              <span className="t-micro" style={{ color: "var(--accento-chiaro)", letterSpacing: ".06em" }}>CONSIGLIATO</span>
+                            )}
+                          </div>
+                          <p className="t-piccolo mt-1" style={{ color: "var(--muted)" }}>
+                            {p.tetto === null ? "oltre 30 dipendenti" : `fino a ${p.tetto} dipendenti`}
+                          </p>
+                        </div>
+
+                        {/* PREZZO — incolonnato, cifre tabellari (Regola della Colonna) */}
+                        <div className="sm:text-right sm:shrink-0" style={{ minWidth: 150 }}>
+                          <p className="f-mono" style={{ fontSize: 24, fontWeight: 600, letterSpacing: "-.02em", color: "var(--txt)" }}>
+                            {prezzo} €
+                          </p>
+                          <p className="t-piccolo" style={{ color: "var(--muted)" }}>{annuale ? "all'anno" : "al mese"}</p>
+                          {/* Il prezzo di riferimento si SPIEGA, non si sbarra: un
+                              numero barrato senza provenienza è il trucco dei saldi. */}
+                          {annuale && (
+                            <p className="t-piccolo mt-1" style={{ color: "var(--tenue)" }}>
+                              pagando mese per mese spenderesti {seMensile} € in un anno
+                            </p>
+                          )}
+                        </div>
+
+                        {/* AZIONE */}
+                        <div className="sm:shrink-0">
+                          {/* 48px: è un bersaglio da dito su un bottone che
+                              porta a pagare, e su questa schermata si arriva
+                              anche dal telefono. */}
+                          {abbonato ? (
+                            eIlMio ? (
+                              <Bottone variante="fantasma" className="w-full sm:w-auto min-h-[48px] px-5" onClick={gestisci} disabled={caricando}>
+                                {caricando ? <Loader2 size={14} strokeWidth={1.75} className="animate-spin" /> : <CreditCard size={14} strokeWidth={1.75} />}
+                                {caricando ? "Un attimo…" : "Gestisci"}
+                              </Bottone>
+                            ) : (
+                              <span className="t-piccolo" style={{ color: "var(--tenue)" }}>—</span>
+                            )
+                          ) : (
+                            <Bottone variante={eConsigliato ? "primario" : "fantasma"} className="w-full sm:w-auto min-h-[48px] px-5"
+                              onClick={() => scegli(p)} disabled={caricando}>
+                              {caricando ? <Loader2 size={14} strokeWidth={1.75} className="animate-spin" /> : <ArrowRight size={14} strokeWidth={1.75} />}
+                              {caricando ? "Un attimo…" : "Scegli"}
+                            </Bottone>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* IL MOTIVO del consiglio: un numero con la sua provenienza. */}
+                      {eConsigliato && !inConferma && (
+                        <p className="px-6 pb-5 -mt-1 t-piccolo" style={{ color: "var(--accento-chiaro)" }}>
+                          A {fmtMese(cap.mesePunta).toLowerCase()} avevi {cap.personeMesePunta} {cap.personeMesePunta === 1 ? "persona" : "persone"} in cantiere.
+                        </p>
+                      )}
+
+                      {/* SCELTA CONSAPEVOLE: un piano più piccolo si compra, ma
+                          dicendolo prima invece di lasciarlo scoprire dopo. */}
+                      {inConferma && (
+                        <div className="px-6 pb-5">
+                          <Avviso tono="accento" icona={AlertTriangle}>
+                            Il tuo mese di punta è {cap.personeMesePunta} persone, e {p.nome} arriva a {p.tetto}.
+                            Puoi sceglierlo lo stesso — non si blocca niente — ma l'avviso di capienza resterà.
+                          </Avviso>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <Bottone variante="fantasma" onClick={() => compra(p.id)} disabled={caricando}>
+                              {caricando ? <Loader2 size={14} strokeWidth={1.75} className="animate-spin" /> : <ArrowRight size={14} strokeWidth={1.75} />}
+                              {caricando ? "Un attimo…" : `Scegli ${p.nome} lo stesso`}
+                            </Bottone>
+                            <Bottone variante="fantasma" onClick={() => setDaConfermare(null)}>Annulla</Bottone>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {/* IL PIEDE: le due cose che valgono per tutte e tre le righe. */}
+                <div className="px-6 py-5" style={{ borderTop: ".5px solid var(--bordo)", background: "var(--velo)" }}>
+                  <p className="t-corpo" style={{ color: "var(--txt-chiaro)" }}>
+                    Tutti i piani hanno le stesse funzioni: cambia solo quante persone ci stanno dentro.
+                  </p>
+                  <p className="t-piccolo mt-2" style={{ color: "var(--muted)" }}>
+                    Prezzi al netto dell'IVA · disdici quando vuoi, senza vincoli.
+                  </p>
+                  {/* Senza ore non si consiglia niente, e si dice perché. */}
+                  {!consigliato && (
+                    <p className="t-piccolo mt-2" style={{ color: "var(--tenue)" }}>
+                      Quando avrai registrato delle ore ti diremo quale piano serve: si guarda il mese
+                      più affollato degli ultimi dodici, contando le persone che hanno ore in quello stesso mese.
+                    </p>
                   )}
                 </div>
               </div>
-            )}
-
-            {/* Il prezzo è quello del PIANO dell'azienda, mandato dal server:
-                qui dentro non è scritto nessun importo. Agli esenti `capienza`
-                non arriva affatto, e infatti non si mostra nessun prezzo — non
-                pagano niente. */}
-            {info.capienza && info.stato !== "esente" && (
-              <div className="mb-6">
-                <ScegliPeriodicita capienza={info.capienza} valore={fatturazione} onCambia={setFatturazione} />
-              </div>
-            )}
-
-            {errore && <div className="mb-6"><Avviso tono="errore">{errore}</Avviso></div>}
-
-            {info.stato === "esente" ? (
-              <p className="t-piccolo" style={{ color: "var(--muted)" }}>Il tuo account ha accesso completo e illimitato, senza bisogno di abbonamento.</p>
-            ) : info.stato === "attivo" ? (
-              <Bottone variante="fantasma" onClick={() => vai("portale")} disabled={caricando}>
-                {caricando ? <Loader2 size={14} strokeWidth={1.75} className="animate-spin" /> : <CreditCard size={14} strokeWidth={1.75} />}
-                {caricando ? "Un attimo…" : "Gestisci abbonamento"}
-              </Bottone>
-            ) : (
-              <Bottone variante="primario" onClick={() => vai("checkout")} disabled={caricando}>
-                {caricando ? <Loader2 size={14} strokeWidth={1.75} className="animate-spin" /> : <ArrowRight size={14} strokeWidth={1.75} />}
-                {caricando ? "Un attimo…" : "Abbonati ora"}
-              </Bottone>
-            )}
-          </>
-        )}
-      </Sezione>
-
-      {/* ================= CAPIENZA =================
-          Sta QUI, nella schermata dell'abbonamento, e non come striscia dentro
-          l'applicazione: il piano è una faccenda di amministrazione, e chi sta
-          battendo trecento righe di ore non deve trovarsi un invito a spendere
-          in mezzo al lavoro. Per lo stesso motivo qui non c'è nessun bottone
-          per cambiare piano — si dicono i numeri e basta.
-
-          `info.capienza` non arriva affatto per gli account esenti: il server
-          non calcola nemmeno il conteggio. Quindi non c'è niente da nascondere
-          qui, questa sezione semplicemente non compare.
-
-          E il tetto NON blocca niente: superarlo cambia una frase su questa
-          pagina, non quello che si può fare nell'app. */}
-      {info?.capienza && (
-        <Sezione titolo="Capienza">
-          <dl className="space-y-3.5">
-            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-              <dt className="t-piccolo" style={{ color: "var(--muted)" }}>Il tuo piano</dt>
-              <dd className="t-corpo" style={{ color: "var(--txt)", fontWeight: 500 }}>
-                {info.capienza.pianoNome}
-                <span className="t-piccolo" style={{ fontWeight: 400, color: "var(--muted)" }}>
-                  {info.capienza.tetto === null ? " · oltre 30 dipendenti" : ` · fino a ${info.capienza.tetto} dipendenti`}
-                </span>
-              </dd>
-            </div>
-            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-              <dt className="t-piccolo" style={{ color: "var(--muted)" }}>Mese di punta degli ultimi 12</dt>
-              <dd className="t-corpo" style={{ color: "var(--txt)" }}>
-                {info.capienza.mesePunta
-                  ? <>{fmtMese(info.capienza.mesePunta)} · <span className="f-mono">{info.capienza.personeMesePunta}</span> {info.capienza.personeMesePunta === 1 ? "persona" : "persone"}</>
-                  : <span style={{ color: "var(--muted)" }}>nessuna ora registrata</span>}
-              </dd>
-            </div>
-            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-              <dt className="t-piccolo" style={{ color: "var(--muted)" }}>Piano che ne risulta</dt>
-              <dd className="t-corpo" style={{ color: "var(--txt)" }}>{info.capienza.pianoConsigliatoNome}</dd>
-            </div>
-          </dl>
-
-          {/* Il conteggio è sulla DATA DEL LAVORO, non su quando le ore sono
-              state battute: chi inserisce luglio ad agosto deve ritrovarsi
-              luglio, non un mese vuoto. Vale la pena scriverlo, perché è la
-              prima domanda che uno si fa guardando quel numero. */}
-          <p className="t-piccolo mt-5" style={{ color: "var(--tenue)" }}>
-            Si contano le persone che hanno ore registrate nello stesso mese di lavoro,
-            prendendo il mese più affollato degli ultimi dodici.
-          </p>
-
-          {!info.capienza.bastaIlPiano && (
-            <div className="mt-5">
-              <Avviso tono="accento" icona={AlertTriangle}>
-                Nel mese di punta hai avuto {info.capienza.personeMesePunta} persone, oltre le {info.capienza.tetto} del piano {info.capienza.pianoNome}:
-                per questa capienza serve il piano {info.capienza.pianoConsigliatoNome}. Nel frattempo non cambia niente — puoi aggiungere dipendenti e registrare ore come sempre.
-              </Avviso>
-            </div>
+            </>
           )}
-        </Sezione>
+        </>
       )}
     </div>
   );

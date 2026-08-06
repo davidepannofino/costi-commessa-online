@@ -8,7 +8,7 @@ import { cifraPassword, verificaPassword, generaToken, richiedeAuth } from "./au
 import { inviaEmailResetPassword } from "./email.js";
 import { stripe, prezzoStripeDi } from "./stripe.js";
 import { chiaveListinoDellaSottoscrizione, letturaSottoscrizione } from "./sottoscrizioneStripe.js";
-import { pianoDi, fatturazioneDi, daChiaveListino } from "./piani.js";
+import { pianoDi, fatturazioneDi, daChiaveListino, elencoPiani, PIANI, ORDINE } from "./piani.js";
 import { richiedeAbbonamentoAttivo, statoAbbonamentoDi, capienzaDi, GIORNI_PROVA } from "./abbonamento.js";
 import { adminRouter, richiedeAdmin, eAdmin } from "./admin.js";
 import {
@@ -268,7 +268,14 @@ app.get("/api/abbonamento/stato", richiedeAuth, async (req, res) => {
        illimitato"). Il conteggio non si calcola nemmeno — la chiave non esiste
        proprio nella risposta, così non c'è niente da nascondere lato client. */
     const capienza = info.stato === "esente" ? null : await capienzaDi(req.aziendaId);
-    res.json({ ...info, admin: await eAdmin(req.aziendaId), ...(capienza ? { capienza } : {}) });
+    /* Il catalogo dei tre piani viaggia insieme alla capienza, e sparisce con
+       lei per gli esenti: la schermata deve poterli confrontare tutti e tre
+       senza ricopiarsi nessun prezzo: gli euro restano in piani.js. */
+    res.json({
+      ...info,
+      admin: await eAdmin(req.aziendaId),
+      ...(capienza ? { capienza, piani: elencoPiani() } : {}),
+    });
   } catch (e) {
     console.error(e);
     res.status(500).json({ errore: "Impossibile leggere lo stato dell'abbonamento." });
@@ -279,10 +286,13 @@ app.get("/api/abbonamento/stato", richiedeAuth, async (req, res) => {
  * Crea una sessione di Stripe Checkout (pagina ospitata da Stripe: il numero
  * di carta non passa mai dal nostro backend).
  *
- * IL PIANO LO DECIDE IL SERVER, leggendolo da `aziende.piano`. Dal client
- * arriva solo la periodicità, mensile o annuale. Così non c'è nessun modo di
- * chiedere un piano diverso da quello che si ha, e non c'è niente da validare
- * sul piano: quello che non arriva dal client non può essere manomesso.
+ * QUALE PIANO. Il client può chiederne uno — la schermata li mostra tutti e
+ * tre e si compra quello che si vuole — ma deve essere UNO DEI TRE, verificato
+ * qui contro piani.js. Un identificativo che non si riconosce viene rifiutato
+ * con un 400 e non interpretato: `pianoDi()` ripiegherebbe in silenzio sul più
+ * piccolo, e un ripiego che afferma, su una richiesta di pagamento, vuol dire
+ * addebitare una cifra che nessuno ha chiesto.
+ * Se il client non chiede niente vale il piano scritto sull'azienda.
  *
  * Il prezzo si cerca su Stripe per NOME (lookup_key), non per identificatore:
  * gli importi restano solo in piani.js. Se il prezzo non esiste la sessione
@@ -297,7 +307,11 @@ app.post("/api/abbonamento/checkout", richiedeAuth, async (req, res) => {
     const riga = ris.rows[0];
     if (!riga) return res.status(404).json({ errore: "Azienda non trovata." });
 
-    const piano = pianoDi(riga.piano);
+    const richiesto = String(req.body?.piano ?? "").trim().toLowerCase();
+    if (richiesto && !ORDINE.includes(richiesto)) {
+      return res.status(400).json({ errore: "Piano non riconosciuto." });
+    }
+    const piano = richiesto ? PIANI[richiesto] : pianoDi(riga.piano);
     const fatturazione = fatturazioneDi(req.body?.fatturazione);
 
     let prezzo;

@@ -386,13 +386,14 @@ export const datiAPI = {
   },
 
   /** Avvia il pagamento: ritorna l'URL di Stripe Checkout a cui reindirizzare.
-   *  Si manda solo la periodicità — il PIANO lo decide il server leggendolo dal
-   *  database, così non c'è modo di chiederne uno diverso dal proprio. */
-  async avviaCheckout(fatturazione) {
+   *  Il piano è facoltativo — senza, il server usa quello scritto sull'azienda —
+   *  e comunque il server lo verifica contro i tre esistenti: un identificativo
+   *  che non riconosce viene rifiutato, non interpretato. */
+  async avviaCheckout(fatturazione, piano) {
     const res = await fetch(`${API_BASE}/api/abbonamento/checkout`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...headerAuth() },
-      body: JSON.stringify({ fatturazione }),
+      body: JSON.stringify({ fatturazione, ...(piano ? { piano } : {}) }),
     });
     if (!res.ok) throw new Error("Impossibile avviare il pagamento.");
     const dati = await res.json();
