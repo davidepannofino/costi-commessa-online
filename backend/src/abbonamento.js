@@ -85,6 +85,51 @@ export async function richiedeAbbonamentoAttivo(req, res, next) {
   }
 }
 
+/**
+ * Gli stati a cui si concede di RILEGGERE i propri dati per portarseli via.
+ *
+ * Scritti a uno a uno, e non come "tutti tranne quelli bloccati", per la regola
+ * dei corollari in PRODUCT.md: un ramo che cattura tutto quello che non ha
+ * trovato posto prima diventa falso il giorno che si aggiunge un caso nuovo.
+ * Se domani nascesse uno stato "sospeso" — un account fermato per abuso o per
+ * un pagamento contestato — con un "tranne" gli si aprirebbe l'esportazione da
+ * solo, senza che nessuno l'abbia deciso. Così invece non passa, e chi lo
+ * aggiunge deve venire qui e scegliere.
+ */
+const STATI_CHE_POSSONO_ESPORTARE = new Set(["esente", "attivo", "prova", "scaduto"]);
+
+/**
+ * Da applicare dopo richiedeAuth, SOLO alle rotte che leggono e non scrivono.
+ *
+ * A cosa serve. PRODUCT.md promette che uscire (Excel, CSV, stampa) resta
+ * facile come entrare. Con il solo `richiedeAbbonamentoAttivo` quella promessa
+ * cadeva esattamente quando serve: un'impresa che decide di non abbonarsi si
+ * ritrovava i propri costi del personale chiusi dentro. Quei dati sono suoi.
+ *
+ * PERCHÉ NON È IL BLOCCO CHE SI ALLENTA. `richiedeAbbonamentoAttivo` non è
+ * stato toccato e resta su tutte le rotte che aveva: questa è una guardia
+ * SEPARATA, e le rotte che la usano si contano su una mano. Il nome è lungo
+ * apposta — deve essere impossibile scriverlo credendo di scrivere l'altro.
+ *
+ * NON BASTA QUESTA FUNZIONE a rendere una rotta sicura: la sola lettura la
+ * garantisce il DATABASE, con una transazione dichiarata READ ONLY nel
+ * gestore. Qui si decide CHI può bussare, là si decide COSA può succedere.
+ */
+export async function richiedeAccessoAiPropriDati(req, res, next) {
+  try {
+    const riga = await leggiRigaAccesso(req.aziendaId);
+    if (!riga) return res.status(404).json({ errore: "Azienda non trovata." });
+    const info = calcolaStatoAccesso(riga);
+    if (!STATI_CHE_POSSONO_ESPORTARE.has(info.stato)) {
+      return res.status(402).json({ errore: "Abbonamento richiesto.", ...info });
+    }
+    next();
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ errore: "Impossibile verificare l'abbonamento." });
+  }
+}
+
 export async function statoAbbonamentoDi(aziendaId) {
   const riga = await leggiRigaAccesso(aziendaId);
   if (!riga) return null;

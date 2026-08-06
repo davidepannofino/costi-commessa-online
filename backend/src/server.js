@@ -9,7 +9,7 @@ import { inviaEmailResetPassword } from "./email.js";
 import { stripe, prezzoStripeDi } from "./stripe.js";
 import { chiaveListinoDellaSottoscrizione, letturaSottoscrizione } from "./sottoscrizioneStripe.js";
 import { pianoDi, fatturazioneDi, daChiaveListino, elencoPiani, PIANI, ORDINE } from "./piani.js";
-import { richiedeAbbonamentoAttivo, statoAbbonamentoDi, capienzaDi, GIORNI_PROVA } from "./abbonamento.js";
+import { richiedeAbbonamentoAttivo, richiedeAccessoAiPropriDati, statoAbbonamentoDi, capienzaDi, GIORNI_PROVA } from "./abbonamento.js";
 import { adminRouter, richiedeAdmin, eAdmin } from "./admin.js";
 import {
   salvaFile, leggiFile, eliminaFile, eliminaFileInBlocco,
@@ -914,6 +914,86 @@ async function spazioAllegati(aziendaId) {
     maxFile: MAX_FILE_BYTE,
   };
 }
+
+/**
+ * PORTARE VIA I PROPRI DATI. Restituisce tutto quello che l'azienda ha dentro,
+ * nella stessa forma di GET /api/stato, e funziona ANCHE CON LA PROVA SCADUTA.
+ *
+ * PERCHÉ ESISTE. Con il blocco su ogni rotta, chi decide di non abbonarsi si
+ * ritrovava i propri costi del personale chiusi dentro: PRODUCT.md promette
+ * che uscire resta facile come entrare, e quella promessa cadeva esattamente
+ * nel momento in cui serve. I dati sono dell'azienda, non nostri.
+ *
+ * PERCHÉ UNA ROTTA NUOVA E NON /api/stato APERTA AGLI SCADUTI. Il frontend
+ * decide di mostrare la schermata di blocco SOLO perché riceve un 402 da
+ * /api/stato (vedi datiAPI.js). Farle restituire 200 non avrebbe aperto
+ * l'esportazione: avrebbe rimesso in piedi l'applicazione intera. Così invece
+ * `richiedeAbbonamentoAttivo` non è toccato e resta dov'era su tutte le rotte
+ * che aveva: quello che si apre è questa, e solo questa.
+ *
+ * LA SOLA LETTURA NON È UNA PROMESSA, È UNA TRANSAZIONE READ ONLY. Il metodo
+ * HTTP non garantisce niente — è una convenzione, e qui dentro esistono già
+ * POST che leggono e GET che costano. Dentro `BEGIN READ ONLY` è Postgres a
+ * rifiutare qualunque INSERT, UPDATE o DELETE (errore 25006): se un domani
+ * qualcuno aggiungesse una scrittura in questo gestore, non passerebbe.
+ *
+ * COSA NON C'È: i file dei documenti. Ne esce l'INVENTARIO (nome, data,
+ * fornitore, a quale commessa sono legati), che è lavoro dell'azienda e non si
+ * ricostruisce; non i byte dei PDF, che stanno nell'archivio esterno e sono
+ * documenti che il fornitore ha già mandato. È la stessa scelta che il backup
+ * JSON fa da sempre. La schermata lo dice PRIMA di scaricare, non dopo.
+ */
+app.get("/api/esportazione", richiedeAuth, richiedeAccessoAiPropriDati, async (req, res) => {
+  const aziendaId = req.aziendaId;
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN READ ONLY");
+
+    const [azRes, dipRes, comRes, regRes, matRes, allRes] = await Promise.all([
+      client.query("SELECT nome FROM aziende WHERE id = $1", [aziendaId]),
+      client.query(
+        "SELECT id, nome, cognome, lordo_mensile, archiviato FROM dipendenti WHERE azienda_id = $1 ORDER BY nome, cognome",
+        [aziendaId]
+      ),
+      client.query("SELECT id, codice, descrizione FROM commesse WHERE azienda_id = $1 ORDER BY codice", [aziendaId]),
+      client.query(
+        "SELECT id, dipendente_id, commessa_id, to_char(data, 'YYYY-MM-DD') AS data, ore FROM registrazioni WHERE azienda_id = $1",
+        [aziendaId]
+      ),
+      client.query(`${SELECT_MATERIALI} WHERE azienda_id = $1 ORDER BY data DESC, descrizione`, [aziendaId]),
+      client.query(`${SELECT_ALLEGATI} WHERE azienda_id = $1 ORDER BY caricato_il DESC`, [aziendaId]),
+    ]);
+
+    await client.query("COMMIT");
+
+    res.json({
+      azienda: azRes.rows[0]?.nome ?? "",
+      dipendenti: dipRes.rows.map((d) => ({
+        id: d.id,
+        nome: d.nome,
+        cognome: d.cognome,
+        lordoMensile: d.lordo_mensile || {},
+        archiviato: d.archiviato === true,
+      })),
+      commesse: comRes.rows.map((c) => ({ id: c.id, codice: c.codice, descrizione: c.descrizione })),
+      registrazioni: regRes.rows.map((r) => ({
+        id: r.id,
+        dipendenteId: r.dipendente_id,
+        commessaId: r.commessa_id,
+        data: r.data,
+        ore: Number(r.ore),
+      })),
+      materiali: matRes.rows.map(mappaMateriale),
+      allegati: allRes.rows.map(mappaAllegato),
+    });
+  } catch (e) {
+    await client.query("ROLLBACK");
+    console.error(e);
+    res.status(500).json({ errore: "Impossibile preparare l'esportazione." });
+  } finally {
+    client.release();
+  }
+});
 
 /**
  * Carica un documento e lo allega a una commessa dell'azienda del token.

@@ -95,6 +95,31 @@ PRODUCT.md, «Non deciso»).
 
 ---
 
+## 3. Chi se ne va non può portare via i file dei documenti archiviati
+
+**Cosa manca.** L'esportazione dà tutto: ore, dipendenti, commesse, materiali, e
+l'**inventario** dei documenti — nome, data, fornitore, a quale commessa sono
+legati. Non dà i file: i PDF delle fatture e le foto dei DDT restano
+nell'archivio esterno.
+
+**Chi ne soffre.** Un'impresa che smette di abbonarsi e che nel frattempo ha
+caricato qui l'unico esemplare di un documento. L'inventario le dice che quel
+DDT esisteva e a quale cantiere apparteneva, ma il documento non ce l'ha più.
+
+**Perché non è stato fatto.** È una scelta, non una dimenticanza: i file
+stanno su R2, scaricarli in blocco vuol dire una seconda rotta, un archivio
+compresso costruito al volo e un costo di banda proporzionale a quanto hanno
+caricato. E sono documenti che il fornitore ha già mandato all'azienda per
+altre vie. È anche la stessa scelta che il backup JSON fa da sempre, dove gli
+allegati escono con la nota «solo riferimento: il file resta nell'archivio».
+
+**Resta un buco noto.** L'inventario senza i file è un compromesso ragionevole
+finché i documenti sono copie di qualcosa che l'azienda ha già. Il giorno che
+questo diventasse l'archivio principale di qualcuno — ed è esattamente quello
+che succede quando un prodotto funziona — smetterebbe di esserlo.
+
+---
+
 ## Fatte
 
 - **Cancellare un dipendente distruggeva le sue ore** (6 agosto 2026). Chi ha

@@ -1707,6 +1707,91 @@ function PaginaResetPassword({ token, alSuccesso }) {
  * niente. Finché la conferma non c'è si dice apertamente che si sta
  * aspettando, e si offre un modo per ricontrollare subito.
  */
+/**
+ * PORTARE VIA I PROPRI DATI, dalla schermata che blocca tutto il resto.
+ *
+ * È il momento in cui serve davvero: chi decide di non abbonarsi deve poter
+ * uscire con in mano i propri costi del personale. Sta SOPRA il listino e non
+ * sotto, perché non è un ripensamento — è un diritto, e nasconderlo in fondo
+ * a una pagina che vende sarebbe un modo elegante di non darlo.
+ *
+ * COSA C'È DENTRO LO DICE PRIMA, non dopo lo scaricamento: l'inventario dei
+ * documenti sì, i PDF no. Scoprirlo aprendo il file sarebbe scoprirlo quando
+ * l'abbonamento è già stato disdetto.
+ *
+ * Il periodo non si chiede: lo ricavano i dati stessi, dalla prima all'ultima
+ * ora registrata. Un selettore di date qui sarebbe una domanda in più fra una
+ * persona e i suoi dati.
+ */
+function PortaViaIDati() {
+  const [inCorso, setInCorso] = useState(null);   // "excel" | "json" | null
+  const [errore, setErrore] = useState(null);
+  const [fatto, setFatto] = useState(null);
+
+  const scarica = async (formato) => {
+    setErrore(null); setFatto(null); setInCorso(formato);
+    const ris = await datiAPI.esporta();
+    setInCorso(null);
+    if (!ris.ok) return setErrore(ris.motivo);
+
+    const d = ris.dati;
+    if (formato === "json") {
+      const esito = await datiAPI.backupEsporta(null, {
+        azienda: d.azienda, dipendenti: d.dipendenti, commesse: d.commesse,
+        registrazioni: d.registrazioni, materiali: d.materiali,
+        allegati: (d.allegati || []).map((a) => ({ ...a, nota: "solo riferimento: il file resta nell'archivio dell'app" })),
+      });
+      return esito.ok ? setFatto("Backup scaricato.") : setErrore("Non è stato possibile salvare il file.");
+    }
+
+    const date = (d.registrazioni || []).map((r) => r.data).sort();
+    if (date.length === 0) {
+      return setErrore("Non c'è nessuna ora registrata da mettere in Excel. Il backup JSON contiene comunque dipendenti, commesse e materiali.");
+    }
+    esportaCompletoXLSX(
+      { dipendenti: d.dipendenti, commesse: d.commesse, registrazioni: d.registrazioni, materiali: d.materiali },
+      date[0], date[date.length - 1]
+    );
+    setFatto(`Excel scaricato: dal ${fmtData(date[0])} al ${fmtData(date[date.length - 1])}.`);
+  };
+
+  return (
+    <div className="card p-6 mb-5">
+      <h2 className="t-sezione">I tuoi dati sono tuoi</h2>
+      <p className="t-corpo mt-2" style={{ color: "var(--muted)" }}>
+        Puoi scaricarli adesso, anche senza abbonarti.
+      </p>
+      <p className="t-piccolo mt-2.5" style={{ color: "var(--txt-tenue)" }}>
+        L'esportazione contiene tutte le ore, i dipendenti, le commesse e i materiali, più
+        l'elenco dei documenti archiviati — ma non i PDF veri, che restano nell'archivio
+        dell'applicazione.
+      </p>
+      <div className="flex flex-wrap gap-2 mt-5">
+        <Bottone variante="fantasma" onClick={() => scarica("excel")} disabled={inCorso !== null}>
+          {inCorso === "excel"
+            ? <><Loader2 size={14} strokeWidth={1.75} className="animate-spin" /> Preparo…</>
+            : <><FileSpreadsheet size={14} strokeWidth={1.75} /> Scarica tutto in Excel</>}
+        </Bottone>
+        <Bottone variante="fantasma" onClick={() => scarica("json")} disabled={inCorso !== null}>
+          {inCorso === "json"
+            ? <><Loader2 size={14} strokeWidth={1.75} className="animate-spin" /> Preparo…</>
+            : <><Download size={14} strokeWidth={1.75} /> Backup completo (JSON)</>}
+        </Bottone>
+      </div>
+      {errore && (
+        <p className="t-piccolo mt-3.5 flex items-start gap-2" style={{ color: "var(--errore)" }}>
+          <AlertTriangle size={13} strokeWidth={1.75} className="mt-0.5 shrink-0" /> {errore}
+        </p>
+      )}
+      {fatto && (
+        <p className="t-piccolo mt-3.5 flex items-start gap-2" style={{ color: "var(--verde)" }}>
+          <CheckCircle2 size={13} strokeWidth={1.75} className="mt-0.5 shrink-0" /> {fatto}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function PaginaAbbonamento({ onUscire, info, inAttesaDiConferma, onRicontrolla }) {
   const [ricontrollando, setRicontrollando] = useState(false);
   const [ancoraNiente, setAncoraNiente] = useState(false);
@@ -1770,6 +1855,11 @@ function PaginaAbbonamento({ onUscire, info, inAttesaDiConferma, onRicontrolla }
                   bloccare l'accesso non cancella niente. */}
               I tuoi dati sono rimasti tutti dove li hai lasciati. Per tornare a vederli, attiva l'abbonamento.
             </p>
+
+            {/* PRIMA del listino, non dopo. Chi arriva qui ha due strade
+                legittime — abbonarsi o andarsene — e la seconda non deve
+                stare in fondo a una pagina che vende. */}
+            <div className="text-left"><PortaViaIDati /></div>
 
             {/* LO STESSO LISTINO del pannello Abbonamento, non una copia.
                 Qui uno decide davvero — è la schermata di chi non può più

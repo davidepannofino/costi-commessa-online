@@ -96,6 +96,29 @@ async function comprimiSeImmagine(file) {
 }
 
 export const datiAPI = {
+  /**
+   * Rilegge TUTTO per portarselo via. Funziona anche con la prova scaduta:
+   * è l'unica rotta che lo fa, ed è di sola lettura garantita dal database.
+   *
+   * NON chiama gestoreAbbonamentoRichiesto su un 402. Sembra un dettaglio ed è
+   * il punto: questa funzione la si usa DALLA schermata di blocco, e rimandare
+   * lì chi ci è già dentro vorrebbe dire far sparire il messaggio d'errore
+   * ridisegnando la stessa schermata. Chi la chiama vede l'errore e lo mostra.
+   */
+  async esporta() {
+    try {
+      const res = await fetch(`${API_BASE}/api/esportazione`, { headers: headerAuth() });
+      if (res.status === 401) {
+        gestoreSessioneScaduta?.();
+        return { ok: false, motivo: "La sessione è scaduta: accedi di nuovo." };
+      }
+      if (!res.ok) return { ok: false, motivo: `Il server ha risposto con l'errore ${res.status}.` };
+      return { ok: true, dati: await res.json() };
+    } catch (e) {
+      return { ok: false, motivo: "Impossibile contattare il server. Riprova fra un minuto." };
+    }
+  },
+
   async carica() {
     try {
       const res = await fetch(`${API_BASE}/api/stato`, { headers: headerAuth() });
