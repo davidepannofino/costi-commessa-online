@@ -1,5 +1,26 @@
 # Miglioramenti
 
+## Regola di lavoro: compilare non è eseguire
+
+**Ogni schermata toccata va aperta davvero prima di dirla finita.** La build
+passa anche quando manca una costante: il bundler non sa se un identificatore
+esisterà a runtime, quindi `npm run build` che finisce con «✓ built» non dice
+niente sul fatto che la pagina si apra.
+
+Non è un principio astratto. Il 6 agosto 2026, rifacendo la schermata
+Abbonamento, un innesto ha portato via la costante `ICONE_STATO` insieme al
+commento che la precedeva. Le prove passavano, la build passava, e la pagina
+era **bianca** — l'errore esisteva solo nella console del browser. Se quel
+lavoro fosse stato chiuso sulla parola della build, sarebbe andato in
+produzione così.
+
+Quindi: aprire la pagina, guardarla, e **leggere la console** — ricaricando con
+la console già in ascolto, perché gli errori che contano capitano al
+caricamento. Vale anche per una modifica «di solo testo»: il costo di guardare
+è trenta secondi, quello di non guardare è una schermata bianca a un cliente.
+
+---
+
 Cose sapute e non ancora fatte. Ogni voce dice **cosa manca**, **chi ne
 soffre** e **perché non è stato fatto** — senza quest'ultimo pezzo una lista di
 miglioramenti diventa una lista dei desideri.
