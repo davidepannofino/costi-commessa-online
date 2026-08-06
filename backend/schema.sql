@@ -1,3 +1,38 @@
+-- ===========================================================================
+-- LA REGOLA DI QUESTO FILE — leggila prima di aggiungere una riga qui sotto.
+--
+-- Questo file viene eseguito a ogni pubblicazione, PRIMA che il codice nuovo
+-- serva traffico. Quindi c'è sempre una finestra in cui il database ha già la
+-- forma NUOVA e a rispondere agli utenti c'è ancora il codice VECCHIO.
+--
+-- Ne segue l'unica regola che conta:
+--
+--     ogni modifica qui dentro deve restare sicura anche per la VERSIONE
+--     PRECEDENTE del codice, non solo per quella che si sta pubblicando.
+--
+-- SI PUÒ, perché il codice di prima non se ne accorge:
+--   - aggiungere una tabella;
+--   - aggiungere una colonna con un valore predefinito (o NULL-abile);
+--   - allentare un vincolo, togliere un CHECK, aggiungere un indice.
+--
+-- NON SI PUÒ, perché il codice di prima si romperebbe nella finestra:
+--   - togliere o rinominare una colonna o una tabella;
+--   - mettere un NOT NULL senza valore predefinito;
+--   - stringere un vincolo che il codice attuale viola.
+--
+-- Quelle vogliono DUE PUBBLICAZIONI SEPARATE, in quest'ordine: prima il
+-- codice che tollera tutte e due le forme, poi lo schema che toglie la
+-- vecchia. Non esiste un comando di pubblicazione più furbo che le renda
+-- sicure in una volta sola: è una questione di ordine, non di strumenti.
+--
+-- Perché la regola sta QUI e non in un documento a parte: questo è il file
+-- che si sta modificando nel momento in cui la si sta per violare.
+--
+-- (Il passo che lo esegue è il comando di pubblicazione del servizio backend
+-- su Render. Se lì non ci fosse, la migrazione va data a mano nello stesso
+-- punto — prima del deploy del codice nuovo — e la regola vale identica.)
+-- ===========================================================================
+
 -- Schema del database — Costi Commessa
 -- Pensato per più aziende fin da subito: ogni tabella ha una colonna azienda_id.
 -- Tappa 2 (login): azienda_id viene ora popolato con l'azienda dell'utente
