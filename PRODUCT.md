@@ -33,9 +33,22 @@ Il successo è che a fine mese il numero sia lì senza che nessuno abbia dovuto
 ricostruirlo: aprire la commessa e vedere il costo, invece di riaprire il file
 Excel delle ore, la cartella dei DDT e la posta del commercialista.
 
-Commexa è un prodotto in abbonamento: 30 giorni di prova liberi, poi 29 €
-al mese, disdetta libera. Il pagamento passa da Stripe Checkout; alcune email
-possono essere esentate a mano.
+Commexa è un prodotto in abbonamento: 30 giorni di prova liberi, poi uno di tre
+piani, disdetta libera. I piani si distinguono **solo per capienza** — le
+funzioni sono le stesse su tutti e tre:
+
+| piano | dipendenti | al mese | all'anno |
+|---|---|---|---|
+| Cantiere | fino a 10 | 49 € | 490 € |
+| Impresa | fino a 30 | 99 € | 990 € |
+| Struttura | oltre 30 | 179 € | 1.790 € |
+
+Sull'annuale si pagano dieci mensilità invece di dodici. **Tutti i prezzi sono
+al netto dell'IVA**: come l'IVA venga esposta e come si emetta la fattura non è
+ancora deciso, e non va inventato.
+
+Il pagamento passa da Stripe Checkout; alcune email possono essere esentate a
+mano.
 
 ## Positioning
 
@@ -112,8 +125,22 @@ Funzionalità confermate dall'implementazione:
   selezionabile; abbinamento automatico ai DDT archiviati; assegnazione per
   gruppo DDT o per singola riga; righe escludibili dall'importazione.
 - Autenticazione email/password con recupero password via email; abbonamento
-  Stripe con prova di 30 giorni; pannello di amministrazione per il gestore
-  della piattaforma.
+  Stripe con prova di 30 giorni e tre piani (mensile o annuale); pannello di
+  amministrazione per il gestore della piattaforma.
+- **La capienza si misura, non si dichiara.** Il piano che serve si ricava dal
+  **mese di punta degli ultimi dodici**: in quale mese solare hanno lavorato più
+  persone, contate sulla data del lavoro e non su quando le ore sono state
+  inserite. Il picco e non il totale delle teste, perché in edilizia il ricambio
+  è alto: otto operai fissi più quattro sostituzioni nell'anno non sono dodici
+  persone in cantiere. Non si contano le righe della tabella `dipendenti`
+  perché togliere una persona cancella le sue ore, quindi chi conserva lo
+  storico è costretto a tenersi anche gli ex dipendenti.
+- **Superare il tetto non blocca niente.** L'undicesimo dipendente si aggiunge,
+  le sue ore si registrano, i conti si fanno. Cambia solo una frase nella
+  schermata dell'abbonamento. Un software che impedisce di lavorare perché si è
+  assunta una persona non lo vuole nessuno — e per la stessa ragione si può
+  comprare un piano più piccolo della propria capienza, purché lo si sappia nel
+  momento in cui lo si sceglie.
 - Esportazione CSV / XLSX e stampa.
 
 Vincoli tecnici e di prodotto:
@@ -151,7 +178,11 @@ Vincoli tecnici e di prodotto:
   su centinaia di righe, in transazione. Per un identificatore che l'utente non
   vede mai, l'avvertenza costa meno del rischio.
 
-Non deciso (da non inventare): piani diversi dal singolo abbonamento mensile,
+Non deciso (da non inventare): **come si espone l'IVA e come si emette la
+fattura** dell'abbonamento, i dati fiscali da chiedere all'iscrizione (partita
+IVA, codice destinatario), la pagina prezzi pubblica, il cambio di piano da
+dentro l'applicazione — oggi si sceglie il piano una volta sola, al primo
+acquisto, e il portale Stripe **non** va configurato per cambiarlo. E ancora:
 gestione multiutente, integrazioni con gestionali o con lo SdI.
 
 ## Brand Commitments
@@ -164,7 +195,11 @@ gestione multiutente, integrazioni con gestionali o con lo SdI.
   della pagina, componente `Marchio`, benvenuto, pagina abbonamento, email di
   reset e voce Stripe dicono Commexa. Restano al nome tecnico soltanto i
   commenti di intestazione (`App.jsx`, `schema.sql`) e i nomi delle cartelle.
-- Prezzo dichiarato: 29 € / mese, «disdici quando vuoi, senza vincoli».
+- Prezzi dichiarati: 49 / 99 / 179 € al mese secondo la capienza, al netto
+  dell'IVA, «disdici quando vuoi, senza vincoli». Sull'annuale si dice «due mesi
+  in regalo», e accanto al prezzo si scrive per esteso quanto si spenderebbe
+  pagando mese per mese: un prezzo di riferimento che non spiega da dove viene
+  sembra il trucco dei saldi.
 - **La voce parla come parla un artigiano competente:** frasi corte, prima
   persona plurale mai, nessun gergo da software. Gli avvisi dicono cosa fare
   («Elimina qualche documento prima di caricarne altri»), non cosa è andato
