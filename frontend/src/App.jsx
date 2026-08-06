@@ -1689,60 +1689,6 @@ function PaginaResetPassword({ token, alSuccesso }) {
  *  scadenza è congelata per account su aziende.prova_fino_al, quindi non c'è
  *  UNA durata da nominare. */
 /**
- * SCELTA DELLA PERIODICITÀ, con il prezzo che ne risulta.
- *
- * Uno solo, usato sia dalla schermata bloccante sia dal pannello: gli importi
- * arrivano dal server dentro `capienza` e non si scrivono da nessuna parte qui,
- * così restano quelli di piani.js e non se ne creano copie.
- */
-function ScegliPeriodicita({ capienza, valore, onCambia }) {
-  const prezzo = valore === "annuale" ? capienza.prezzoAnnuale : capienza.prezzoMensile;
-  const risparmio = capienza.prezzoMensile * 12 - capienza.prezzoAnnuale;
-  return (
-    <div>
-      <div className="flex gap-2 mb-5" role="group" aria-label="Periodicità">
-        {[
-          { id: "mensile", testo: "Mensile" },
-          { id: "annuale", testo: "Annuale" },
-        ].map((o) => {
-          const scelto = valore === o.id;
-          return (
-            <button key={o.id} type="button" onClick={() => onCambia(o.id)} aria-pressed={scelto}
-              className="flex-1 px-4 t-corpo btn"
-              style={{
-                minHeight: 48, borderRadius: "var(--r-sm)", fontWeight: 500,
-                background: scelto ? "var(--bg-elevato)" : "transparent",
-                border: `.5px solid ${scelto ? "var(--accento-bordo)" : "var(--bordo-input)"}`,
-                color: scelto ? "var(--txt)" : "var(--muted)",
-              }}>
-              {o.testo}
-            </button>
-          );
-        })}
-      </div>
-      <div className="card px-6 py-7">
-        <p className="t-micro mb-2">Piano {capienza.pianoNome}</p>
-        <p className="cifra-grande" style={{ fontSize: 40, lineHeight: 1, letterSpacing: "-.035em" }}>
-          {prezzo} €
-          <span className="t-corpo" style={{ fontWeight: 400, color: "var(--tenue)", letterSpacing: 0 }}>
-            {valore === "annuale" ? " / anno" : " / mese"}
-          </span>
-        </p>
-        {/* "+ IVA" e nient'altro: come si espone e come si emette l'IVA non è
-            deciso, e inventarlo qui vorrebbe dire scrivere un numero fiscale
-            che nessuno ha confermato. */}
-        <p className="t-piccolo mt-2" style={{ color: "var(--tenue)" }}>al netto dell'IVA</p>
-        <p className="t-piccolo mt-3" style={{ color: "var(--muted)" }}>
-          {valore === "annuale"
-            ? `Dieci mensilità invece di dodici: ${risparmio} € risparmiati in un anno.`
-            : "Disdici quando vuoi, senza vincoli."}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-/**
  * Schermata che sostituisce l'app quando l'accesso ai dati è bloccato.
  *
  * Ha DUE facce, e la seconda è il motivo per cui questo componente è stato
@@ -1753,24 +1699,11 @@ function ScegliPeriodicita({ capienza, valore, onCambia }) {
  * aspettando, e si offre un modo per ricontrollare subito.
  */
 function PaginaAbbonamento({ onUscire, info, inAttesaDiConferma, onRicontrolla }) {
-  const [caricando, setCaricando] = useState(false);
-  const [errore, setErrore] = useState(null);
-  const [fatturazione, setFatturazione] = useState("mensile");
   const [ricontrollando, setRicontrollando] = useState(false);
   const [ancoraNiente, setAncoraNiente] = useState(false);
-  const capienza = info?.capienza;
 
-  const abbonati = async () => {
-    setErrore(null);
-    setCaricando(true);
-    try {
-      const url = await datiAPI.avviaCheckout(fatturazione);
-      window.location.href = url;
-    } catch (e) {
-      setErrore("Non è stato possibile avviare il pagamento. Riprova tra poco.");
-      setCaricando(false);
-    }
-  };
+  /* Il prezzo, la periodicità e l'avvio del pagamento non stanno più qui:
+     li porta ListinoPiani, lo stesso componente del pannello Abbonamento. */
 
   const ricontrolla = async () => {
     setAncoraNiente(false);
@@ -1783,7 +1716,9 @@ function PaginaAbbonamento({ onUscire, info, inAttesaDiConferma, onRicontrolla }
   return (
     <div className="min-h-screen flex items-center justify-center px-4" style={{ background: "var(--tela)", color: "var(--txt)" }}>
       <StileGlobale />
-      <div className="w-full" style={{ maxWidth: 420 }}>
+      {/* Largo come il pannello Abbonamento: qui dentro ci sta il listino a
+          tre righe, e a 420px non ci starebbe. */}
+      <div className="w-full" style={{ maxWidth: 720 }}>
         <div className="mb-10"><Marchio centrato /></div>
 
         {inAttesaDiConferma ? (
@@ -1827,26 +1762,15 @@ function PaginaAbbonamento({ onUscire, info, inAttesaDiConferma, onRicontrolla }
               I tuoi dati sono rimasti tutti dove li hai lasciati. Per tornare a vederli, attiva l'abbonamento.
             </p>
 
-            {capienza ? (
-              <div className="mb-8 text-left">
-                <ScegliPeriodicita capienza={capienza} valore={fatturazione} onCambia={setFatturazione} />
-              </div>
-            ) : (
-              /* Senza i dati del piano non si inventa un prezzo: si lascia
-                 comunque il bottone, e il prezzo lo dirà Stripe nella sua
-                 pagina, che è comunque il posto dove si conferma. */
-              <p className="t-piccolo mb-8" style={{ color: "var(--tenue)" }}>
-                Il prezzo del tuo piano è indicato nella pagina di pagamento.
-              </p>
-            )}
+            {/* LO STESSO LISTINO del pannello Abbonamento, non una copia.
+                Qui uno decide davvero — è la schermata di chi non può più
+                entrare — e mostrargli un piano solo vorrebbe dire che chi è
+                cresciuto a 35 dipendenti può ricomprare soltanto quello che
+                aveva. Due listini copiati sarebbero due pagine prezzi che
+                divergono al primo ritocco. */}
+            <ListinoPiani info={info} />
 
-            {errore && <div className="mb-5 text-left"><Avviso tono="errore">{errore}</Avviso></div>}
-
-            <Bottone variante="primario" className="w-full" onClick={abbonati} disabled={caricando}>
-              {caricando ? <Loader2 size={15} strokeWidth={1.75} className="animate-spin" /> : <ArrowRight size={15} strokeWidth={1.75} />}
-              {caricando ? "Un attimo…" : "Abbonati ora"}
-            </Bottone>
-            <button type="button" onClick={onUscire} className="t-piccolo mt-6 btn" style={{ color: "var(--muted)" }}>
+            <button type="button" onClick={onUscire} className="t-piccolo mt-7 btn" style={{ color: "var(--muted)" }}>
               Esci e torna più tardi
             </button>
           </div>
@@ -1880,7 +1804,16 @@ const ICONE_STATO = {
 };
 
 /**
- * LA SCHERMATA ABBONAMENTO: i tre piani, confrontabili, in un registro.
+ * IL LISTINO: i tre piani in un registro, con lo scambio di periodicità e i
+ * bottoni per comprarli.
+ *
+ * ESISTE UNA VOLTA SOLA, ed è il punto. Lo usano DUE schermate — il pannello
+ * Abbonamento e la schermata che sostituisce l'app quando la prova è finita — e
+ * quella di fine prova è il posto dove uno decide davvero. Due listini copiati
+ * sarebbero due pagine prezzi che divergono al primo ritocco: un prezzo
+ * aggiornato di qua e non di là, un piano nuovo che compare solo su una delle
+ * due. Qui dentro ci sono anche le AZIONI (checkout, portale, la conferma sul
+ * piano troppo piccolo), così non divergono nemmeno i comportamenti.
  *
  * Non tre card affiancate. DESIGN.md lo vieta due volte — «Se stai per
  * ripetere la stessa card N volte, quella è una lista» e, fra i Don't,
@@ -1893,24 +1826,19 @@ const ICONE_STATO = {
  * si legge scorrendo quella, invece di saltare fra tre riquadri. Sotto i 640px
  * le righe diventano blocchi impilati: è la Regola della Tabella che si Arrende.
  *
- * Il bronzo pieno compare UNA volta sola su questa schermata — il bottone del
- * piano consigliato — come vuole la Regola dell'Unico in Evidenza. La riga
- * consigliata si distingue col velo bronzo, che pieno non è.
+ * Il bronzo pieno compare UNA volta sola — il bottone del piano consigliato —
+ * come vuole la Regola dell'Unico in Evidenza. La riga consigliata si distingue
+ * col velo bronzo, che pieno non è.
  *
  * I prezzi NON sono verdi. La Regola del Verde Denaro riserva quel colore agli
  * importi in euro, ma in questo prodotto vuol dire «quanto ti costa una
  * commessa»: colorare il canone lo metterebbe nella stessa famiglia dei costi
  * di cantiere, che è un'altra cosa.
- *
- * E non c'è nessun numero-eroe: qui i prezzi sono tre, nessuno è IL numero, e
- * DESIGN.md riserva la scala display alle schermate di riepilogo.
  */
-function VistaAbbonamento({ info, inAttesaDiConferma, onRicontrolla }) {
+function ListinoPiani({ info }) {
   const [caricando, setCaricando] = useState(false);
   const [errore, setErrore] = useState(null);
   const [fatturazione, setFatturazione] = useState(info?.capienza?.fatturazione || "mensile");
-  const [ricontrollando, setRicontrollando] = useState(false);
-  const [ancoraNiente, setAncoraNiente] = useState(false);
   /* Il piano che l'utente ha scelto pur essendo più piccolo della sua
      capienza: prima di mandarlo a pagare glielo si dice. Non è un blocco — si
      procede lo stesso — è che deve essere una scelta fatta sapendo. */
@@ -1918,8 +1846,6 @@ function VistaAbbonamento({ info, inAttesaDiConferma, onRicontrolla }) {
 
   const cap = info?.capienza;
   const piani = info?.piani || [];
-  const desc = descriviAbbonamento(info);
-  const Icona = desc ? ICONE_STATO[desc.icona] : null;
   const abbonato = info?.stato === "attivo";
 
   /* Si consiglia SOLO se c'è una prova su cui fondarlo. Con zero ore
@@ -1928,14 +1854,12 @@ function VistaAbbonamento({ info, inAttesaDiConferma, onRicontrolla }) {
      numero inventato. In quel caso nessuna riga viene segnalata. */
   const consigliato = cap?.mesePunta ? cap.pianoConsigliato : null;
 
-  const vaiA = async (url) => { window.location.href = url; };
-
   const compra = async (idPiano) => {
     setErrore(null);
     setDaConfermare(null);
     setCaricando(true);
     try {
-      vaiA(await datiAPI.avviaCheckout(fatturazione, idPiano));
+      window.location.href = await datiAPI.avviaCheckout(fatturazione, idPiano);
     } catch (e) {
       setErrore("Non è stato possibile avviare il pagamento. Riprova tra poco.");
       setCaricando(false);
@@ -1955,12 +1879,181 @@ function VistaAbbonamento({ info, inAttesaDiConferma, onRicontrolla }) {
     setErrore(null);
     setCaricando(true);
     try {
-      vaiA(await datiAPI.avviaPortale());
+      window.location.href = await datiAPI.avviaPortale();
     } catch (e) {
       setErrore("Non è stato possibile aprire la gestione dell'abbonamento. Riprova tra poco.");
       setCaricando(false);
     }
   };
+
+  const annuale = fatturazione === "annuale";
+  if (piani.length === 0) {
+    return <p className="t-piccolo" style={{ color: "var(--muted)" }}>Caricamento dei piani…</p>;
+  }
+
+  return (
+    <div className="text-left">
+      {errore && <div className="mb-6"><Avviso tono="errore">{errore}</Avviso></div>}
+
+      {/* LO SCAMBIO, sopra il listino e valido per tutte e tre le righe. */}
+      <div className="flex gap-2 mb-6" role="group" aria-label="Periodicità">
+        {[
+          { id: "mensile", testo: "Mensile", nota: null },
+          { id: "annuale", testo: "Annuale", nota: "2 mesi in regalo" },
+        ].map((o) => {
+          const scelto = fatturazione === o.id;
+          return (
+            <button key={o.id} type="button" onClick={() => setFatturazione(o.id)} aria-pressed={scelto}
+              className="px-4 t-corpo btn text-left"
+              style={{
+                minHeight: 48, borderRadius: "var(--r-sm)", fontWeight: 500,
+                background: scelto ? "var(--bg-elevato)" : "transparent",
+                border: `.5px solid ${scelto ? "var(--accento-bordo)" : "var(--bordo-input)"}`,
+                color: scelto ? "var(--txt)" : "var(--muted)",
+              }}>
+              {o.testo}
+              {o.nota && (
+                <span className="t-piccolo" style={{ fontWeight: 400, color: scelto ? "var(--accento-chiaro)" : "var(--tenue)" }}>
+                  {" · "}{o.nota}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* IL REGISTRO: un contenitore, tre righe, un piede. */}
+      <div className="card overflow-hidden">
+        {piani.map((p, i) => {
+          const eConsigliato = p.id === consigliato;
+          const eIlMio = p.id === cap?.piano;
+          const prezzo = annuale ? p.prezzoAnnuale : p.prezzoMensile;
+          const seMensile = p.prezzoMensile * 12;
+          const inConferma = daConfermare === p.id;
+          return (
+            <div key={p.id}
+              style={{
+                borderTop: i > 0 ? ".5px solid var(--bordo-tenue)" : "none",
+                background: eConsigliato ? "var(--velo-accento)" : "transparent",
+              }}>
+              <div className="px-6 py-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
+                {/* NOME E CAPIENZA */}
+                <div className="min-w-0 sm:flex-1">
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <span className="t-sotto" style={{ color: "var(--txt)" }}>{p.nome}</span>
+                    {eIlMio && <span className="badge-codice">Il tuo piano</span>}
+                    {eConsigliato && (
+                      <span className="t-micro" style={{ color: "var(--accento-chiaro)", letterSpacing: ".06em" }}>CONSIGLIATO</span>
+                    )}
+                  </div>
+                  <p className="t-piccolo mt-1" style={{ color: "var(--muted)" }}>
+                    {p.tetto === null ? "oltre 30 dipendenti" : `fino a ${p.tetto} dipendenti`}
+                  </p>
+                </div>
+
+                {/* PREZZO — incolonnato, cifre tabellari (Regola della Colonna) */}
+                <div className="sm:text-right sm:shrink-0" style={{ minWidth: 150 }}>
+                  <p className="f-mono" style={{ fontSize: 24, fontWeight: 600, letterSpacing: "-.02em", color: "var(--txt)" }}>
+                    {prezzo} €
+                  </p>
+                  <p className="t-piccolo" style={{ color: "var(--muted)" }}>{annuale ? "all'anno" : "al mese"}</p>
+                  {/* Il prezzo di riferimento si SPIEGA, non si sbarra: un
+                      numero barrato senza provenienza è il trucco dei saldi. */}
+                  {annuale && (
+                    <p className="t-piccolo mt-1" style={{ color: "var(--tenue)" }}>
+                      pagando mese per mese spenderesti {seMensile} € in un anno
+                    </p>
+                  )}
+                </div>
+
+                {/* AZIONE — 48px: è un bersaglio da dito su un bottone che porta
+                    a pagare, e qui si arriva anche dal telefono. */}
+                <div className="sm:shrink-0">
+                  {abbonato ? (
+                    eIlMio ? (
+                      <Bottone variante="fantasma" className="w-full sm:w-auto min-h-[48px] px-5" onClick={gestisci} disabled={caricando}>
+                        {caricando ? <Loader2 size={14} strokeWidth={1.75} className="animate-spin" /> : <CreditCard size={14} strokeWidth={1.75} />}
+                        {caricando ? "Un attimo…" : "Gestisci"}
+                      </Bottone>
+                    ) : (
+                      <span className="t-piccolo" style={{ color: "var(--tenue)" }}>—</span>
+                    )
+                  ) : (
+                    <Bottone variante={eConsigliato ? "primario" : "fantasma"} className="w-full sm:w-auto min-h-[48px] px-5"
+                      onClick={() => scegli(p)} disabled={caricando}>
+                      {caricando ? <Loader2 size={14} strokeWidth={1.75} className="animate-spin" /> : <ArrowRight size={14} strokeWidth={1.75} />}
+                      {caricando ? "Un attimo…" : "Scegli"}
+                    </Bottone>
+                  )}
+                </div>
+              </div>
+
+              {/* IL MOTIVO del consiglio: un numero con la sua provenienza. */}
+              {eConsigliato && !inConferma && (
+                <p className="px-6 pb-5 -mt-1 t-piccolo" style={{ color: "var(--accento-chiaro)" }}>
+                  A {fmtMese(cap.mesePunta).toLowerCase()} avevi {cap.personeMesePunta} {cap.personeMesePunta === 1 ? "persona" : "persone"} in cantiere.
+                </p>
+              )}
+
+              {/* SCELTA CONSAPEVOLE: un piano più piccolo si compra, ma
+                  dicendolo prima invece di lasciarlo scoprire dopo. */}
+              {inConferma && (
+                <div className="px-6 pb-5">
+                  <Avviso tono="accento" icona={AlertTriangle}>
+                    Il tuo mese di punta è {cap.personeMesePunta} persone, e {p.nome} arriva a {p.tetto}.
+                    Puoi sceglierlo lo stesso — non si blocca niente — ma l'avviso di capienza resterà.
+                  </Avviso>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Bottone variante="fantasma" onClick={() => compra(p.id)} disabled={caricando}>
+                      {caricando ? <Loader2 size={14} strokeWidth={1.75} className="animate-spin" /> : <ArrowRight size={14} strokeWidth={1.75} />}
+                      {caricando ? "Un attimo…" : `Scegli ${p.nome} lo stesso`}
+                    </Bottone>
+                    <Bottone variante="fantasma" onClick={() => setDaConfermare(null)}>Annulla</Bottone>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {/* IL PIEDE: le due cose che valgono per tutte e tre le righe. */}
+        <div className="px-6 py-5" style={{ borderTop: ".5px solid var(--bordo)", background: "var(--velo)" }}>
+          <p className="t-corpo" style={{ color: "var(--txt-chiaro)" }}>
+            Tutti i piani hanno le stesse funzioni: cambia solo quante persone ci stanno dentro.
+          </p>
+          <p className="t-piccolo mt-2" style={{ color: "var(--muted)" }}>
+            Prezzi al netto dell'IVA · disdici quando vuoi, senza vincoli.
+          </p>
+          {/* Senza ore non si consiglia niente, e si dice perché. */}
+          {!consigliato && (
+            <p className="t-piccolo mt-2" style={{ color: "var(--tenue)" }}>
+              Quando avrai registrato delle ore ti diremo quale piano serve: si guarda il mese
+              più affollato degli ultimi dodici, contando le persone che hanno ore in quello stesso mese.
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * LA SCHERMATA ABBONAMENTO: lo stato, e sotto il listino.
+ *
+ * Il listino non sta qui: sta in ListinoPiani, che usa anche la schermata di
+ * fine prova. Questa aggiunge quello che riguarda l'account — a che punto è
+ * l'abbonamento, e l'avviso quando un pagamento risulta inviato ma non ancora
+ * confermato.
+ *
+ * Nessun numero-eroe: i prezzi sono tre, nessuno è IL numero, e DESIGN.md
+ * riserva la scala display alle schermate di riepilogo.
+ */
+function VistaAbbonamento({ info, inAttesaDiConferma, onRicontrolla }) {
+  const [ricontrollando, setRicontrollando] = useState(false);
+  const [ancoraNiente, setAncoraNiente] = useState(false);
+
+  const desc = descriviAbbonamento(info);
+  const Icona = desc ? ICONE_STATO[desc.icona] : null;
 
   const ricontrolla = async () => {
     setAncoraNiente(false);
@@ -1969,9 +2062,6 @@ function VistaAbbonamento({ info, inAttesaDiConferma, onRicontrolla }) {
     setRicontrollando(false);
     if (!ok) setAncoraNiente(true);
   };
-
-  const annuale = fatturazione === "annuale";
-  const prezzoDelPiano = (p) => (annuale ? p.prezzoAnnuale : p.prezzoMensile);
 
   return (
     <div style={{ maxWidth: 720 }}>
@@ -2016,165 +2106,21 @@ function VistaAbbonamento({ info, inAttesaDiConferma, onRicontrolla }) {
             </div>
           )}
 
-          {errore && <div className="mb-6"><Avviso tono="errore">{errore}</Avviso></div>}
-
           {info.stato === "esente" ? (
             /* Agli esenti il listino non arriva nemmeno dal server: niente
                piani, niente prezzi, niente consigli. Non pagano. */
             <p className="t-corpo" style={{ color: "var(--muted)" }}>
               Il tuo account ha accesso completo e illimitato, senza bisogno di abbonamento.
             </p>
-          ) : piani.length === 0 ? (
-            <p className="t-piccolo" style={{ color: "var(--muted)" }}>Caricamento dei piani…</p>
           ) : (
-            <>
-              {/* LO SCAMBIO, sopra il listino e valido per tutte e tre le righe. */}
-              <div className="flex gap-2 mb-6" role="group" aria-label="Periodicità">
-                {[
-                  { id: "mensile", testo: "Mensile", nota: null },
-                  { id: "annuale", testo: "Annuale", nota: "2 mesi in regalo" },
-                ].map((o) => {
-                  const scelto = fatturazione === o.id;
-                  return (
-                    <button key={o.id} type="button" onClick={() => setFatturazione(o.id)} aria-pressed={scelto}
-                      className="px-4 t-corpo btn text-left"
-                      style={{
-                        minHeight: 48, borderRadius: "var(--r-sm)", fontWeight: 500,
-                        background: scelto ? "var(--bg-elevato)" : "transparent",
-                        border: `.5px solid ${scelto ? "var(--accento-bordo)" : "var(--bordo-input)"}`,
-                        color: scelto ? "var(--txt)" : "var(--muted)",
-                      }}>
-                      {o.testo}
-                      {o.nota && (
-                        <span className="t-piccolo" style={{ fontWeight: 400, color: scelto ? "var(--accento-chiaro)" : "var(--tenue)" }}>
-                          {" · "}{o.nota}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* IL REGISTRO: un contenitore, tre righe, un piede. */}
-              <div className="card overflow-hidden">
-                {piani.map((p, i) => {
-                  const eConsigliato = p.id === consigliato;
-                  const eIlMio = p.id === cap?.piano;
-                  const prezzo = prezzoDelPiano(p);
-                  const seMensile = p.prezzoMensile * 12;
-                  const inConferma = daConfermare === p.id;
-                  return (
-                    <div key={p.id}
-                      style={{
-                        borderTop: i > 0 ? ".5px solid var(--bordo-tenue)" : "none",
-                        background: eConsigliato ? "var(--velo-accento)" : "transparent",
-                      }}>
-                      <div className="px-6 py-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
-                        {/* NOME E CAPIENZA */}
-                        <div className="min-w-0 sm:flex-1">
-                          <div className="flex flex-wrap items-center gap-2.5">
-                            <span className="t-sotto" style={{ color: "var(--txt)" }}>{p.nome}</span>
-                            {eIlMio && <span className="badge-codice">Il tuo piano</span>}
-                            {eConsigliato && (
-                              <span className="t-micro" style={{ color: "var(--accento-chiaro)", letterSpacing: ".06em" }}>CONSIGLIATO</span>
-                            )}
-                          </div>
-                          <p className="t-piccolo mt-1" style={{ color: "var(--muted)" }}>
-                            {p.tetto === null ? "oltre 30 dipendenti" : `fino a ${p.tetto} dipendenti`}
-                          </p>
-                        </div>
-
-                        {/* PREZZO — incolonnato, cifre tabellari (Regola della Colonna) */}
-                        <div className="sm:text-right sm:shrink-0" style={{ minWidth: 150 }}>
-                          <p className="f-mono" style={{ fontSize: 24, fontWeight: 600, letterSpacing: "-.02em", color: "var(--txt)" }}>
-                            {prezzo} €
-                          </p>
-                          <p className="t-piccolo" style={{ color: "var(--muted)" }}>{annuale ? "all'anno" : "al mese"}</p>
-                          {/* Il prezzo di riferimento si SPIEGA, non si sbarra: un
-                              numero barrato senza provenienza è il trucco dei saldi. */}
-                          {annuale && (
-                            <p className="t-piccolo mt-1" style={{ color: "var(--tenue)" }}>
-                              pagando mese per mese spenderesti {seMensile} € in un anno
-                            </p>
-                          )}
-                        </div>
-
-                        {/* AZIONE */}
-                        <div className="sm:shrink-0">
-                          {/* 48px: è un bersaglio da dito su un bottone che
-                              porta a pagare, e su questa schermata si arriva
-                              anche dal telefono. */}
-                          {abbonato ? (
-                            eIlMio ? (
-                              <Bottone variante="fantasma" className="w-full sm:w-auto min-h-[48px] px-5" onClick={gestisci} disabled={caricando}>
-                                {caricando ? <Loader2 size={14} strokeWidth={1.75} className="animate-spin" /> : <CreditCard size={14} strokeWidth={1.75} />}
-                                {caricando ? "Un attimo…" : "Gestisci"}
-                              </Bottone>
-                            ) : (
-                              <span className="t-piccolo" style={{ color: "var(--tenue)" }}>—</span>
-                            )
-                          ) : (
-                            <Bottone variante={eConsigliato ? "primario" : "fantasma"} className="w-full sm:w-auto min-h-[48px] px-5"
-                              onClick={() => scegli(p)} disabled={caricando}>
-                              {caricando ? <Loader2 size={14} strokeWidth={1.75} className="animate-spin" /> : <ArrowRight size={14} strokeWidth={1.75} />}
-                              {caricando ? "Un attimo…" : "Scegli"}
-                            </Bottone>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* IL MOTIVO del consiglio: un numero con la sua provenienza. */}
-                      {eConsigliato && !inConferma && (
-                        <p className="px-6 pb-5 -mt-1 t-piccolo" style={{ color: "var(--accento-chiaro)" }}>
-                          A {fmtMese(cap.mesePunta).toLowerCase()} avevi {cap.personeMesePunta} {cap.personeMesePunta === 1 ? "persona" : "persone"} in cantiere.
-                        </p>
-                      )}
-
-                      {/* SCELTA CONSAPEVOLE: un piano più piccolo si compra, ma
-                          dicendolo prima invece di lasciarlo scoprire dopo. */}
-                      {inConferma && (
-                        <div className="px-6 pb-5">
-                          <Avviso tono="accento" icona={AlertTriangle}>
-                            Il tuo mese di punta è {cap.personeMesePunta} persone, e {p.nome} arriva a {p.tetto}.
-                            Puoi sceglierlo lo stesso — non si blocca niente — ma l'avviso di capienza resterà.
-                          </Avviso>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            <Bottone variante="fantasma" onClick={() => compra(p.id)} disabled={caricando}>
-                              {caricando ? <Loader2 size={14} strokeWidth={1.75} className="animate-spin" /> : <ArrowRight size={14} strokeWidth={1.75} />}
-                              {caricando ? "Un attimo…" : `Scegli ${p.nome} lo stesso`}
-                            </Bottone>
-                            <Bottone variante="fantasma" onClick={() => setDaConfermare(null)}>Annulla</Bottone>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-
-                {/* IL PIEDE: le due cose che valgono per tutte e tre le righe. */}
-                <div className="px-6 py-5" style={{ borderTop: ".5px solid var(--bordo)", background: "var(--velo)" }}>
-                  <p className="t-corpo" style={{ color: "var(--txt-chiaro)" }}>
-                    Tutti i piani hanno le stesse funzioni: cambia solo quante persone ci stanno dentro.
-                  </p>
-                  <p className="t-piccolo mt-2" style={{ color: "var(--muted)" }}>
-                    Prezzi al netto dell'IVA · disdici quando vuoi, senza vincoli.
-                  </p>
-                  {/* Senza ore non si consiglia niente, e si dice perché. */}
-                  {!consigliato && (
-                    <p className="t-piccolo mt-2" style={{ color: "var(--tenue)" }}>
-                      Quando avrai registrato delle ore ti diremo quale piano serve: si guarda il mese
-                      più affollato degli ultimi dodici, contando le persone che hanno ore in quello stesso mese.
-                    </p>
-                  )}
-                </div>
-              </div>
-            </>
+            <ListinoPiani info={info} />
           )}
         </>
       )}
     </div>
   );
 }
+
 
 const ETICHETTE_STATO_ADMIN = { prova: "Prova", attivo: "Attivo", scaduto: "Scaduto", esente: "Esente" };
 const COLORI_STATO_ADMIN = { prova: "var(--accento)", attivo: "var(--euro)", scaduto: "var(--errore)", esente: "var(--euro)" };
