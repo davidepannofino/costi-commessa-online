@@ -73,6 +73,29 @@ ragione per cui i numeri sono credibili:
   diviso per le ore effettivamente registrate in quel mese. Quando non è
   calcolabile (nessuna ora, nessun lordo per quel mese) l'app lo dichiara invece
   di produrre una tariffa plausibile.
+
+- **I costi sono veri solo a MESE COMPLETO.** Il costo di una commessa è
+  `tariffa × ore` dove la tariffa è `lordo / ore del mese`: ne segue che il
+  costo totale di quel dipendente **è sempre il lordo intero**, comunque poche
+  siano le ore registrate. Tutto lo stipendio del mese finisce addosso alle ore
+  che ci sono. Con un lordo di 2.400 € e un solo giorno da 8 ore inserito, il
+  cantiere risulta costato 2.400 € e la tariffa 300 €/h: non è un numero
+  impreciso, è sbagliato di venti volte, e sembra giusto.
+
+  **Non riguarda solo il primo giorno: riguarda ogni mese in corso, per
+  chiunque.** Finché agosto non è finito, i costi di agosto sono più alti del
+  vero — e l'errore va sempre in quella direzione, mai nell'altra.
+
+  L'invariante non lo intercetta e non può farlo: verifica che la somma dei
+  costi coincida con la somma dei lordi, cosa che torna per costruzione. Un
+  timbro che non può mai diventare rosso non è informazione. L'unico posto dove
+  la cosa si vede è **la tariffa oraria**, ed è lì che l'app guarda.
+
+  Quello che l'app dice è ciò che ha osservato — quante ore, quale lordo, quanto
+  viene la tariffa, e con cosa la sta confrontando — e si ferma lì. Non conclude
+  «il mese è incompleto», perché non lo sa: potrebbe essere un lordo sbagliato,
+  o un mese davvero fatto di tre giorni. La conclusione la trae chi guarda, che
+  è l'unico ad avere l'informazione che serve.
 - **XML e PDF non hanno lo stesso statuto.** L'XML è un dato: i valori sono
   esatti. Il PDF è una stampa che va interpretata, quindi le righe risultano da
   controllare. La differenza è visibile all'utente, con etichette diverse.

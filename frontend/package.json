@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "prova": "node src/statoGruppoDDT.test.js && node src/sceltaFiltrata.test.js && node src/statoAbbonamento.test.js && node src/dipendentiVisibili.test.js"
+    "prova": "node src/statoGruppoDDT.test.js && node src/sceltaFiltrata.test.js && node src/statoAbbonamento.test.js && node src/dipendentiVisibili.test.js && node src/tariffaDaControllare.test.js && node src/primoGiorno.test.js"
   },
   "dependencies": {
     "lucide-react": "^0.400.0",

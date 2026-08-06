@@ -16,6 +16,8 @@ import { statoGruppo, assegnazioneIniziale, NON_IMPORTARE } from "./statoGruppoD
 import { filtra, decidiConferma, muoviEvidenziato, CONFERMA, AMBIGUO, VUOTO } from "./sceltaFiltrata.js";
 import { descriviAbbonamento } from "./statoAbbonamento.js";
 import { soloAttivi, perModificaDi, perElenco, eArchiviato, azionePerTogliere } from "./dipendentiVisibili.js";
+import { tariffeDaControllare } from "./tariffaDaControllare.js";
+import { statoPrimoGiorno } from "./primoGiorno.js";
 import { leggiToken, salvaToken, cancellaToken } from "./auth.js";
 
 /* ============================================================================
@@ -1578,8 +1580,16 @@ function SchermataAccesso({ alSuccesso, messaggio }) {
 
                 {modo === "registrati" && (
                   <Avviso tono="accento" icona={Gift} className="mb-6">
-                    <strong style={{ fontWeight: 600 }}>30 giorni di prova gratuita</strong>, poi 29 €/mese.
-                    Nessuna carta richiesta per iniziare — disdici quando vuoi.
+                    {/* NESSUN PREZZO SCRITTO QUI. Diceva «poi 29 €/mese», una
+                        cifra che non esiste più da quando i piani sono tre:
+                        era la prima frase che leggeva chi si iscriveva, ed era
+                        falsa. Prima dell'accesso non c'è modo di chiedere al
+                        server quanto costa, e gli euro stanno solo in
+                        piani.js: allora non si nomina nessun numero. Il
+                        listino vero è nella schermata Abbonamento, dove i
+                        prezzi arrivano da lì. */}
+                    <strong style={{ fontWeight: 600 }}>30 giorni di prova gratuita</strong>, con tutto
+                    quello che c'è. Nessuna carta richiesta per iniziare — disdici quando vuoi.
                   </Avviso>
                 )}
 
@@ -2734,6 +2744,27 @@ export default function App() {
   }, [registrazioni, dipendenti, commesse, dal, al, erroreIntervallo]);
 
   /**
+   * Le tariffe orarie che non stanno in piedi nel periodo che si sta
+   * guardando. È la sola cosa che sappia distinguere un costo vero da uno
+   * gonfiato: il totale non lo tradisce mai, perché è sempre il lordo intero.
+   * Vedi tariffaDaControllare.js.
+   */
+  const daControllare = useMemo(() => {
+    if (!riep) return [];
+    return tariffeDaControllare({
+      dipendenti, oreMensili: riep.oreMensili, mesi: [...(riep.mesiToccati ?? [])],
+    });
+  }, [riep, dipendenti]);
+
+  /* A che punto è il primo giorno. Si ricava dai dati veri a ogni disegno:
+     nessuna spunta salvata da qualche parte, che potrebbe andare fuori
+     sincrono con la realtà e mostrare come fatto un passo disfatto. */
+  const primoGiorno = useMemo(
+    () => statoPrimoGiorno({ dipendentiAttivi, commesse, registrazioni }),
+    [dipendentiAttivi, commesse, registrazioni]
+  );
+
+  /**
    * Manodopera e materiali uniti, commessa per commessa. `riep` resta quello
    * di sempre (sola manodopera): qui si affianca il costo dei materiali senza
    * mai mescolarlo, e si aggiungono le commesse che nell'intervallo hanno
@@ -3491,13 +3522,31 @@ export default function App() {
             </div>
 
             <div className="ml-auto flex items-center gap-6 md:gap-8">
+              {/* IL TIMBRO DICE ANCHE QUANDO NON SA.
+                  «Quadra» verificava che la somma dei costi coincidesse con la
+                  somma dei lordi: torna sempre, per costruzione. Un timbro che
+                  non può mai diventare rosso non è informazione — verde vuol
+                  dire «il conto è coerente con sé stesso», ma chi legge ci
+                  sente «i numeri sono giusti», ed è falso proprio nel caso
+                  peggiore: un lordo intero addossato a un giorno solo di
+                  lavoro dà un costo sbagliato di venti volte, e la quadratura
+                  dice comunque di sì.
+                  Adesso il verde vuole due cose: il conto coerente E le
+                  tariffe plausibili. Se una tariffa è fuori scala si passa
+                  all'ambra, che in questo prodotto vuol dire «da controllare».
+                  L'etichetta non conclude che il mese è incompleto — non lo
+                  sappiamo. Dice che c'è da guardare; il numero osservato lo
+                  scrive la frase sotto il costo. */}
               {riep && riep.invariante && (
-                <span className="hidden md:inline-flex" title={riep.invariante.ok
-                  ? "Il costo del periodo coincide con la somma dei lordi mensili"
-                  : "Quadratura non verificata: controlla lordi e dati"}>
-                  <Pillola tono={riep.invariante.ok ? "euro" : "accento"}>
+                <span className="hidden md:inline-flex" title={
+                  daControllare.length > 0
+                    ? `La tariffa oraria di ${daControllare[0].dip.nome} ${daControllare[0].dip.cognome} risulta ${euro(daControllare[0].tariffa)}/h`
+                    : riep.invariante.ok
+                      ? "Il costo del periodo coincide con la somma dei lordi mensili"
+                      : "Quadratura non verificata: controlla lordi e dati"}>
+                  <Pillola tono={daControllare.length > 0 ? "ambra" : riep.invariante.ok ? "euro" : "accento"}>
                     <span className="rounded-full" style={{ width: 5, height: 5, background: "currentColor" }} />
-                    {riep.invariante.ok ? "Quadra" : "Non quadra"}
+                    {daControllare.length > 0 ? "Da controllare" : riep.invariante.ok ? "Quadra" : "Non quadra"}
                   </Pillola>
                 </span>
               )}
@@ -3609,6 +3658,37 @@ export default function App() {
             </div>
           )}
 
+          {/* LA FRASE CHE RENDE ONESTO IL NUMERO.
+              Dice solo quello che si è osservato — quante ore, quale lordo,
+              quanto viene la tariffa — e si ferma lì. Non conclude «il mese è
+              incompleto», perché non lo sappiamo: potrebbe essere un lordo
+              sbagliato, o un mese davvero fatto di tre giorni. La conclusione
+              la trae chi guarda, che è l'unico ad avere l'informazione. Quello
+              che diciamo noi è la direzione dell'errore, e quella la sappiamo
+              per certo: con meno ore il costo risulta più ALTO del vero. */}
+          {daControllare.length > 0 && (
+            <div className="mb-9 px-4 py-3 space-y-1.5" role="alert"
+              style={{ background: "var(--ambra-bg)", boxShadow: "0 0 0 .5px var(--ambra)", borderRadius: "var(--r-sm)" }}>
+              {daControllare.slice(0, 3).map((t) => (
+                <p key={t.dip.id + t.mese} className="t-piccolo flex items-start gap-2.5" style={{ color: "var(--ambra)" }}>
+                  <AlertTriangle size={14} strokeWidth={1.75} className="mt-0.5 shrink-0" />
+                  <span>
+                    <strong>{t.dip.nome} {t.dip.cognome}</strong> ha {fmtOre.format(t.ore)} ore
+                    in {fmtMese(t.mese)} su un lordo di {euro(t.lordo)}: la tariffa risulta{" "}
+                    <strong>{euro(t.tariffa)}/h</strong>
+                    {t.confronto != null && <> , contro {euro(t.confronto)}/h degli altri mesi</>}.
+                    Finché le ore di quel mese non ci sono tutte, i costi che vedi sono più alti del vero.
+                  </span>
+                </p>
+              ))}
+              {daControllare.length > 3 && (
+                <p className="t-piccolo pl-6" style={{ color: "var(--ambra)", opacity: .85 }}>
+                  e altre {daControllare.length - 3} tariffe fuori scala nello stesso periodo.
+                </p>
+              )}
+            </div>
+          )}
+
           {riep && riep.avvisi.length > 0 && (
             <div className="mb-9 px-4 py-3 space-y-1.5" style={{ background: "var(--velo-accento)", boxShadow: "0 0 0 .5px var(--accento-bordo)", borderRadius: "var(--r-sm)" }} role="alert">
               {riep.avvisi.map((a, i) => (
@@ -3617,7 +3697,7 @@ export default function App() {
             </div>
           )}
 
-          {vista === "dashboard" && <Dashboard riep={riep} costi={costi} dal={dal} al={al} dipendentiAttivi={dipendentiAttivi} serieMensile={serieMensile} vaiCommesse={() => setVista("commesse")} vaiDati={() => setVista("dati")} vaiDipendenti={() => setVista("dipendenti")} haDati={registrazioni.length > 0} apri={(riga) => setIdDettaglio(riga.commessa.id)} />}
+          {vista === "dashboard" && <Dashboard riep={riep} costi={costi} dal={dal} al={al} dipendentiAttivi={dipendentiAttivi} serieMensile={serieMensile} vaiCommesse={() => setVista("commesse")} vaiDati={() => setVista("dati")} vaiDipendenti={() => setVista("dipendenti")} haDati={registrazioni.length > 0} statoPrimoGiorno={primoGiorno} apri={(riga) => setIdDettaglio(riga.commessa.id)} />}
           {vista === "commesse" && <VistaCommesse riep={riep} costi={costi} dal={dal} al={al} apri={(riga) => setIdDettaglio(riga.commessa.id)} esportaCsv={() => riep && esportaCSV(costi.righe, costi, dal, al)} esportaXlsx={() => riep && esportaXLSX(costi.righe, costi, dal, al)} esportaTutto={() => esportaCompletoXLSX({ dipendenti, commesse, registrazioni, materiali }, dal, al)} stampa={stampaPDF} vaiDati={() => setVista("dati")} />}
           {vista === "dipendenti" && <VistaDipendenti dipendenti={dipendenti} setDipendenti={setDipendenti} registrazioni={registrazioni} riep={riep} elimina={eliminaDipendente} riattiva={riattivaDipendente} notifica={notifica} />}
           {vista === "dati" && (
@@ -3636,7 +3716,8 @@ export default function App() {
           )}
           {vista === "fatture" && (
             <VistaFatture commesse={commesse} onCarica={caricaFattura} onImporta={importaFattura}
-              notifica={notifica} vaiCommesse={() => setVista("commesse")} />
+              notifica={notifica} vaiCommesse={() => setVista("commesse")}
+              onCreaCommessa={(c) => setCommesse((x) => [...x, { id: uid("c"), codice: c.codice, descrizione: c.descrizione }])} />
           )}
           {vista === "abbonamento" && (
             <VistaAbbonamento info={abbonamentoInfo}
@@ -3773,7 +3854,15 @@ export default function App() {
             In questo periodo puoi registrare ore per dipendente e commessa, vedere il costo del lavoro in tempo reale ed esportare i report in Excel.
           </p>
           <p className="text-sm leading-relaxed mb-6" style={{ color: "var(--muted)" }}>
-            Alla scadenza della prova, potrai abbonarti per 29 €/mese per continuare — disdici quando vuoi, dalla sezione "Abbonamento" nella barra laterale.
+            {/* Il prezzo si legge da quello che il server ha mandato, non si
+                scrive qui: prima diceva «29 €/mese», rimasto da quando il
+                piano era uno solo. Se per qualsiasi motivo il listino non è
+                arrivato, non si nomina nessuna cifra invece di indovinarne
+                una. */}
+            Alla scadenza della prova potrai abbonarti
+            {abbonamentoInfo?.piani?.length
+              ? <> scegliendo fra {abbonamentoInfo.piani.length} piani, da {euro(Math.min(...abbonamentoInfo.piani.map((p) => p.prezzoMensile)))} al mese</>
+              : <> per continuare</>} — disdici quando vuoi, dalla sezione "Abbonamento" nella barra laterale.
           </p>
           <Bottone variante="accento" className="w-full" onClick={() => setMostraBenvenuto(false)}>
             Ho capito, iniziamo
@@ -4027,7 +4116,73 @@ function BandaEroe({ costi, dal, al, titolo = "Costo del periodo", metriche = []
 /* Riceve gli ATTIVI e non tutta l'anagrafica: l'unico posto dove usa questa
    lista è il "su N in anagrafica" della metrica qui sotto. I costi e le ore li
    prende da `riep`, che è calcolato su tutti — archiviati compresi. */
-function Dashboard({ riep, costi, dal, al, dipendentiAttivi, serieMensile, vaiCommesse, vaiDati, vaiDipendenti, haDati, apri }) {
+/**
+ * IL PRIMO GIORNO: i tre gradini fra «mi sono iscritto» e «vedo quanto mi
+ * costa un cantiere», con l'azione DENTRO ciascuno.
+ *
+ * Non è un giro guidato: è la strada più corta che esiste, e i tre passi non
+ * si possono saltare — senza lordo non c'è tariffa, senza commessa non c'è
+ * dove mettere le ore, senza ore non c'è costo. Si spuntano da soli guardando
+ * i dati veri, e appena il terzo è fatto il pannello sparisce e al suo posto
+ * c'è il numero di chi lo ha inserito.
+ *
+ * Nessun dato d'esempio qui dentro, e nessun numero finto per riempire: una
+ * schermata senza dati resta senza dati e lo dice. La promessa del prodotto è
+ * «quanto ti costa il TUO cantiere»; i costi di un'azienda inventata sono una
+ * dimostrazione, non un primo giorno.
+ */
+function PrimoGiorno({ stato, vaiDipendenti, vaiDati }) {
+  const azioni = { chi: vaiDipendenti, dove: vaiDati, quando: vaiDati };
+  const etichette = { chi: "Aggiungi una persona", dove: "Crea una commessa", quando: "Registra le ore" };
+  const corrente = stato.passi.find((p) => !p.fatto);
+
+  return (
+    <section className="card px-7 py-8 sm:px-9">
+      <h2 className="t-sezione">Il primo numero è a tre passi</h2>
+      <p className="t-corpo mt-2" style={{ color: "var(--muted)", maxWidth: "56ch" }}>
+        Non ci sono dati d'esempio qui: quello che vedrai sarà il costo dei tuoi cantieri,
+        calcolato sulle tue ore.
+      </p>
+
+      <ol className="mt-7">
+        {stato.passi.map((p, i) => {
+          const attivo = corrente?.id === p.id;
+          return (
+            <li key={p.id} className="flex items-start gap-4 py-4"
+              style={{ borderTop: i > 0 ? ".5px solid var(--bordo-tenue)" : "none" }}>
+              <span className="flex items-center justify-center shrink-0 box f-mono t-piccolo"
+                style={{
+                  width: 28, height: 28, borderRadius: "50%",
+                  color: p.fatto ? "var(--euro)" : attivo ? "var(--accento-chiaro)" : "var(--txt-tenue)",
+                  background: p.fatto ? "var(--velo-euro)" : attivo ? "var(--velo-accento)" : "transparent",
+                }}>
+                {p.fatto ? <Check size={14} strokeWidth={2} /> : i + 1}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="t-sotto" style={{ color: p.fatto ? "var(--txt-tenue)" : "var(--txt)" }}>{p.titolo}</p>
+                <p className="t-piccolo mt-1" style={{ color: "var(--txt-tenue)" }}>{p.testo}</p>
+                {p.nota && (
+                  <p className="t-piccolo mt-1.5" style={{ color: "var(--ambra)" }}>{p.nota}</p>
+                )}
+              </div>
+              {/* L'AZIONE STA QUI, non «vai nella sezione Dati». Un passo che
+                  dice cosa fare e poi ti manda a cercare dove farlo è mezzo
+                  passo. Compare solo su quello a cui si è arrivati: tre
+                  bottoni accesi insieme non direbbero da dove si comincia. */}
+              {attivo && (
+                <Bottone onClick={azioni[p.id]} className="shrink-0">
+                  <Plus size={14} strokeWidth={1.75} /> {etichette[p.id]}
+                </Bottone>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </section>
+  );
+}
+
+function Dashboard({ riep, costi, dal, al, dipendentiAttivi, serieMensile, vaiCommesse, vaiDati, vaiDipendenti, haDati, apri, statoPrimoGiorno: primo }) {
   /* Questo useMemo stava DOPO il `return null` qui sotto: un hook dentro un
      ramo condizionale. Finché `riep` è già valorizzato al primo montaggio non
      si vede niente, ma se passasse da null a valorizzato con la Dashboard già
@@ -4055,13 +4210,19 @@ function Dashboard({ riep, costi, dal, al, dipendentiAttivi, serieMensile, vaiCo
         {/* Zero ore non vuol dire zero costi: se ci sono materiali nel periodo,
             i tre numeri restano visibili invece di sparire con le ore. */}
         {costi.totMateriali > 0 && <BandaEroe costi={costi} dal={dal} al={al} />}
-        <StatoVuoto icona={LayoutDashboard} titolo="Nessuna ora nell'intervallo"
-          testo={costi.totMateriali > 0
-            ? "In queste date ci sono materiali ma nessuna ora registrata: il riepilogo Commesse mostra le commesse interessate."
-            : haDati ? "Cambia l'intervallo di date con le frecce in alto oppure registra nuove ore." : "Non ci sono ancora dati. Registra le prime ore, importa il file Excel o ricarica i dati d'esempio dalla sezione Dati."}
-          azione={costi.totMateriali > 0
-            ? <Bottone onClick={vaiCommesse}><ChevronRight size={14} strokeWidth={1.75} /> Vai al riepilogo</Bottone>
-            : <Bottone onClick={vaiDati}><Plus size={14} strokeWidth={1.75} /> Vai a Dati</Bottone>} />
+        {/* MAI ANCORA NIENTE: non è una schermata vuota, è il primo giorno, e
+            merita la strada invece di un'icona grigia che dice «vai a Dati». */}
+        {primo && !primo.finito ? (
+          <PrimoGiorno stato={primo} vaiDipendenti={vaiDipendenti} vaiDati={vaiDati} />
+        ) : (
+          <StatoVuoto icona={LayoutDashboard} titolo="Nessuna ora nell'intervallo"
+            testo={costi.totMateriali > 0
+              ? "In queste date ci sono materiali ma nessuna ora registrata: il riepilogo Commesse mostra le commesse interessate."
+              : "Cambia l'intervallo di date con le frecce in alto oppure registra nuove ore."}
+            azione={costi.totMateriali > 0
+              ? <Bottone onClick={vaiCommesse}><ChevronRight size={14} strokeWidth={1.75} /> Vai al riepilogo</Bottone>
+              : <Bottone onClick={vaiDati}><Plus size={14} strokeWidth={1.75} /> Registra ore</Bottone>} />
+        )}
         {haDati && <AndamentoMensile serieMensile={serieMensile} />}
       </div>
     );
@@ -5258,8 +5419,21 @@ function EsitoScansione({ esito, comById, vaiCommesse }) {
   );
 }
 
-function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) {
+function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse, onCreaCommessa }) {
   const refFile = useRef();
+  /* La commessa creata al volo quando non ce ne sono: vive qui perche' serve
+     solo a questa schermata e sparisce con lei. */
+  const [nuovaCommessa, setNuovaCommessa] = useState("");
+  const creaCommessaAlVolo = () => {
+    const testo = nuovaCommessa.trim();
+    if (!testo) return;
+    /* "P1 — Villa Tarcento" si spezza al primo separatore; senza separatore
+       tutto il testo diventa il codice, che e' l'unica parte obbligatoria. */
+    const [codice, ...resto] = testo.split(/\s*[—–-]\s*/);
+    onCreaCommessa({ codice: codice.trim(), descrizione: resto.join(" ").trim() });
+    setNuovaCommessa("");
+    notifica(`Commessa ${codice.trim()} creata.`);
+  };
   const [inLettura, setInLettura] = useState(false);
   const [inImportazione, setInImportazione] = useState(false);
   const [lettura, setLettura] = useState(null);  // { fattura, gruppi, avvisi, abbinamenti }
@@ -5599,10 +5773,24 @@ function VistaFatture({ commesse, onCarica, onImporta, notifica, vaiCommesse }) 
         </div>
       )}
 
+      {/* «Creane una nella sezione Dati, poi torna qui» faceva perdere il
+          lavoro appena caricato: chi va via da questa schermata si ritrova la
+          fattura da ricaricare. La commessa si crea da qui, e le righe restano
+          dove sono. */}
       {commesse.length === 0 && (
-        <div className="rounded-[var(--r-sm)] px-4 py-3 text-sm flex items-start gap-2" style={{ background: "var(--velo-errore)", border: ".5px solid var(--rosso-bordo)", color: "var(--errore)" }}>
-          <Info size={14} strokeWidth={1.75} className="mt-0.5 shrink-0" />
-          Non ci sono commesse a cui assegnare le righe: creane una nella sezione Dati, poi torna qui.
+        <div className="rounded-[var(--r-sm)] px-4 py-3.5 text-sm" style={{ background: "var(--velo-accento)", border: ".5px solid var(--accento-bordo)", color: "var(--accento-chiaro)" }}>
+          <p className="flex items-start gap-2">
+            <Info size={14} strokeWidth={1.75} className="mt-0.5 shrink-0" />
+            <span>Non hai ancora nessuna commessa a cui assegnare queste righe. Creane una qui: la fattura che hai caricato resta dov'è.</span>
+          </p>
+          <div className="flex flex-wrap gap-2 mt-3 pl-6">
+            <input value={nuovaCommessa} onChange={(e) => setNuovaCommessa(e.target.value)}
+              placeholder="es. P1 — Villa Tarcento" className={inputCls} style={{ maxWidth: 260, background: "var(--card)" }}
+              aria-label="Codice e descrizione della nuova commessa" />
+            <Bottone onClick={creaCommessaAlVolo} disabled={!nuovaCommessa.trim()}>
+              <Plus size={14} strokeWidth={1.75} /> Crea commessa
+            </Bottone>
+          </div>
         </div>
       )}
 
@@ -6463,9 +6651,18 @@ function VistaDati({ dipendenti, dipendentiAttivi, commesse, registrazioni, setC
           </div>
         </div>
         {registrazioni.length === 0 ? (
-          <p className="px-6 py-6 t-corpo" style={{ color: "var(--txt-attenuato)" }}>
-            Le ore che registri compariranno qui, dalla più recente.
-          </p>
+          /* Dice il passo successivo e lo mette a portata di mano. Il modulo
+             d'inserimento sta sopra, ma su uno schermo stretto è già fuori
+             vista: «compariranno qui» descriveva il futuro senza dire come
+             arrivarci. */
+          <div className="px-6 py-7">
+            <p className="t-corpo" style={{ color: "var(--txt-attenuato)" }}>
+              Non hai ancora registrato ore. Ogni riga è una persona, una commessa, un giorno.
+            </p>
+            <Bottone className="mt-4" onClick={vaiA(refDip)}>
+              <Plus size={14} strokeWidth={1.75} /> Registra la prima
+            </Bottone>
+          </div>
         ) : elenco.length === 0 ? (
           /* Prima qui restavano le intestazioni sopra un corpo vuoto: la
              tabella sembrava rotta invece che filtrata. */
