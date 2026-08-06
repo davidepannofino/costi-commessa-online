@@ -235,6 +235,17 @@ gestione multiutente, integrazioni con gestionali o con lo SdI.
    pensare come un database.
 5. **Il dato appartiene all'azienda.** Uscire (Excel, CSV, stampa) resta facile
    come entrare.
+6. **Un costo già registrato non si cancella insieme a chi l'ha prodotto.** Chi
+   ha ore registrate si archivia: sparisce dagli elenchi dove si inseriscono le
+   ore, ma la sua riga e le sue registrazioni restano, e i costi delle commesse
+   passate non cambiano di un centesimo. Si cancella davvero solo chi non ha
+   nessuna ora, perché non c'è niente da perdere.
+
+   Il corollario è la parte che conta: **nessuna funzione di pulizia
+   dell'anagrafica deve costare storico.** Finché cancellare una persona
+   portava via le sue ore, chi voleva conti corretti era costretto a tenersi in
+   elenco gli ex dipendenti — l'ordine dell'elenco e la verità dei costi non
+   possono essere in concorrenza fra loro.
 
 ## Accessibility & Inclusion
 
