@@ -53,7 +53,7 @@ Il corollario, che è parte del posizionamento e non un dettaglio tecnico: **nes
 numero entra nei costi senza una conferma umana**, e su un documento di spesa
 l'app preferisce ammettere di non saper leggere piuttosto che indovinare.
 
-Sotto questo, due cose che il prodotto fa e che vanno preservate perché sono la
+Sotto questo, tre cose che il prodotto fa e che vanno preservate perché sono la
 ragione per cui i numeri sono credibili:
 
 - **Il costo orario è calcolato, non digitato.** Lordo mensile del dipendente
@@ -63,6 +63,18 @@ ragione per cui i numeri sono credibili:
 - **XML e PDF non hanno lo stesso statuto.** L'XML è un dato: i valori sono
   esatti. Il PDF è una stampa che va interpretata, quindi le righe risultano da
   controllare. La differenza è visibile all'utente, con etichette diverse.
+- **Nessun ripiego che afferma.** Un ramo finale che cattura tutto quello che non
+  ha trovato posto prima («se è qualcosa, allora è X») diventa falso il giorno
+  che si aggiunge un caso nuovo. Se non si riconosce lo stato, non si scrive
+  niente: un'etichetta assente è un buco visibile, un'etichetta sbagliata no.
+
+  Sta qui, fra i corollari, perché lo stesso errore di forma ha già prodotto due
+  frasi false in due punti lontani del prodotto. Una commessa nominata a caso fra
+  candidati a pari merito, quando la risposta onesta era dire quanti sono. E
+  «Abbonamento scaduto» scritto sotto il nome di un'azienda esente, perché il
+  ramo finale chiedeva «sei qualcosa?» invece di «sei scaduto?» — mentre a due
+  centimetri di distanza, sulla stessa schermata, c'era scritto «Accesso
+  illimitato».
 
 ## Operating Context
 

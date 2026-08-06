@@ -13,6 +13,7 @@ import {
 import { datiAPI, suSessioneScaduta, suAbbonamentoRichiesto, API_BASE } from "./datiAPI.js";
 import { statoGruppo, assegnazioneIniziale, NON_IMPORTARE } from "./statoGruppoDDT.js";
 import { filtra, decidiConferma, muoviEvidenziato, CONFERMA, AMBIGUO, VUOTO } from "./sceltaFiltrata.js";
+import { descriviAbbonamento } from "./statoAbbonamento.js";
 import { leggiToken, salvaToken, cancellaToken } from "./auth.js";
 
 /* ============================================================================
@@ -1766,6 +1767,16 @@ function VerificaPagamento() {
  *  attuale, giorni di prova rimanenti, prezzo, e un pulsante che porta al
  *  checkout (se non attivo) o al portale Stripe per gestire il pagamento
  *  (se già attivo). */
+/** Da chiave a icona. statoAbbonamento.js dice quale icona serve con una
+ *  stringa e non con un componente, così resta un file puro che si collauda
+ *  senza React; la traduzione la fa qui chi disegna davvero. */
+const ICONE_STATO = {
+  illimitato: Sparkles,
+  attivo: CheckCircle2,
+  prova: Clock,
+  scaduto: AlertTriangle,
+};
+
 function VistaAbbonamento({ info }) {
   const [caricando, setCaricando] = useState(false);
   const [errore, setErrore] = useState(null);
@@ -1782,14 +1793,15 @@ function VistaAbbonamento({ info }) {
     }
   };
 
-  const STATI = {
-    esente: { etichetta: "Accesso illimitato", tono: "euro", icona: Sparkles },
-    attivo: { etichetta: "Abbonamento attivo", tono: "euro", icona: CheckCircle2 },
-    prova: { etichetta: "Prova gratuita", tono: "accento", icona: Clock },
-    scaduto: { etichetta: "Prova terminata", tono: "errore", icona: AlertTriangle },
-  };
-  const s = STATI[info?.stato] || STATI.prova;
-  const Icona = s.icona;
+  /* Le etichette NON stanno più qui. Stanno in statoAbbonamento.js, e da lì le
+     legge anche la barra laterale: erano due liste indipendenti, e sono
+     divergute — la barra scriveva «Abbonamento scaduto» mentre questo pannello,
+     nello stesso istante, diceva «Accesso illimitato».
+     Sparito anche il ripiego `|| STATI.prova`: uno stato sconosciuto diventava
+     in silenzio «Prova gratuita». Adesso descriviAbbonamento restituisce null e
+     la pillola non si disegna — un buco si vede, un'etichetta sbagliata no. */
+  const desc = descriviAbbonamento(info);
+  const Icona = desc ? ICONE_STATO[desc.icona] : null;
 
   return (
     <div style={{ maxWidth: 560 }}>
@@ -1804,7 +1816,7 @@ function VistaAbbonamento({ info }) {
             {/* Lo stato si legge da una pillola, non da un'icona colorata in un
                 quadrato: è la stessa forma usata per gli stati altrove. */}
             <div className="flex items-center gap-3 mb-7">
-              <Pillola tono={s.tono}><Icona size={13} strokeWidth={1.75} /> {s.etichetta}</Pillola>
+              {desc && <Pillola tono={desc.tono}><Icona size={13} strokeWidth={1.75} /> {desc.etichetta}</Pillola>}
               {info.stato === "prova" && (
                 <span className="t-piccolo" style={{ color: "var(--muted)" }}>
                   {info.giorniProvaRestanti === 1 ? "ultimo giorno" : `${info.giorniProvaRestanti} giorni rimanenti`}
@@ -2745,9 +2757,14 @@ export default function App() {
      ricavate da quello che già c'è. Nessuna chiamata nuova. */
   const inizialiAzienda = (azienda || "")
     .split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0].toUpperCase()).join("") || "—";
-  const etichettaPiano = abbonamentoInfo?.stato === "attivo" ? "Abbonamento attivo"
-    : abbonamentoInfo?.stato === "prova" ? "Periodo di prova"
-    : abbonamentoInfo?.stato ? "Abbonamento scaduto" : "";
+  /* L'etichetta viene dalla STESSA mappa che usa la schermata dell'abbonamento
+     (statoAbbonamento.js). Prima qui c'era una catena di ternari che finiva con
+     «se lo stato è qualcosa, allora è scaduto»: scritta quando gli stati erano
+     tre, è diventata falsa quando ne è arrivato un quarto, e un'azienda esente
+     si è ritrovata «Abbonamento scaduto» sotto il nome mentre il pannello,
+     nello stesso momento, diceva «Accesso illimitato».
+     Stato sconosciuto o non ancora caricato: stringa vuota, cioè niente. */
+  const etichettaPiano = descriviAbbonamento(abbonamentoInfo)?.etichetta ?? "";
   const GRUPPI_NAV = [
     { etichetta: "Generale", voci: ["dashboard", "commesse", "dipendenti"] },
     { etichetta: "Documenti", voci: ["ddt", "fatture", "dati"] },
