@@ -10,6 +10,7 @@ import { stripe, prezzoStripeDi } from "./stripe.js";
 import { chiaveListinoDellaSottoscrizione, letturaSottoscrizione, letturaFattura } from "./sottoscrizioneStripe.js";
 import { decidiTolleranza } from "./tolleranza.js";
 import { troppeCancellazioni } from "./sogliaCancellazioni.js";
+import { confrontaRegistrazioni } from "./confrontoRegistrazioni.js";
 import { pianoDi, fatturazioneDi, daChiaveListino, elencoPiani, PIANI, ORDINE } from "./piani.js";
 import { richiedeAbbonamentoAttivo, richiedeAccessoAiPropriDati, statoAbbonamentoDi, capienzaDi, GIORNI_PROVA } from "./abbonamento.js";
 import { adminRouter, richiedeAdmin, eAdmin } from "./admin.js";
@@ -629,10 +630,27 @@ app.get("/api/stato", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) 
 });
 
 /**
- * Sostituisce l'intero dataset dell'azienda autenticata in una transazione
- * (stesso modello dell'autosave "salva tutto lo stato" che l'app usava
- * già in locale, solo che ora scrive su un database condiviso). L'azienda è
- * sempre quella del token verificato da richiedeAuth, mai un id mandato dal client.
+ * Allinea i dati dell'azienda autenticata a quelli mandati dal browser, in una
+ * transazione sola. L'azienda è sempre quella del token verificato da
+ * richiedeAuth, mai un id mandato dal client.
+ *
+ * IL BROWSER MANDA TUTTO, IL SERVER SCRIVE SOLO LA DIFFERENZA. La richiesta
+ * porta l'elenco intero — è il modello dell'autosave "salva tutto lo stato"
+ * che l'app usava già in locale — ma da qui in giù si toccano solo le righe
+ * davvero cambiate.
+ *
+ * Misurato su una copia dei dati di PIEMME (624 registrazioni, 15 dipendenti,
+ * 22 commesse), cambiando una cifra sola:
+ *
+ *     prima   670 istruzioni verso Neon    (di cui 624 + 15 + 22 una per riga)
+ *     adesso   13 istruzioni               (12 se non è cambiato niente)
+ *
+ * Più una, in tutti e due i casi, per il controllo dell'abbonamento che sta
+ * nel middleware qui sopra: sono i 671 → 14 misurati end-to-end sulla rotta.
+ *
+ * Il punto non è il fattore: è che 670 CRESCEVA col numero di righe già
+ * inserite — il prodotto rallentava man mano che lo si usava bene — mentre 13
+ * resta 13 anche fra sei mesi.
  */
 app.put("/api/stato", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) => {
   const aziendaId = req.aziendaId;
@@ -697,8 +715,28 @@ app.put("/api/stato", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) 
       [aziendaId, azienda]
     );
 
-    // Ordine di cancellazione che rispetta i vincoli di chiave esterna.
-    await client.query("DELETE FROM registrazioni WHERE azienda_id = $1", [aziendaId]);
+    /* Ordine di cancellazione che rispetta i vincoli di chiave esterna: le
+       registrazioni per prime, così quando più sotto si cancellano i
+       dipendenti spariti non c'è più niente che li citi e il vincolo RESTRICT
+       non scatta. È la ragione per cui «Svuota tutto» continua a svuotare —
+       vedi schema.sql, «COSA NON CAMBIA».
+
+       PRIMA si cancellavano TUTTE e si riscrivevano una per una: 624
+       istruzioni per aver cambiato una cifra. Adesso spariscono solo quelle
+       che l'elenco in arrivo non contiene più.
+
+       IL PREDICATO È LO STESSO, CARATTERE PER CARATTERE, che il cancello ha
+       appena usato per contare quante righe sarebbero sparite. Non è una
+       coincidenza da mantenere a mano: è la ragione per cui la soglia
+       continua a valere. Il cancello non "prevede" quante righe toglierà
+       questa DELETE — conta esattamente le righe che questa DELETE toglie,
+       perché seleziona le stesse. Cambiare uno dei due senza l'altro
+       scollegherebbe la protezione dal fatto che dovrebbe proteggere. */
+    await client.query(
+      `DELETE FROM registrazioni
+        WHERE azienda_id = $1 AND NOT (id = ANY($2::text[]))`,
+      [aziendaId, idInArrivo]
+    );
     // Le commesse NON si cancellano tutte: i materiali sono loro figli in
     // cascata, e un "cancella e ricrea" a ogni salvataggio automatico
     // cancellerebbe tutti i materiali dell'azienda. Si tolgono quindi solo le
@@ -742,42 +780,145 @@ app.put("/api/stato", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) 
       [aziendaId, idDipendenti, idCitatiDalleOre]
     );
 
-    for (const d of dipendenti) {
-      /* "WHERE dipendenti.azienda_id = $2" ha lo stesso ruolo che ha sulle
-         commesse: un id di un'altra azienda non aggiorna niente e la
-         transazione si annulla subito sotto. */
+    /* ═══════════════════════════════════════════════════════════════════
+       LE SCRITTURE, IN BLOCCO.
+
+       Prima erano tre cicli: una istruzione per ogni dipendente, una per ogni
+       commessa, una per ogni registrazione — per PIEMME, 661 viaggi fino a
+       Neon per aver cambiato una cifra, e il conto cresceva con lo storico.
+       Adesso ogni tabella è UNA istruzione, con le righe passate come array
+       paralleli e riaperte da UNNEST.
+
+       ─── LA GUARDIA «azienda_id», E PERCHÉ NON SI TOGLIE ───
+
+       Su tutte e tre, in coda al DO UPDATE, c'è:
+
+           WHERE <tabella>.azienda_id = $1
+
+       Non è un dettaglio dell'upsert e non è una ottimizzazione: è
+       l'ISOLAMENTO FRA AZIENDE, cioè la cosa che tiene separati i dati di
+       clienti diversi, e qui è l'ultima riga di difesa.
+
+       Il motivo è che gli id delle righe arrivano dal browser, mentre
+       l'azienda no — quella viene dal token verificato. Senza questa
+       clausola, un salvataggio che contenesse l'id di una riga DI UN'ALTRA
+       AZIENDA non fallirebbe: la sovrascriverebbe. ON CONFLICT (id) trova la
+       riga per chiave primaria, e la chiave primaria non sa niente di
+       aziende. Sarebbe un cliente che riscrive le ore di un altro cliente.
+
+       Con la clausola quella riga non viene toccata: il DO UPDATE non scatta,
+       la riga non torna dal RETURNING, il conto delle righe scritte non torna
+       e la transazione si annulla per intero. Il controllo sul numero di
+       righe tornate, qui sotto, non è una cintura in più: È il modo in cui
+       questa difesa si fa sentire. Senza, la scrittura verrebbe saltata in
+       silenzio — e una scrittura persa senza rumore è peggio di un errore.
+
+       A chi la trovasse fra un anno e la ritenesse superflua: toglierla apre
+       una porta fra clienti diversi.
+       ═══════════════════════════════════════════════════════════════════ */
+
+    if (dipendenti.length) {
       const ris = await client.query(
         `INSERT INTO dipendenti (id, azienda_id, nome, cognome, lordo_mensile, archiviato)
-         VALUES ($1, $2, $3, $4, $5, $6)
+         SELECT t.id, $1, t.nome, t.cognome, t.lordo, t.archiviato
+           FROM UNNEST($2::text[], $3::text[], $4::text[], $5::jsonb[], $6::boolean[])
+                AS t(id, nome, cognome, lordo, archiviato)
            ON CONFLICT (id) DO UPDATE SET nome = EXCLUDED.nome, cognome = EXCLUDED.cognome,
              lordo_mensile = EXCLUDED.lordo_mensile, archiviato = EXCLUDED.archiviato
-           WHERE dipendenti.azienda_id = $2
+           WHERE dipendenti.azienda_id = $1
          RETURNING id`,
-        /* Solo un true esplicito archivia. Un backup fatto prima che questa
-           colonna esistesse non ha il campo, e chi torna da un file vecchio
-           deve tornare attivo, non sparire dagli elenchi. */
-        [d.id, aziendaId, d.nome, d.cognome || "", JSON.stringify(d.lordoMensile || {}), d.archiviato === true]
+        [
+          aziendaId,
+          dipendenti.map((d) => d.id),
+          dipendenti.map((d) => d.nome),
+          dipendenti.map((d) => d.cognome || ""),
+          dipendenti.map((d) => JSON.stringify(d.lordoMensile || {})),
+          /* Solo un true esplicito archivia. Un backup fatto prima che questa
+             colonna esistesse non ha il campo, e chi torna da un file vecchio
+             deve tornare attivo, non sparire dagli elenchi. */
+          dipendenti.map((d) => d.archiviato === true),
+        ]
       );
-      if (ris.rowCount === 0) throw new Error(`Il dipendente ${d.id} appartiene a un'altra azienda.`);
+      if (ris.rowCount !== dipendenti.length) {
+        throw new Error(
+          `Scritti ${ris.rowCount} dipendenti su ${dipendenti.length}: qualcuno appartiene a un'altra azienda.`
+        );
+      }
     }
-    for (const c of commesse) {
-      // "WHERE commesse.azienda_id = $2" impedisce che un id appartenente a
-      // un'altra azienda venga sovrascritto: in quel caso non si aggiorna
-      // nulla e la transazione viene annullata subito sotto.
+
+    if (commesse.length) {
       const ris = await client.query(
-        `INSERT INTO commesse (id, azienda_id, codice, descrizione) VALUES ($1, $2, $3, $4)
+        `INSERT INTO commesse (id, azienda_id, codice, descrizione)
+         SELECT t.id, $1, t.codice, t.descrizione
+           FROM UNNEST($2::text[], $3::text[], $4::text[]) AS t(id, codice, descrizione)
            ON CONFLICT (id) DO UPDATE SET codice = EXCLUDED.codice, descrizione = EXCLUDED.descrizione
-           WHERE commesse.azienda_id = $2
+           WHERE commesse.azienda_id = $1
          RETURNING id`,
-        [c.id, aziendaId, c.codice, c.descrizione || ""]
+        [aziendaId, idCommesse, commesse.map((c) => c.codice), commesse.map((c) => c.descrizione || "")]
       );
-      if (ris.rowCount === 0) throw new Error(`La commessa ${c.id} appartiene a un'altra azienda.`);
+      if (ris.rowCount !== commesse.length) {
+        throw new Error(
+          `Scritte ${ris.rowCount} commesse su ${commesse.length}: qualcuna appartiene a un'altra azienda.`
+        );
+      }
     }
-    for (const r of registrazioni) {
-      await client.query(
-        "INSERT INTO registrazioni (id, azienda_id, dipendente_id, commessa_id, data, ore) VALUES ($1, $2, $3, $4, $5, $6)",
-        [r.id, aziendaId, r.dipendenteId, r.commessaId, r.data, r.ore]
+
+    /* ─── IL CONFRONTO ───
+       Si legge quello che è rimasto e si scrive solo la differenza. La
+       lettura sta QUI DENTRO, dopo il BEGIN, non fuori insieme al cancello:
+       così il confronto guarda lo stato che la transazione sta effettivamente
+       modificando, invece di una fotografia presa prima.
+       Va dopo le due scritture qui sopra perché una registrazione nuova può
+       citare un dipendente o una commessa appena creati.
+       Il to_char è lo stesso della GET: le due letture devono dare alla data
+       la stessa forma, o il confronto vedrebbe differenze che non ci sono. */
+    const rimaste = (await client.query(
+      `SELECT id, dipendente_id, commessa_id, to_char(data, 'YYYY-MM-DD') AS data, ore
+         FROM registrazioni WHERE azienda_id = $1`,
+      [aziendaId]
+    )).rows;
+
+    const { daScrivere, daCancellare } = confrontaRegistrazioni({
+      nelDatabase: rimaste, inArrivo: registrazioni,
+    });
+
+    /* La DELETE più sopra ha già tolto tutto quello che l'elenco in arrivo non
+       contiene, con lo stesso predicato che il cancello usa per contare. Se
+       il confronto trovasse ancora qualcosa da cancellare, vorrebbe dire che
+       i due modi di calcolare quell'insieme hanno smesso di coincidere — ed è
+       proprio su quella coincidenza che poggia la soglia. Non si prosegue: un
+       salvataggio annullato si rifà, una protezione scollegata dai dati che
+       dovrebbe proteggere non si accorge di esserlo. */
+    if (daCancellare.length > 0) {
+      throw new Error(
+        `Incoerenza fra la cancellazione e il confronto: restano ${daCancellare.length} righe da togliere.`
       );
+    }
+
+    if (daScrivere.length) {
+      const ris = await client.query(
+        `INSERT INTO registrazioni (id, azienda_id, dipendente_id, commessa_id, data, ore)
+         SELECT t.id, $1, t.dipendente, t.commessa, t.data, t.ore
+           FROM UNNEST($2::text[], $3::text[], $4::text[], $5::date[], $6::numeric[])
+                AS t(id, dipendente, commessa, data, ore)
+           ON CONFLICT (id) DO UPDATE SET dipendente_id = EXCLUDED.dipendente_id,
+             commessa_id = EXCLUDED.commessa_id, data = EXCLUDED.data, ore = EXCLUDED.ore
+           WHERE registrazioni.azienda_id = $1
+         RETURNING id`,
+        [
+          aziendaId,
+          daScrivere.map((r) => r.id),
+          daScrivere.map((r) => r.dipendenteId),
+          daScrivere.map((r) => r.commessaId),
+          daScrivere.map((r) => r.data),
+          daScrivere.map((r) => r.ore),
+        ]
+      );
+      if (ris.rowCount !== daScrivere.length) {
+        throw new Error(
+          `Scritte ${ris.rowCount} registrazioni su ${daScrivere.length}: qualcuna appartiene a un'altra azienda.`
+        );
+      }
     }
 
     // I materiali si toccano SOLO se il client li manda esplicitamente (è il

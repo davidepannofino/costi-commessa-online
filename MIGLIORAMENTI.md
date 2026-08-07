@@ -27,42 +27,7 @@ miglioramenti diventa una lista dei desideri.
 
 ---
 
-## 1. Oltre 600 istruzioni verso il database per aver cambiato una cifra
-
-**Cosa manca.** `PUT /api/stato` cancella tutte le registrazioni dell'azienda e
-le reinserisce **una per una**: per PIEMME sono una `DELETE` più 624 `INSERT`,
-ognuna con il suo viaggio fino a Neon, a ogni salvataggio. E il salvataggio
-scatta a ogni modifica, 600 ms dopo l'ultimo tasto.
-
-Dipendenti e commesse non si fanno più così: si toccano solo le righe davvero
-cambiate. Le registrazioni sono rimaste indietro perché sono le uniche senza
-figli, quindi cancellarle e riscriverle non rompeva nessun vincolo — comodo,
-finché le righe erano poche.
-
-**Chi ne soffre.** Chi inserisce ore, cioè l'uso principale del prodotto. Ogni
-riga battuta costa più di seicento istruzioni, e il costo cresce con lo storico:
-più anni di lavoro ci sono dentro, più lento diventa aggiungere una riga. È un
-prodotto che rallenta man mano che lo si usa bene.
-
-**Perché non è stato fatto.** Perché la protezione contro la perdita di dati
-(la soglia sulle cancellazioni) andava fatta prima, ed è stata fatta senza
-toccare questo: la soglia conta le righe che sparirebbero e funziona identica
-con o senza il confronto.
-
-**E va detto chiaro che il confronto riga per riga NON è una protezione.** Le
-righe presenti nel database e assenti nell'elenco in arrivo verrebbero
-cancellate lo stesso: è la stessa decisione, con lo stesso esito. Una scheda
-vecchia distrugge le stesse righe in tutti e due i modi. Questo è un lavoro
-sulle prestazioni, e chiamarlo sicurezza sarebbe la peggiore delle illusioni —
-sentirsi protetti da un cambiamento che non protegge.
-
-**Da fare:** confrontare per id come già si fa per dipendenti e commesse,
-scrivendo solo le righe nuove, quelle cambiate e quelle sparite. Con
-`INSERT … ON CONFLICT DO UPDATE` in blocco invece di un giro per riga.
-
----
-
-## 2. Fra due schede aperte vince l'ultima che scrive
+## 1. Fra due schede aperte vince l'ultima che scrive
 
 **Cosa manca.** Il salvataggio non porta nessuna versione: se la stessa azienda
 ha due schede aperte, ognuna riscrive sopra l'altra e nessuna se ne accorge.
@@ -94,7 +59,7 @@ risposta accettabile da mostrare a qualcuno che ha appena scritto.
 
 ---
 
-## 3. Nessun backup automatico prima delle operazioni distruttive
+## 2. Nessun backup automatico prima delle operazioni distruttive
 
 **Cosa manca.** Svuota tutto, ripristino di un backup e import con
 «sostituisci» cambiano molti dati in un colpo, e non ne resta nessuna copia. Se
@@ -118,7 +83,7 @@ problema di prima: una seconda rete finta, stavolta con le prove a coprirla.
 
 ---
 
-## 4. Con abbonamento attivo il piano non si può cambiare
+## 3. Con abbonamento attivo il piano non si può cambiare
 
 **Cosa manca.** Chi ha già un abbonamento attivo non ha nessun modo, dentro
 l'applicazione, di passare a un piano superiore. Nella schermata Abbonamento i
@@ -144,7 +109,7 @@ PRODUCT.md, «Non deciso»).
 
 ---
 
-## 5. Chi se ne va non può portare via i file dei documenti archiviati
+## 4. Chi se ne va non può portare via i file dei documenti archiviati
 
 **Cosa manca.** L'esportazione dà tutto: ore, dipendenti, commesse, materiali, e
 l'**inventario** dei documenti — nome, data, fornitore, a quale commessa sono
@@ -188,8 +153,61 @@ che succede quando un prodotto funziona — smetterebbe di esserlo.
   l'asimmetria che protegge. In più `pronto.current` è rientrato nel ramo che
   ha ricevuto i dati, così una lettura fallita non arma più il salvataggio.
 
+- **Il primo giorno, e un timbro che diceva sempre di sì** (7 agosto 2026). La
+  schermata iniziale ha tre gradini che si spuntano da soli sui dati veri —
+  senza lordo non c'è tariffa, senza commessa non c'è dove mettere le ore,
+  senza ore non c'è costo — e l'azione sta dentro il passo. «Quadra»
+  verificava che la somma dei costi coincidesse con la somma dei lordi, cosa
+  che torna per costruzione: un timbro che non può mai diventare rosso. Adesso
+  il verde vuole anche tariffe plausibili, e se una è fuori scala passa
+  all'ambra «Da controllare», con sotto i numeri osservati. Fuori scala vuol
+  dire oltre il doppio della mediana degli altri mesi della stessa persona —
+  il metro è la persona, non una soglia inventata — e solo senza storico si
+  usa un numero, 50 €/h. L'etichetta non conclude che il mese è incompleto:
+  dice che c'è da guardare. Vedi PRODUCT.md, «I costi sono veri solo a mese
+  completo».
+
 - **Verificato che il salvataggio sia una transazione sola** (7 agosto 2026).
   `BEGIN` … `COMMIT` su una connessione sola, e nessuna query che esca dal
   client: una connessione che cade a metà non lascia il database mezzo
   cancellato, Postgres annulla tutto. Non era un cambiamento, era un dubbio
   legittimo — e ora è una cosa verificata invece che sperata.
+
+- **Da 671 istruzioni a 14, e non crescono più** (7 agosto 2026). Il
+  salvataggio cancellava tutte le registrazioni e le riscriveva una per una.
+  Misurato prima di toccare niente, su una copia dei dati di PIEMME: **671
+  istruzioni** verso Neon per aver cambiato una cifra — 624 registrazioni, 15
+  dipendenti, 22 commesse una per una, più le fisse, più il controllo
+  dell'abbonamento — e **35 secondi** dal portatile. Adesso sono **14** (13 se
+  non è cambiato niente) e **864 ms**, e soprattutto non dipendono più da
+  quante righe ci sono: fra sei mesi saranno ancora 14.
+  Ogni tabella è una istruzione sola con `UNNEST` e `ON CONFLICT DO UPDATE`, e
+  delle registrazioni si scrivono solo quelle davvero cambiate — per una cifra
+  cambiata, **una riga**.
+
+  I millisecondi sono misurati dal portatile verso Francoforte, non da Render:
+  il numero vero di produzione sta nei log, che registrano già la durata di
+  ogni `PUT /api/stato`. Il conteggio delle istruzioni invece non dipende da
+  dove gira.
+
+  **La soglia sulle cancellazioni non è cambiata di una riga**, e adesso il
+  legame è dimostrato invece che argomentato: la `DELETE` usa lo stesso
+  predicato SQL, carattere per carattere, che il cancello usa per contare —
+  quindi il cancello non prevede quante righe spariranno, conta esattamente
+  quelle che spariranno. `confrontoRegistrazioni.test.js` genera 400 casi e
+  verifica che l'insieme che sparisce sia identico nei due modi, e che il
+  verdetto coincida; il collaudo end-to-end ha visto il 409 arrivare con gli
+  stessi 319 di prima.
+
+  **Il confronto è costruito al contrario di come verrebbe da scriverlo:** non
+  chiede «sono diversi?» ma «sono uguali con certezza?». Ogni tipo va
+  riconosciuto per nome, e quello che non si riconosce conta come cambiato.
+  Riscrivere una riga di troppo non costa niente; non riscriverne una che era
+  cambiata fa sparire il lavoro di chi l'ha appena battuta, in silenzio. Il
+  guasto peggiore che quel modulo può produrre è di essere inutile.
+
+  In più, le registrazioni hanno preso la guardia `azienda_id` sull'upsert che
+  dipendenti e commesse avevano già: senza, un id appartenente a un'altra
+  azienda verrebbe sovrascritto invece di far fallire il salvataggio, perché
+  `ON CONFLICT (id)` trova la riga per chiave primaria e la chiave primaria non
+  sa niente di aziende. È isolamento fra clienti, non un dettaglio dell'upsert.
