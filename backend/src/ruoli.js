@@ -64,6 +64,40 @@ const SCRIVE_LE_ORE = new Set([TITOLARE, ORE]);
 /* Chi crea e toglie gli utenti dell'azienda. */
 const GESTISCE_GLI_UTENTI = new Set([TITOLARE]);
 
+/**
+ * ────────────────────────────────────────────────────────────────────────────
+ * UN'AZIENDA HA SEMPRE ALMENO UN TITOLARE, e non e' un auspicio.
+ *
+ * Senza titolare l'impresa resterebbe chiusa fuori dai propri costi — i lordi
+ * li vede solo lui — e senza nessuno che possa creare utenti: uno stato da cui
+ * non si esce da dentro. Tre cose lo impediscono, e vale la pena saperle tutte
+ * e tre perche' stanno in posti diversi:
+ *
+ *   1. IL RUOLO NON SI CAMBIA. Non c'e' nessuna rotta che scriva la colonna
+ *      `ruolo` dopo la creazione: gli unici due punti che la toccano sono le
+ *      INSERT (registrazione e POST /api/utenti), e ogni UPDATE su `utenti`
+ *      riguarda `password_hash`. Un titolare non puo' declassarsi perche'
+ *      l'operazione non esiste.
+ *   2. NON CI SI TOGLIE DA SOLI. DELETE /api/utenti/:id rifiuta con 400 se
+ *      l'id e' quello di chi chiede.
+ *   3. L'ULTIMO TITOLARE E' PROTETTO. Stessa rotta, 409, dentro una
+ *      transazione con SELECT ... FOR UPDATE perche' due richieste in parallelo
+ *      non possano contarsi a vicenda.
+ *
+ * Verificato l'8 agosto 2026 contro un backend vero su schema usa-e-getta:
+ * undici prove, comprese le tre rotte di cambio ruolo che NON esistono (404) e
+ * un `ruolo` infilato nel corpo del cambio password, che viene ignorato perche'
+ * quel campo non si legge affatto.
+ *
+ * SE UN GIORNO NASCE UNA ROTTA CHE CAMBIA IL RUOLO — e prima o poi servira',
+ * perche' un titolare che passa l'azienda a un altro e' un caso vero — allora
+ * il punto 1 smette di reggere e quella rotta deve rifiutare il declassamento
+ * dell'ultimo titolare, con lo stesso conteggio del punto 3. Il pericolo non e'
+ * che qualcuno se ne dimentichi: e' che oggi la difesa e' un'ASSENZA, e le
+ * assenze non si notano quando si aggiunge qualcosa.
+ * ────────────────────────────────────────────────────────────────────────────
+ */
+
 /* Chi puo' correggere e cancellare QUALUNQUE riga di ore, non solo le proprie. */
 const TOCCA_LE_RIGHE_ALTRUI = new Set([TITOLARE]);
 

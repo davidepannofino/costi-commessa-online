@@ -2558,7 +2558,20 @@ app.delete("/api/utenti/:id", richiedeAuth, richiedeAbbonamentoAttivo, async (re
        di cui non si sa piu' chi e' esente, a chi mandare l'avviso di scadenza e
        chi risulta cliente su Stripe: quelle tre letture cercano il titolare di
        riferimento e senza di lui non tornano niente. Meglio impedirlo qui che
-       spiegarlo dopo. */
+       spiegarlo dopo.
+
+       QUESTO RAMO SEMBRA CODICE MORTO E NON LO E'. Il ragionamento che porta a
+       cancellarlo e' questo, ed e' quasi giusto: chi cancella e' per forza un
+       titolare, e la vittima non puo' essere se stesso (lo blocca la riga
+       sopra), quindi i titolari sono almeno due e il conteggio non scende mai a
+       uno. Manca un passo: `richiedeAuth` verifica la FIRMA del token, non che
+       la riga esista ancora. I token durano trenta giorni, quindi un titolare
+       gia' tolto continua a bussare come titolare — ed e' lui che puo' arrivare
+       qui e togliere l'ultimo rimasto.
+
+       Provato l'8 agosto 2026 su schema usa-e-getta, per intero: T2 toglie T1
+       (200, resta un titolare), poi T1 col suo token ormai orfano prova a
+       togliere T2 e si prende questo 409. */
     const vittima = await client.query(
       "SELECT ruolo FROM utenti WHERE id = $1 AND azienda_id = $2 FOR UPDATE", [id, req.aziendaId]
     );
