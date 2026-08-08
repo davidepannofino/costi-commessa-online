@@ -270,6 +270,29 @@ gestione multiutente, integrazioni con gestionali o con lo SdI.
    elenco gli ex dipendenti — l'ordine dell'elenco e la verità dei costi non
    possono essere in concorrenza fra loro.
 
+7. **Le osservazioni riguardano i numeri e la loro affidabilità, mai il
+   comportamento di una persona.** Il prodotto può dire da dove viene una cifra
+   e quanto ci si può contare. Non può descrivere come lavora qualcuno.
+
+   La distinzione passa fra due frasi che sembrano parenti e non lo sono. «La
+   tariffa di Mario a luglio è 20 €/h perché ha registrato 120 ore invece di
+   160» **spiega una cifra**: il soggetto è la tariffa, il nome serve solo a
+   sapere quale riga andare ad aprire, e chi legge finisce di leggere sapendo
+   perché quel numero è quello che è. «Le ore di Mario sono tutte su un
+   cantiere» **descrive Mario**: il soggetto è la persona, non c'è nessuna cifra
+   da spiegare, e l'unica cosa che quella frase aggiunge è l'invito a farsi
+   un'idea — un'idea che qui dentro non ha niente su cui poggiare, perché non
+   esiste un solo dato capace di sostenerla o di smentirla.
+
+   La prova da fare su una frase nuova è questa: **toglie un dubbio su un
+   numero, o lo mette su una persona?** Un operaio che per un mese sta su un
+   cantiere solo, in edilizia, è la normalità: segnalarlo non informa, insinua.
+
+   Non è una regola sulla delicatezza, è la stessa dei Principi 1 e 2 applicata
+   a chi legge invece che a chi inserisce. Un numero senza provenienza non vale
+   niente; un sospetto senza provenienza vale meno di niente, perché a
+   differenza del numero non si può aprire per andare a vedere.
+
 ## Accessibility & Inclusion
 
 Nessun requisito normativo stabilito. Necessità reali osservabili nel contesto:
