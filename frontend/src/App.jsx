@@ -17,6 +17,7 @@ import { filtra, decidiConferma, muoviEvidenziato, CONFERMA, AMBIGUO, VUOTO } fr
 import { descriviAbbonamento } from "./statoAbbonamento.js";
 import { soloAttivi, perModificaDi, perElenco, eArchiviato, azionePerTogliere } from "./dipendentiVisibili.js";
 import { tariffeDaControllare } from "./tariffaDaControllare.js";
+import { buchiNeiDati, mesiDaGuardare } from "./buchiNeiDati.js";
 import { statoPrimoGiorno } from "./primoGiorno.js";
 import { leggiToken, salvaToken, cancellaToken } from "./auth.js";
 
@@ -2756,6 +2757,108 @@ export default function App() {
     });
   }, [riep, dipendenti]);
 
+  /**
+   * I dati che MANCANO nel periodo che si sta guardando.
+   *
+   * I MESI NON SONO QUELLI DI `daControllare`, ed è voluto: sono due domande
+   * diverse. «Questa tariffa è plausibile?» ha senso solo dove ci sono ore da
+   * valorizzare, e là un mese vuoto non direbbe niente. «Manca qualcosa?» deve
+   * poter guardare anche dove non c'è niente — un mese in cui nessuno ha
+   * registrato ore non compare fra i mesi toccati, ed è proprio quello in cui
+   * tutti gli stipendi restano fuori dai costi. Guardare solo i mesi toccati
+   * renderebbe cieco il rilevatore esattamente dove il guasto è totale.
+   *
+   * La campata si misura su TUTTE le registrazioni e non su quelle del
+   * periodo, perché la vista normale è di un mese solo: chi guarda luglio da
+   * solo non ha, dentro il periodo, i due mesi che dicono che luglio sta in
+   * mezzo. Il risultato torna poi ritagliato su quello che è a schermo.
+   * `oreMensili` copre già tutti i mesi, non solo quelli dell'intervallo
+   * (calcolaOreMensili gira su tutte le registrazioni), quindi le ore di
+   * giugno e agosto si leggono comunque.
+   */
+  const buchi = useMemo(() => {
+    if (!riep || !dal || !al) return [];
+    const conOre = new Set();
+    for (const r of registrazioni) conOre.add(r.data.slice(0, 7));
+    return buchiNeiDati({
+      dipendenti,
+      oreMensili: riep.oreMensili,
+      mesi: mesiDaGuardare([...conOre], { da: dal.slice(0, 7), a: al.slice(0, 7) }),
+    });
+  }, [riep, dipendenti, registrazioni, dal, al]);
+
+  /**
+   * LA RISPOSTA A «POSSO FIDARMI DI QUESTO NUMERO?», IN UN POSTO SOLO.
+   *
+   * Due moduli, una lista. Prima i dati che MANCANO (buchiNeiDati), poi quelli
+   * che ci sono e sembrano storti (tariffaDaControllare): un numero a cui manca
+   * un pezzo merita meno fiducia di uno che è solo sorprendente. Dentro i
+   * primi, l'ordine se lo porta già buchiNeiDati — prima quello di cui si sa
+   * QUANTO manca.
+   *
+   * Il tetto è tre righe in tutto e non tre per famiglia: la scatola serve a
+   * far capire in tre secondi se il numero regge, non a elencare tutto.
+   *
+   * LA DIREZIONE DELL'ERRORE è l'unica cosa che sappiamo per certo, ed è il
+   * guadagno vero dell'aver unito i due blocchi: finché erano separati non si
+   * poteva dire che spingono da parti opposte. Sta in fondo e una volta sola,
+   * invece che appesa a ogni riga come prima.
+   *
+   * ─────────────────────────────────────────────────────────────────────────
+   * SE STAI PER RIMETTERE A SCHERMO `riep.avvisi`, FERMATI: È VOLUTO.
+   *
+   * `calcolaRiepilogo` continua a costruire e restituire `avvisi`, ma da agosto
+   * 2026 non lo rende più nessuno. Non è una dimenticanza ed è l'unico posto
+   * dove sta scritto, quindi vale la pena leggerlo fino in fondo.
+   *
+   * Quegli avvisi venivano da `tariffaOraria` e dicevano «Manca il lordo di X
+   * per Y: le sue ore valgono 0 €» — cioè esattamente ORE_SENZA_LORDO, che ora
+   * arriva da buchiNeiDati insieme al suo gemello LORDO_SENZA_ORE. Renderli
+   * tutt'e due significherebbe scrivere lo stesso fatto in due scatole diverse,
+   * che è la cosa che questa fusione è servita a togliere.
+   *
+   * Il campo NON si toglie da calcolaRiepilogo: quel blocco sta fra i due
+   * marcatori di sezione pura, in cima a questo file, e si verifica per
+   * impronta — cambiarlo anche solo per un commento romperebbe il rituale.
+   * (I marcatori non si scrivono per esteso qui: l'impronta si estrae con un
+   * intervallo `awk` fra i due, e nominarli una seconda volta ne aprirebbe
+   * uno spurio. È già successo scrivendo questo commento.)
+   * La sorgente di verità per «cosa manca» è
+   * buchiNeiDati.js; se un giorno servisse di nuovo un elenco, si aggiunge lì.
+   * Vedi anche MIGLIORAMENTI.md, voce 5.
+   * ─────────────────────────────────────────────────────────────────────────
+   */
+  const MAX_RIGHE_DA_GUARDARE = 3;
+  const daGuardare = useMemo(() => {
+    const mostraBuchi = buchi.slice(0, MAX_RIGHE_DA_GUARDARE);
+    const mostraTariffe = daControllare.slice(0, Math.max(0, MAX_RIGHE_DA_GUARDARE - mostraBuchi.length));
+    const restanti = (buchi.length - mostraBuchi.length) + (daControllare.length - mostraTariffe.length);
+
+    let direzione = null;
+    if (buchi.length > 0 && daControllare.length > 0) {
+      direzione = "I dati che mancano tengono il costo più basso del vero; le tariffe fuori scala lo tengono più alto.";
+    } else if (buchi.length > 0) {
+      direzione = "Finché quei dati mancano, il costo che vedi è più basso del vero.";
+    } else if (daControllare.length > 0) {
+      direzione = "Finché le ore di quel mese non ci sono tutte, il costo che vedi è più alto del vero.";
+    }
+
+    const primo = buchi[0]
+      ? buchi[0].testo
+      : daControllare[0]
+        ? `La tariffa oraria di ${daControllare[0].dip.nome} ${daControllare[0].dip.cognome} risulta ${euro(daControllare[0].tariffa)}/h`
+        : null;
+
+    return { mostraBuchi, mostraTariffe, restanti, direzione, primo, quante: buchi.length + daControllare.length };
+  }, [buchi, daControllare]);
+
+  /* LO SCARTO VERO, cioè i conti che si contraddicono: l'invariante ha tutti i
+     lordi che gli servono (`completo`) e la somma non torna lo stesso. È l'unico
+     caso che merita ancora «Non quadra» — un lordo che manca non è il software
+     che sbaglia a sommare, è un dato che non c'è, e adesso sappiamo dirlo per
+     nome invece di dipingere di rosso tutta la schermata. */
+  const scartoVero = Boolean(riep?.invariante?.completo && !riep.invariante.ok);
+
   /* A che punto è il primo giorno. Si ricava dai dati veri a ogni disegno:
      nessuna spunta salvata da qualche parte, che potrebbe andare fuori
      sincrono con la realtà e mostrare come fatto un passo disfatto. */
@@ -3531,22 +3634,34 @@ export default function App() {
                   peggiore: un lordo intero addossato a un giorno solo di
                   lavoro dà un costo sbagliato di venti volte, e la quadratura
                   dice comunque di sì.
-                  Adesso il verde vuole due cose: il conto coerente E le
-                  tariffe plausibili. Se una tariffa è fuori scala si passa
-                  all'ambra, che in questo prodotto vuol dire «da controllare».
-                  L'etichetta non conclude che il mese è incompleto — non lo
-                  sappiamo. Dice che c'è da guardare; il numero osservato lo
-                  scrive la frase sotto il costo. */}
+                  Adesso il verde vuole tre cose: il conto coerente, le tariffe
+                  plausibili E nessun dato mancante. Se una delle ultime due
+                  cade si passa all'ambra, che in questo prodotto vuol dire «da
+                  controllare». L'etichetta non conclude che il mese è
+                  incompleto — non lo sappiamo. Dice che c'è da guardare; il
+                  numero osservato lo scrive la frase sotto il costo.
+
+                  «NON QUADRA» È DIVENTATO PIÙ RARO E PIÙ VERO. Prima scattava
+                  anche quando mancava il lordo di qualcuno che aveva ore,
+                  perché l'invariante marcava `completo = false`. Ma un lordo
+                  che manca non è il software che sbaglia a sommare: è un dato
+                  che non c'è, e adesso buchiNeiDati lo sa dire per nome. Il
+                  rosso resta al solo caso in cui i lordi ci sono TUTTI e la
+                  somma non torna lo stesso — cioè a una contraddizione vera.
+
+                  E il verde ha smesso di mentire sul caso peggiore: un lordo
+                  senza ore usciva da tutt'e due i lati dell'invariante, quindi
+                  uno stipendio intero poteva mancare dai totali con la pillola
+                  che diceva «Quadra». Adesso è una riga nella scatola qui
+                  sotto. */}
               {riep && riep.invariante && (
                 <span className="hidden md:inline-flex" title={
-                  daControllare.length > 0
-                    ? `La tariffa oraria di ${daControllare[0].dip.nome} ${daControllare[0].dip.cognome} risulta ${euro(daControllare[0].tariffa)}/h`
-                    : riep.invariante.ok
-                      ? "Il costo del periodo coincide con la somma dei lordi mensili"
-                      : "Quadratura non verificata: controlla lordi e dati"}>
-                  <Pillola tono={daControllare.length > 0 ? "ambra" : riep.invariante.ok ? "euro" : "accento"}>
+                  scartoVero
+                    ? "Quadratura non verificata: controlla lordi e dati"
+                    : daGuardare.primo ?? "Il costo del periodo coincide con la somma dei lordi mensili"}>
+                  <Pillola tono={scartoVero ? "accento" : daGuardare.quante > 0 ? "ambra" : "euro"}>
                     <span className="rounded-full" style={{ width: 5, height: 5, background: "currentColor" }} />
-                    {daControllare.length > 0 ? "Da controllare" : riep.invariante.ok ? "Quadra" : "Non quadra"}
+                    {scartoVero ? "Non quadra" : daGuardare.quante > 0 ? "Da controllare" : "Quadra"}
                   </Pillola>
                 </span>
               )}
@@ -3658,18 +3773,39 @@ export default function App() {
             </div>
           )}
 
-          {/* LA FRASE CHE RENDE ONESTO IL NUMERO.
-              Dice solo quello che si è osservato — quante ore, quale lordo,
-              quanto viene la tariffa — e si ferma lì. Non conclude «il mese è
-              incompleto», perché non lo sappiamo: potrebbe essere un lordo
-              sbagliato, o un mese davvero fatto di tre giorni. La conclusione
-              la trae chi guarda, che è l'unico ad avere l'informazione. Quello
-              che diciamo noi è la direzione dell'errore, e quella la sappiamo
-              per certo: con meno ore il costo risulta più ALTO del vero. */}
-          {daControllare.length > 0 && (
+          {/* PERCHÉ IL NUMERO QUI SOPRA POTREBBE NON REGGERE — UNA SCATOLA SOLA.
+              Qui c'erano due blocchi consecutivi: le tariffe fuori scala, e
+              sotto gli `avvisi` di calcolaRiepilogo. Il secondo diceva «Manca
+              il lordo di X per Y: le sue ore valgono 0 €», che è la stessa cosa
+              che ora dice buchiNeiDati — quindi non se n'è aggiunto un terzo,
+              se ne sono fusi due. Chi legge ha una domanda sola («posso fidarmi
+              di questo numero?») e merita un posto solo dove trovarne risposta.
+
+              NIENTE È ANDATO PERSO nel togliere `riep.avvisi` da qui:
+              tariffaOraria produce due avvisi, e quello su «manca il lordo» è
+              coperto riga per riga da ORE_SENZA_LORDO. L'altro — «ha un lordo
+              ma zero ore» — da calcolaRiepilogo non era raggiungibile, perché
+              la tariffa si chiede solo per chi ha una registrazione in quel
+              mese: adesso quel caso lo trova LORDO_SENZA_ORE, che è poi la
+              ragione per cui buchiNeiDati esiste.
+
+              LA FRASE RESTA UN'OSSERVAZIONE. Dice quante ore, quale lordo,
+              quanto viene la tariffa, e si ferma lì: non conclude «il mese è
+              incompleto», perché non lo sappiamo. L'unica cosa che aggiungiamo
+              è la DIREZIONE dell'errore, che sappiamo per certo — e sta in
+              fondo una volta sola invece che appesa a ogni riga, perché adesso
+              le due famiglie spingono da parti opposte e la cosa si può
+              finalmente dire. */}
+          {daGuardare.quante > 0 && (
             <div className="mb-9 px-4 py-3 space-y-1.5" role="alert"
               style={{ background: "var(--ambra-bg)", boxShadow: "0 0 0 .5px var(--ambra)", borderRadius: "var(--r-sm)" }}>
-              {daControllare.slice(0, 3).map((t) => (
+              {daGuardare.mostraBuchi.map((b) => (
+                <p key={b.tipo + b.mese} className="t-piccolo flex items-start gap-2.5" style={{ color: "var(--ambra)" }}>
+                  <AlertTriangle size={14} strokeWidth={1.75} className="mt-0.5 shrink-0" />
+                  <span>{b.testo}</span>
+                </p>
+              ))}
+              {daGuardare.mostraTariffe.map((t) => (
                 <p key={t.dip.id + t.mese} className="t-piccolo flex items-start gap-2.5" style={{ color: "var(--ambra)" }}>
                   <AlertTriangle size={14} strokeWidth={1.75} className="mt-0.5 shrink-0" />
                   <span>
@@ -3677,23 +3813,19 @@ export default function App() {
                     in {fmtMese(t.mese)} su un lordo di {euro(t.lordo)}: la tariffa risulta{" "}
                     <strong>{euro(t.tariffa)}/h</strong>
                     {t.confronto != null && <> , contro {euro(t.confronto)}/h degli altri mesi</>}.
-                    Finché le ore di quel mese non ci sono tutte, i costi che vedi sono più alti del vero.
                   </span>
                 </p>
               ))}
-              {daControllare.length > 3 && (
+              {daGuardare.restanti > 0 && (
                 <p className="t-piccolo pl-6" style={{ color: "var(--ambra)", opacity: .85 }}>
-                  e altre {daControllare.length - 3} tariffe fuori scala nello stesso periodo.
+                  e altre {daGuardare.restanti} cose da controllare nello stesso periodo.
                 </p>
               )}
-            </div>
-          )}
-
-          {riep && riep.avvisi.length > 0 && (
-            <div className="mb-9 px-4 py-3 space-y-1.5" style={{ background: "var(--velo-accento)", boxShadow: "0 0 0 .5px var(--accento-bordo)", borderRadius: "var(--r-sm)" }} role="alert">
-              {riep.avvisi.map((a, i) => (
-                <p key={i} className="t-piccolo flex items-start gap-2.5" style={{ color: "var(--accento-chiaro)" }}><AlertTriangle size={14} strokeWidth={1.75} className="mt-0.5 shrink-0" /> {a}</p>
-              ))}
+              {daGuardare.direzione && (
+                <p className="t-piccolo pl-6 pt-0.5" style={{ color: "var(--ambra)", opacity: .85 }}>
+                  {daGuardare.direzione}
+                </p>
+              )}
             </div>
           )}
 

@@ -10,7 +10,7 @@
  * qualcuno togliesse questo modulo, quel buco tornerebbe invisibile.
  */
 import {
-  buchiNeiDati, cSonoBuchiNeiDati, euro, meseEsteso,
+  buchiNeiDati, cSonoBuchiNeiDati, euro, meseEsteso, mesiDaGuardare,
   ORE_SENZA_LORDO, LORDO_SENZA_ORE,
 } from "./buchiNeiDati.js";
 
@@ -228,6 +228,102 @@ prova("i mesi si scrivono per esteso, non 2026-07", () => {
   uguale(meseEsteso("2026-07"), "luglio 2026", "luglio");
   uguale(meseEsteso("2026-01"), "gennaio 2026", "gennaio");
   uguale(meseEsteso("2026-12"), "dicembre 2026", "dicembre");
+});
+
+/* ================================================================== */
+
+console.log("\n7. I MESI DA GUARDARE: UN BUCO, NON UN BORDO");
+
+prova("senza mesi con ore non c'è nessun «in mezzo»", () => {
+  uguale(mesiDaGuardare([]), [], "elenco vuoto");
+  uguale(mesiDaGuardare(null), [], "null");
+  uguale(mesiDaGuardare(undefined), [], "undefined");
+});
+
+prova("un mese solo resta un mese solo", () => {
+  uguale(mesiDaGuardare(["2026-07"]), ["2026-07"], "niente da riempire");
+});
+
+prova("due mesi adiacenti non inventano niente in mezzo", () => {
+  uguale(mesiDaGuardare(["2026-06", "2026-07"]), ["2026-06", "2026-07"], "adiacenti");
+});
+
+prova("un mese vuoto in mezzo viene riempito", () => {
+  uguale(mesiDaGuardare(["2026-06", "2026-08"]), ["2026-06", "2026-07", "2026-08"], "luglio entra");
+});
+
+prova("più mesi vuoti di fila, e l'ingresso disordinato non conta", () => {
+  uguale(mesiDaGuardare(["2026-09", "2026-05"]),
+    ["2026-05", "2026-06", "2026-07", "2026-08", "2026-09"], "quattro buchi");
+});
+
+prova("la campata attraversa il cambio d'anno", () => {
+  uguale(mesiDaGuardare(["2025-11", "2026-02"]),
+    ["2025-11", "2025-12", "2026-01", "2026-02"], "novembre-febbraio");
+});
+
+prova("I BORDI NON SI ESTENDONO MAI", () => {
+  /* È la metà della regola che evita il rumore: fuori dalla campata non si
+     guarda, comunque siano scritti i lordi. */
+  const c = mesiDaGuardare(["2026-06", "2026-07"]);
+  vero(!c.includes("2026-05"), "niente prima del primo mese con ore");
+  vero(!c.includes("2026-08"), "niente dopo l'ultimo");
+});
+
+prova("i valori malformati non entrano e non fanno esplodere niente", () => {
+  uguale(mesiDaGuardare(["2026-13", "pippo", "", null, "2026-07"]), ["2026-07"], "solo quello valido");
+  uguale(mesiDaGuardare(["2026-00", "2026-1"]), [], "mese fuori scala o senza zero");
+});
+
+prova("IL RITAGLIO: la campata si misura su tutto, si riporta solo il periodo", () => {
+  /* È il caso della vista mensile, che è quella che si usa. Guardando luglio
+     da solo, sono giugno e agosto — fuori dal periodo ma dentro i dati — a
+     dire che luglio sta in mezzo. Senza questo, la regola non scatterebbe mai
+     dove serve. */
+  const conOre = ["2026-06", "2026-08"];
+  uguale(mesiDaGuardare(conOre, { da: "2026-07", a: "2026-07" }), ["2026-07"],
+    "luglio è in mezzo, e si riporta solo luglio");
+  uguale(mesiDaGuardare(conOre, { da: "2026-06", a: "2026-08" }), ["2026-06", "2026-07", "2026-08"],
+    "guardando tutto il periodo, tutta la campata");
+});
+
+prova("il ritaglio non estende: un mese fuori campata resta fuori anche se guardato", () => {
+  uguale(mesiDaGuardare(["2026-06", "2026-07"], { da: "2026-05", a: "2026-05" }), [],
+    "maggio è un bordo: guardarlo non lo rende un buco");
+  uguale(mesiDaGuardare(["2026-06", "2026-07"], { da: "2026-01", a: "2026-12" }), ["2026-06", "2026-07"],
+    "un periodo largo non inventa mesi");
+});
+
+prova("estremi assenti o malformati: si guarda tutta la campata", () => {
+  const c = ["2026-06", "2026-07"];
+  uguale(mesiDaGuardare(c), c, "senza estremi");
+  uguale(mesiDaGuardare(c, {}), c, "oggetto vuoto");
+  uguale(mesiDaGuardare(c, { da: "pippo", a: null }), c, "estremi da buttare");
+});
+
+prova("IL CASO CHE CONTA: un mese interamente vuoto in mezzo viene trovato", () => {
+  /* Nessuno ha registrato niente a luglio, ma i lordi ci sono: stipendi che
+     non finiscono su nessuna commessa. Senza mesiDaGuardare luglio non
+     entrerebbe nemmeno fra i mesi guardati, e questo modulo sarebbe cieco
+     proprio dove il guasto è totale. */
+  const dipendenti = [dip("e1", "Mario", { "2026-06": 2400, "2026-07": 2400, "2026-08": 2400 })];
+  const oreMensili = ore({ "e1|2026-06": 160, "e1|2026-08": 150 });
+  const mesi = mesiDaGuardare(["2026-06", "2026-08"]);
+  uguale(mesi, ["2026-06", "2026-07", "2026-08"], "luglio deve entrare");
+  const r = buchiNeiDati({ dipendenti, oreMensili, mesi });
+  uguale(tipiDi(r), [LORDO_SENZA_ORE], "e deve produrre il buco");
+  uguale(r[0].mese, "2026-07", "proprio luglio");
+  uguale(r[0].importo, 2400, "lo stipendio che manca ai totali");
+});
+
+prova("E IL SUO OPPOSTO: lo stesso mese vuoto, ma di bordo, tace", () => {
+  /* Maggio è prima che l'azienda cominciasse a usare il programma: un lordo
+     scritto lì non è un dato che manca. */
+  const dipendenti = [dip("e1", "Mario", { "2026-05": 2400, "2026-06": 2400 })];
+  const oreMensili = ore({ "e1|2026-06": 160 });
+  const mesi = mesiDaGuardare(["2026-06"]);
+  uguale(mesi, ["2026-06"], "maggio resta fuori dalla campata");
+  uguale(buchiNeiDati({ dipendenti, oreMensili, mesi }), [], "e non si segnala niente");
 });
 
 /* ================================================================== */

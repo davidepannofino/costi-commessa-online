@@ -84,6 +84,71 @@ export function meseEsteso(mese) {
 const nomeDi = (d) => `${d.nome ?? ""} ${d.cognome ?? ""}`.trim() || "(senza nome)";
 
 /**
+ * I MESI DA GUARDARE: quelli con ore, PIÙ i vuoti che stanno in mezzo.
+ *
+ * Serve perché il guasto più grosso che questo modulo deve trovare è anche
+ * l'unico che non lascia tracce: un mese in cui NESSUNO ha registrato ore non
+ * compare fra i mesi toccati, quindi senza questa funzione non verrebbe
+ * guardato — e sono proprio i mesi in cui tutti gli stipendi restano fuori dai
+ * costi. Il rilevatore sarebbe cieco esattamente dove il guasto è totale.
+ *
+ * UN BUCO, NON UN BORDO, e la distinzione è tutta qui. Guardare tutti i mesi
+ * dell'intervallo sarebbe rumore: chi è stato assunto a luglio ha un lordo da
+ * luglio, ma chiunque abbia un lordo scritto più indietro verrebbe segnalato
+ * per ogni mese in cui non ha lavorato, e sei righe false seppelliscono quella
+ * vera. Un mese vuoto PRIMA che l'azienda cominciasse a usare il programma non
+ * è un dato che manca: è il programma che non c'era. Un mese vuoto FRA giugno e
+ * agosto lo è eccome.
+ *
+ * Da cui la regola, che si riduce a una cosa sola: la campata continua dal
+ * primo all'ultimo mese con ore. Tutto quello che ci sta dentro senza ore è per
+ * definizione in mezzo a due mesi che ne hanno; tutto quello che ci sta fuori è
+ * un bordo.
+ *
+ * L'ASIMMETRIA CON tariffaDaControllare È VOLUTA, e non è un'incoerenza: sono
+ * due domande diverse. «Questa tariffa è plausibile?» ha senso solo dove ci
+ * sono ore da valorizzare, e là guardare un mese vuoto non vorrebbe dire
+ * niente. «Manca qualcosa?» deve poter guardare anche dove non c'è niente.
+ *
+ * LA CAMPATA SI MISURA SU TUTTO LO STORICO, IL RISULTATO SI RITAGLIA SUL
+ * PERIODO. Sono due cose diverse e vanno tenute separate, altrimenti la regola
+ * non scatta mai: l'applicazione è mensile per default, e chi guarda luglio da
+ * solo passerebbe un elenco di mesi con ore vuoto — nessun «in mezzo»,
+ * nessuna segnalazione, proprio nel caso peggiore. Se luglio è in mezzo lo
+ * dicono giugno e agosto, che stanno fuori dal periodo guardato ma dentro i
+ * dati. Quello che si RIPORTA resta però solo ciò che si sta guardando: un
+ * avviso su un mese che non è a schermo non si saprebbe dove andare a leggere.
+ *
+ * @param mesiConOre  i mesi 'AAAA-MM' con almeno un'ora, su TUTTO lo storico
+ * @param da, a       estremi 'AAAA-MM' del periodo guardato, facoltativi
+ * @returns i mesi della campata dentro il periodo, in ordine. Vuoto se non ci
+ *          sono ore: senza nemmeno un mese con ore non esiste nessun «in
+ *          mezzo».
+ */
+export function mesiDaGuardare(mesiConOre, { da, a } = {}) {
+  const valido = (m) => /^\d{4}-(0[1-9]|1[0-2])$/.test(String(m));
+  const mesi = [...new Set(mesiConOre ?? [])].filter(valido).sort();
+  if (mesi.length === 0) return [];
+
+  const ultimo = mesi[mesi.length - 1];
+  const campata = [];
+  let [anno, mese] = mesi[0].split("-").map(Number);
+  for (;;) {
+    const corrente = `${anno}-${String(mese).padStart(2, "0")}`;
+    campata.push(corrente);
+    if (corrente >= ultimo) break;
+    mese++;
+    if (mese > 12) { mese = 1; anno++; }
+  }
+
+  /* Un estremo malformato viene ignorato invece di svuotare il risultato:
+     nel dubbio si guarda di più, perché qui il costo di guardare un mese in
+     più è una riga in fondo a una scatola, e quello di guardarne uno in meno
+     è uno stipendio che non risulta a nessuno. */
+  return campata.filter((m) => (valido(da) ? m >= da : true) && (valido(a) ? m <= a : true));
+}
+
+/**
  * I buchi nei mesi che si stanno guardando.
  *
  * Prende le stesse cose di tariffeDaControllare, di proposito: così le due

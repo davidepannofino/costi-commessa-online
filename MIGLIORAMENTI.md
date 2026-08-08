@@ -134,6 +134,33 @@ che succede quando un prodotto funziona — smetterebbe di esserlo.
 
 ---
 
+## 5. `riep.avvisi` è codice morto, e non si può togliere senza rifare l'impronta
+
+**Cosa manca.** `calcolaRiepilogo` costruisce e restituisce ancora `avvisi`, ma
+da agosto 2026 nessuno lo rende. Quegli avvisi dicevano «Manca il lordo di X
+per Y: le sue ore valgono 0 €», che è esattamente `ORE_SENZA_LORDO` di
+`buchiNeiDati.js`: quando i due blocchi di segnalazione sono diventati uno, la
+sorgente è passata al modulo e il campo è rimasto lì a girare a vuoto.
+
+**Chi ne soffre.** Nessuno oggi, ed è il motivo per cui la voce è in fondo. Ma
+è il tipo di residuo che fra sei mesi qualcuno «sistema» rimettendolo a
+schermo, e lo stesso fatto tornerebbe scritto in due scatole diverse — cioè
+esattamente il difetto che quella fusione è servita a togliere.
+
+**Perché non è stato fatto.** Il campo sta dentro il blocco fra `CALC-START` e
+`CALC-END`, che si verifica **per impronta**: cambiarlo anche solo per
+cancellare una riga romperebbe il rituale di verifica, che vale più di due
+righe morte. Quando quel blocco andrà toccato per altri motivi, si toglie
+allora — insieme all'accumulo `avvisi.add(...)` dentro il ciclo e al campo nel
+`return`.
+
+**Nel frattempo** la trappola è disinnescata dove verrebbe fatta: un commento
+in `App.jsx`, dove si compone `daGuardare`, dice che `riep.avvisi` non si rende
+più di proposito e che la sorgente di verità è `buchiNeiDati.js`. Chi passa di
+là a rimetterlo a schermo lo legge prima.
+
+---
+
 ## Fatte
 
 - **Cancellare un dipendente distruggeva le sue ore** (6 agosto 2026). Chi ha
