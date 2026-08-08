@@ -3711,10 +3711,18 @@ export default function App() {
      nello stesso momento, diceva «Accesso illimitato».
      Stato sconosciuto o non ancora caricato: stringa vuota, cioè niente. */
   const etichettaPiano = descriviAbbonamento(abbonamentoInfo)?.etichetta ?? "";
+  /* I GRUPPI DELLA BARRA LATERALE ELENCANO GLI ID A MANO, ed è una lista che va
+     tenuta allineata a NAV: una voce che non compare in nessun gruppo esiste in
+     NAV, si vede nella barra in fondo su telefono, e nella barra laterale
+     SPARISCE senza dire niente — perché il filtro qui sotto scarta quello che
+     non trova.
+     È successo l'9 agosto 2026 aggiungendo "account": la voce c'era nel codice,
+     funzionava da telefono, e da computer non compariva. Chi aggiunge una voce
+     a NAV deve aggiungerla anche qui. */
   const GRUPPI_NAV = [
     { etichetta: "Generale", voci: ["dashboard", "commesse", "dipendenti"] },
     { etichetta: "Documenti", voci: ["ddt", "fatture", "dati"] },
-    { etichetta: "Account", voci: ["abbonamento", "admin"] },
+    { etichetta: "Account", voci: ["account", "abbonamento", "admin"] },
   ];
 
   const costoLive = useContatore(riep ? riep.totCosto : 0);
