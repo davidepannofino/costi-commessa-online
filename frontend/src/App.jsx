@@ -2740,16 +2740,37 @@ export default function App() {
     });
   }, []);
 
+  /**
+   * USCIRE RICARICA LA PAGINA. Non è un dettaglio di comodo: è l'unico modo di
+   * dire con certezza che della persona precedente non resta niente.
+   *
+   * Qui c'era un elenco scritto a mano — svuota i dipendenti, le commesse, le
+   * registrazioni, i materiali, gli allegati, l'azienda, i fornitori, l'admin —
+   * e come tutti gli elenchi tenuti a mano era già incompleto. Misurato l'8
+   * agosto 2026 su uno schermo vero: subito DOPO l'uscita, con il token già
+   * tolto da localStorage, `datiAPI.js` rispondeva ancora
+   *
+   *     ruoloCorrente() -> "titolare"      versioneLetta() -> 7
+   *
+   * cioè il ruolo e la versione di chi se n'era appena andato. Sono variabili di
+   * modulo, fuori da React, e nessun elenco di setState le tocca. E
+   * `ruoloCorrente` legge `ruoloNoto` PRIMA del token: chi entra dopo viene
+   * quindi visto con i permessi di chi è uscito, finché non arriva la prima
+   * risposta di /api/stato. Restavano in memoria anche `trattenuti`, `ruolo` e
+   * `vista`, che l'elenco non nominava.
+   *
+   * È lo stesso difetto della barra laterale che scartava «Persone»: due elenchi
+   * da tenere allineati a mano, e uno che si dimentica in silenzio. Un
+   * ricaricamento non ha niente da ricordare — riparte da zero il modulo, lo
+   * stato di React e la memoria di questa scheda.
+   *
+   * NON si fa lo stesso sulla sessione scaduta: lì c'è un messaggio da mostrare
+   * («La sessione è scaduta: accedi di nuovo») e un ricaricamento se lo
+   * porterebbe via.
+   */
   const uscire = useCallback(() => {
     cancellaToken();
-    pronto.current = false;
-    setCaricamento(true);
-    setDipendenti([]); setCommesse([]); setRegistrazioni([]); setMateriali([]); setAllegati([]); setAzienda("");
-    setFornitoriNoti([]);
-    setMessaggioAccesso(null);
-    setBloccatoAbbonamento(false);
-    setIsAdmin(false);
-    setToken(null);
+    window.location.reload();
   }, []);
 
   /* Qui c'era una SONDA: si chiamava /api/admin/statistiche e si guardava se
