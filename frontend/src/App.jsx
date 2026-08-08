@@ -2256,6 +2256,214 @@ const COLORI_STATO_ADMIN = { prova: "var(--accento)", attivo: "var(--euro)", sca
  *  admin (voce di navigazione già filtrata, controllo reale sulle rotte
  *  /api/admin/*). Sola lettura: nessuna azione qui modifica dati di altre
  *  aziende. */
+/**
+ * LE PERSONE DELL'AZIENDA, E LA PROPRIA PASSWORD.
+ *
+ * Una schermata sola per due cose che sembrano diverse e non lo sono: chi puo'
+ * entrare, e con che chiave. Il cambio password vale per CHIUNQUE — anche per
+ * chi ha il ruolo `ore`, che altrimenti resterebbe per sempre con quella
+ * consegnata a voce dal titolare. L'elenco delle persone e' del solo titolare.
+ *
+ * PERCHE' LA PASSWORD LA SCEGLIE IL TITOLARE, e non si manda un invito per
+ * email: chi arriva dal cantiere col foglietto in tasca non e' detto che abbia
+ * un indirizzo che guarda. Ne segue che «password dimenticata» per quelle
+ * persone non completera' mai — l'email e' inventata — ed e' il motivo per cui
+ * qui c'e' «Rimetti la password»: senza, un account senza email che perde la
+ * chiave sarebbe un account morto.
+ */
+function VistaAccount({ ruolo, notifica }) {
+  const titolare = ruolo !== "ore";
+  const [utenti, setUtenti] = useState(null);
+  const [nuovo, setNuovo] = useState({ email: "", password: "", ruolo: "ore" });
+  const [mia, setMia] = useState({ vecchia: "", nuova: "" });
+  const [rimetti, setRimetti] = useState(null);   // utente a cui rimettere la password
+  const [togli, setTogli] = useState(null);       // utente da togliere, in conferma
+
+  const ricarica = useCallback(async () => {
+    if (!titolare) return;
+    try { setUtenti(await datiAPI.elencoUtenti()); }
+    catch (e) { notifica(e.message, "errore"); }
+  }, [titolare, notifica]);
+  useEffect(() => { ricarica(); }, [ricarica]);
+
+  const crea = async () => {
+    try {
+      await datiAPI.creaUtente(nuovo);
+      setNuovo({ email: "", password: "", ruolo: "ore" });
+      notifica("Persona aggiunta. Consegnale la password a voce: da qui non si rilegge.", "ok");
+      ricarica();
+    } catch (e) { notifica(e.message, "errore"); }
+  };
+
+  const cambiaLaMia = async () => {
+    try {
+      await datiAPI.cambiaPassword(mia.vecchia, mia.nuova);
+      setMia({ vecchia: "", nuova: "" });
+      notifica("Password cambiata.", "ok");
+    } catch (e) { notifica(e.message, "errore"); }
+  };
+
+  return (
+    <div className="space-y-9">
+      <div>
+        <h1 className="t-titolo">{titolare ? "Persone e accesso" : "Il tuo accesso"}</h1>
+        <p className="t-piccolo mt-1.5" style={{ color: "var(--txt-tenue)" }}>
+          {titolare
+            ? "Chi può entrare in questa azienda, e con quali permessi."
+            : "Cambia la password con cui entri."}
+        </p>
+      </div>
+
+      <Sezione titolo="Cambia la tua password">
+        <div className="grid sm:grid-cols-2 gap-4 items-end">
+          <Campo etichetta="Password attuale">
+            <input type="password" autoComplete="current-password" value={mia.vecchia}
+              onChange={(e) => setMia((m) => ({ ...m, vecchia: e.target.value }))}
+              className={inputCls} style={{ minHeight: ALTO_TOCCO }} />
+          </Campo>
+          <Campo etichetta="Nuova password (almeno 8 caratteri)">
+            <input type="password" autoComplete="new-password" value={mia.nuova}
+              onChange={(e) => setMia((m) => ({ ...m, nuova: e.target.value }))}
+              className={inputCls} style={{ minHeight: ALTO_TOCCO }} />
+          </Campo>
+        </div>
+        <div className="mt-4">
+          <Bottone onClick={cambiaLaMia} disabled={!mia.vecchia || mia.nuova.length < 8}>Cambia password</Bottone>
+        </div>
+      </Sezione>
+
+      {titolare && (
+        <Sezione titolo="Aggiungi una persona">
+          <p className="t-piccolo mb-4" style={{ color: "var(--txt-tenue)" }}>
+            La password la scegli tu e gliela consegni a voce: da qui non si rilegge più.
+            Chi registra le ore non vede lordi, costi né documenti di spesa.
+          </p>
+          <div className="grid sm:grid-cols-3 gap-4 items-end">
+            <Campo etichetta="Email (serve per entrare)">
+              <input value={nuovo.email} onChange={(e) => setNuovo((n) => ({ ...n, email: e.target.value }))}
+                placeholder="es. cantiere@piemme.local" className={inputCls} style={{ minHeight: ALTO_TOCCO }} />
+            </Campo>
+            <Campo etichetta="Password (almeno 8 caratteri)">
+              <input type="password" autoComplete="new-password" value={nuovo.password}
+                onChange={(e) => setNuovo((n) => ({ ...n, password: e.target.value }))}
+                className={inputCls} style={{ minHeight: ALTO_TOCCO }} />
+            </Campo>
+            <Campo etichetta="Cosa può fare">
+              <select value={nuovo.ruolo} onChange={(e) => setNuovo((n) => ({ ...n, ruolo: e.target.value }))}
+                className={inputCls} style={{ minHeight: ALTO_TOCCO }}>
+                <option value="ore">Registra le ore</option>
+                <option value="titolare">Tutto, come te</option>
+              </select>
+            </Campo>
+          </div>
+          <div className="mt-4">
+            <Bottone onClick={crea} disabled={!nuovo.email || nuovo.password.length < 8}>
+              <Plus size={14} strokeWidth={1.75} /> Aggiungi
+            </Bottone>
+          </div>
+        </Sezione>
+      )}
+
+      {titolare && (
+        <Sezione titolo="Chi può entrare">
+          {utenti === null ? (
+            <p className="t-piccolo" style={{ color: "var(--txt-tenue)" }}>Caricamento…</p>
+          ) : (
+            <ul>
+              {utenti.map((u, i) => (
+                <li key={u.id} className="flex items-center gap-3 py-3 flex-wrap"
+                  style={{ borderTop: i > 0 ? ".5px solid var(--bordo-tenue)" : "none" }}>
+                  <span className="min-w-0 flex-1 block">
+                    <span className="t-corpo block truncate" style={{ color: "var(--txt)" }}>{u.email}</span>
+                    <span className="t-piccolo block" style={{ color: "var(--txt-tenue)" }}>
+                      {u.ruolo === "ore" ? "Registra le ore" : "Tutto"}{u.io && " · sei tu"}
+                    </span>
+                  </span>
+                  {!u.io && (
+                    <span className="shrink-0 flex gap-2">
+                      <Bottone variante="fantasma" onClick={() => setRimetti(u)}>Rimetti password</Bottone>
+                      <Bottone variante="pericolo" onClick={() => setTogli(u)}>Togli</Bottone>
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Sezione>
+      )}
+
+      {rimetti && (
+        <Modale titolo={`Rimetti la password di ${rimetti.email}`} onChiudi={() => setRimetti(null)}>
+          <ModuloPasswordRimessa utente={rimetti} notifica={notifica} onFatto={() => setRimetti(null)} />
+        </Modale>
+      )}
+
+      {togli && (
+        <Modale titolo={`Togliere ${togli.email}?`} onChiudi={() => setTogli(null)}>
+          {/* L'AVVISO CHE CONTA, e non e' quello ovvio. Le ore non si perdono —
+              nessuna azione porta via delle ore — ma perdono l'AUTORE, e una
+              riga senza autore non e' di nessun utente `ore`: da quel momento
+              solo il titolare puo' correggerla. Chi preme qui sta congelando il
+              lavoro di quella persona, e se il problema era solo una password
+              dimenticata c'e' il bottone accanto. */}
+          <p className="t-corpo" style={{ color: "var(--txt-medio)" }}>
+            Le ore che ha registrato <strong>restano tutte</strong>: togliere una persona non
+            porta via nessun dato.
+          </p>
+          <p className="t-corpo mt-3" style={{ color: "var(--txt-medio)" }}>
+            Ma quelle righe <strong>perdono l'autore</strong>, e da quel momento potrai
+            correggerle <strong>solo tu</strong>: nessun altro di chi registra le ore potrà più
+            toccarle, nemmeno chi prenderà il suo posto.
+          </p>
+          <p className="t-piccolo mt-3" style={{ color: "var(--txt-tenue)" }}>
+            Se il problema è solo una password dimenticata, usa «Rimetti password»: non congela
+            niente.
+          </p>
+          <div className="flex gap-2 mt-6">
+            <Bottone variante="pericolo" onClick={async () => {
+              try {
+                await datiAPI.eliminaUtente(togli.id);
+                notifica("Persona tolta. Le sue ore sono rimaste.", "ok");
+                setTogli(null); ricarica();
+              } catch (e) { notifica(e.message, "errore"); }
+            }}>Togli comunque</Bottone>
+            <Bottone variante="fantasma" onClick={() => setTogli(null)}>Annulla</Bottone>
+          </div>
+        </Modale>
+      )}
+    </div>
+  );
+}
+
+/** Il modulo per rimettere la password a un altro: la vecchia NON si chiede,
+ *  ed e' il punto — chi l'ha dimenticata non ce l'ha. */
+function ModuloPasswordRimessa({ utente, notifica, onFatto }) {
+  const [password, setPassword] = useState("");
+  return (
+    <>
+      <p className="t-piccolo" style={{ color: "var(--txt-tenue)" }}>
+        Scegli tu la nuova password e consegnagliela a voce. Da qui non si rilegge più.
+      </p>
+      <div className="mt-4">
+        <Campo etichetta="Nuova password (almeno 8 caratteri)">
+          <input type="password" autoComplete="new-password" value={password}
+            onChange={(e) => setPassword(e.target.value)} className={inputCls} style={{ minHeight: ALTO_TOCCO }} />
+        </Campo>
+      </div>
+      <div className="flex gap-2 mt-6">
+        <Bottone disabled={password.length < 8} onClick={async () => {
+          try {
+            await datiAPI.reimpostaPassword(utente.id, password);
+            notifica(`Password di ${utente.email} rimessa.`, "ok");
+            onFatto();
+          } catch (e) { notifica(e.message, "errore"); }
+        }}>Rimetti</Bottone>
+        <Bottone variante="fantasma" onClick={onFatto}>Annulla</Bottone>
+      </div>
+    </>
+  );
+}
+
 function VistaAdmin() {
   const [caricando, setCaricando] = useState(true);
   const [errore, setErrore] = useState(null);
@@ -2657,6 +2865,9 @@ export default function App() {
   /* Il rifiuto del server per troppe cancellazioni: {cancellerebbe, esistenti}.
      Separato dall'altro perche' il consiglio da dare e' opposto. */
   const [salvataggioRifiutato, setSalvataggioRifiutato] = useState(null);
+  /* La pagina ha letto i dati prima che un'altra persona scrivesse: il server
+     ha risposto 412 e non ha toccato niente. */
+  const [schedaVecchia, setSchedaVecchia] = useState(false);
 
   const registraEsitoSalvataggio = useCallback((ris) => {
     if (!ris || ris.gestito) return ris; // sessione scaduta o abbonamento: hanno già la loro schermata
@@ -2678,6 +2889,20 @@ export default function App() {
     if (ris.rifiutatoPerCancellazioni) {
       salvataggioKO.current = true;
       setSalvataggioRifiutato({ cancellerebbe: ris.cancellerebbe, esistenti: ris.esistenti });
+      setSalvataggioNonRiuscito(null);
+      return ris;
+    }
+    /* LA PAGINA E' VECCHIA. Stessa cura del rifiuto qui sopra — ricaricare — e
+       per la stessa ragione: sul server i dati ci sono tutti. Ma il motivo e'
+       l'opposto. La' mancava qualcosa a quello che il browser mandava; qui c'e'
+       di piu' sul server, ed e' il lavoro di un'altra persona: le righe che il
+       capocantiere ha inserito mentre questa scheda era aperta.
+       Ricaricare non e' una perdita, e' il modo di vederle. Quello che si perde
+       e' al massimo l'ultima cifra toccata, perche' il salvataggio parte a ogni
+       modifica: il rifiuto arriva subito, non a fine giornata. */
+    if (ris.schedaVecchia) {
+      salvataggioKO.current = true;
+      setSchedaVecchia(true);
       setSalvataggioNonRiuscito(null);
       return ris;
     }
@@ -3459,7 +3684,7 @@ export default function App() {
      troverebbe schermate senza numeri e rotte che rispondono 403. */
   const soloOre = ruolo === "ore";
   const NAV = soloOre
-    ? [{ id: "dati", nome: "Ore", icona: Database }]
+    ? [{ id: "dati", nome: "Ore", icona: Database }, { id: "account", nome: "Accesso", icona: Users }]
     : [
       { id: "dashboard", nome: "Dashboard", icona: LayoutDashboard },
       { id: "commesse", nome: "Commesse", icona: FolderKanban },
@@ -3468,6 +3693,7 @@ export default function App() {
       { id: "fatture", nome: "Fatture", icona: ReceiptText },
       { id: "dati", nome: "Dati", icona: Database },
       { id: "abbonamento", nome: "Abbonamento", icona: CreditCard },
+      { id: "account", nome: "Persone", icona: Users },
       ...(isAdmin ? [{ id: "admin", nome: "Amministrazione", icona: ShieldCheck }] : []),
     ];
   /* Il contatore della barra laterale risponde a "quanti siamo", non a "quante
@@ -3825,6 +4051,31 @@ export default function App() {
               «319 su 624» sì. Infine la cura, che qui è ricaricare — il
               contrario di quello che dice l'altra fascia, ed è per questo che
               sono due messaggi separati e non uno con un se dentro. */}
+          {/* LA PAGINA E' VECCHIA, non rotta. Tono d'avviso e non d'errore: qui
+              non e' andato storto niente: qualcun altro ha lavorato mentre
+              questa scheda era aperta, ed e' esattamente quello che deve
+              succedere quando si e' in due. Il messaggio non dice «errore»,
+              dice cosa c'e' da fare e perche' conviene farlo. */}
+          {schedaVecchia && (
+            <div className="mb-9">
+              <Avviso tono="avviso">
+                <span style={{ fontWeight: 600 }}>
+                  Qualcun altro ha salvato mentre questa pagina era aperta.
+                </span>
+                <span className="block mt-1.5" style={{ opacity: .9 }}>
+                  Il server non ha toccato niente, e le tue ultime modifiche non sono state
+                  salvate. Ricaricando ritrovi <strong style={{ color: "var(--txt)" }}>tutto,
+                  comprese le righe inserite dall'altra persona</strong> — che adesso questa
+                  pagina non ha. Non è una perdita: è il modo di vederle.
+                </span>
+                <button type="button" onClick={() => window.location.reload()}
+                  className="t-piccolo mt-2.5 btn" style={{ fontWeight: 600, textDecoration: "underline" }}>
+                  Ricarica adesso
+                </button>
+              </Avviso>
+            </div>
+          )}
+
           {salvataggioRifiutato && (
             <div className="mb-9">
               <Avviso tono="errore">
@@ -3967,6 +4218,7 @@ export default function App() {
             <VistaAbbonamento info={abbonamentoInfo}
               inAttesaDiConferma={pagamentoNonConfermato} onRicontrolla={ricontrollaPagamento} />
           )}
+          {vista === "account" && <VistaAccount ruolo={ruolo} notifica={notifica} />}
           {vista === "admin" && isAdmin && <VistaAdmin />}
         </main>
       </div>
