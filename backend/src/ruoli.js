@@ -85,6 +85,17 @@ export const toccaLeRigheAltrui = (ruolo) => TOCCA_LE_RIGHE_ALTRUI.has(ruolo);
 export const CAMPI_DI_UNA_RIGA_ORE = ["id", "dipendenteId", "commessaId", "data", "ore"];
 
 /**
+ * «Questo dato manca, o me l'hanno tolto?»
+ *
+ * La domanda che ogni modulo che legge i dati dovrebbe farsi prima di trarre
+ * una conclusione da un campo che non c'e'. Se la risposta e' «trattenuto», la
+ * cosa giusta da fare e' TACERE: non e' un buco nei dati dell'azienda, e' un
+ * permesso. Vedi il commento dentro `stampoStato`.
+ */
+export const trattenuto = (dati, nome) =>
+  Array.isArray(dati?.trattenuti) && dati.trattenuti.includes(nome);
+
+/**
  * LA RISPOSTA DI /api/stato, costruita per ruolo.
  *
  * E' la seconda difesa, non la prima: la prima e' che per il ruolo `ore` la
@@ -123,6 +134,37 @@ export function stampoStato(ruolo, utenteId, dati = {}) {
     commesse: commesse.map((c) => ({ id: c.id, codice: c.codice, descrizione: c.descrizione })),
     registrazioni: righeOre,
   };
+
+  /* ─────────────────────────────────────────────────────────────────────────
+     QUELLO CHE ABBIAMO TRATTENUTO SI DICE, non si lascia mancare.
+
+     E' la regola che questa riga esiste per stabilire, ed e' la stessa famiglia
+     di «nessun ripiego che afferma» in PRODUCT.md, spostata da chi SCRIVE una
+     conclusione a chi la RICAVA.
+
+     Il difetto di fondo: il browser non puo' distinguere «questo dato non c'e'»
+     da «questo dato non me l'hanno mandato». Arrivano identici — un campo
+     assente — e sono cose diversissime. Il 9 agosto 2026 questo ha prodotto,
+     sullo schermo di un capocantiere, la frase «a luglio mancano i lordi di 14
+     persone: le loro 2.679,5 ore valgono 0 €». Falsa: i lordi non mancavano,
+     glieli avevamo tolti noi. E accanto un «costo del periodo 0,00 €», grande,
+     calcolato su quel vuoto.
+
+     Il rimedio non e' aggiustare il modulo che ha sbagliato: e' togliere
+     l'ambiguita' alla radice. La risposta DICHIARA cosa e' stato trattenuto, e
+     qualunque modulo — anche uno scritto fra un anno da chi non sa niente di
+     ruoli — puo' chiedere «assente o trattenuto?» e TACERE invece di
+     concludere.
+
+     Segnale POSITIVO, non un'assenza da interpretare: c'e' un elenco e dice dei
+     nomi. E' la stessa scelta fatta per riconoscere un backend vecchio, dove si
+     guarda se la risposta PORTA `versione` invece di annusare un 404.
+     ───────────────────────────────────────────────────────────────────────── */
+  if (!vedeISoldi(ruolo)) {
+    comuni.trattenuti = ["lordi", "materiali", "allegati", "costi"];
+  } else {
+    comuni.trattenuti = [];
+  }
 
   if (!vedeISoldi(ruolo)) {
     /* Niente lordo_mensile, niente materiali, niente allegati, niente spazio.

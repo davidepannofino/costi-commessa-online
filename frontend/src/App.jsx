@@ -2622,7 +2622,12 @@ export default function App() {
   /* Vista, periodo e commessa aperta nascono dall'URL: un indirizzo incollato
      o ricaricato deve riportare esattamente dov'eri. Se non c'è niente
      nell'indirizzo valgono i valori di sempre. */
-  const [vista, setVista] = useState(() => leggiStatoDaURL().vista ?? "dashboard");
+  const [vista, setVista] = useState(() => (ruoloCorrente() === "ore" ? "dati" : leggiStatoDaURL().vista ?? "dashboard"));
+  /* Cosa il server ci ha DETTO di aver trattenuto. Elenco positivo: chi legge
+     un campo che non c'e' puo' chiedere se manca o se gliel'hanno tolto, e
+     tacere invece di concludere. Vedi stampoStato in backend/src/ruoli.js. */
+  const [trattenuti, setTrattenuti] = useState([]);
+  const senzaSoldi = trattenuti.includes("lordi");
   const [dal, setDal] = useState(() => leggiStatoDaURL().dal ?? "2026-07-01");
   const [al, setAl] = useState(() => leggiStatoDaURL().al ?? "2026-07-31");
   const [azienda, setAzienda] = useState("");
@@ -2825,6 +2830,7 @@ export default function App() {
       // Un'azienda appena registrata parte sempre vuota: i dati d'esempio restano
       // disponibili solo su richiesta esplicita (pulsante "Ricarica dati d'esempio").
       if (dati) {
+        setTrattenuti(Array.isArray(dati.trattenuti) ? dati.trattenuti : []);
         setDipendenti(Array.isArray(dati.dipendenti) ? dati.dipendenti : []);
         setCommesse(Array.isArray(dati.commesse) ? dati.commesse : []);
         setRegistrazioni(Array.isArray(dati.registrazioni) ? dati.registrazioni : []);
@@ -3013,6 +3019,12 @@ export default function App() {
    * giugno e agosto si leggono comunque.
    */
   const buchi = useMemo(() => {
+    /* TRATTENUTO NON E' MANCANTE. Se il server ha dichiarato di aver tolto i
+       lordi, l'assenza non e' un buco nei dati dell'azienda: e' un permesso.
+       Concluderne qualcosa vorrebbe dire dire a un capocantiere che i conti
+       della sua impresa sono rotti — ed e' successo il 9 agosto 2026, con
+       tanto di cifra: «mancano i lordi di 14 persone». Falso. */
+    if (senzaSoldi) return [];
     if (!riep || !dal || !al) return [];
     const conOre = new Set();
     for (const r of registrazioni) conOre.add(r.data.slice(0, 7));
@@ -3021,7 +3033,7 @@ export default function App() {
       oreMensili: riep.oreMensili,
       mesi: mesiDaGuardare([...conOre], { da: dal.slice(0, 7), a: al.slice(0, 7) }),
     });
-  }, [riep, dipendenti, registrazioni, dal, al]);
+  }, [riep, dipendenti, registrazioni, dal, al, senzaSoldi]);
 
   /**
    * LA RISPOSTA A «POSSO FIDARMI DI QUESTO NUMERO?», IN UN POSTO SOLO.
@@ -3973,7 +3985,7 @@ export default function App() {
                   uno stipendio intero poteva mancare dai totali con la pillola
                   che diceva «Quadra». Adesso è una riga nella scatola qui
                   sotto. */}
-              {riep && riep.invariante && (
+              {riep && riep.invariante && !senzaSoldi && (
                 <span className="hidden md:inline-flex" title={
                   scartoVero
                     ? "Quadratura non verificata: controlla lordi e dati"
@@ -3988,7 +4000,7 @@ export default function App() {
                   li dice da sola, e molto più grandi. Un totale scritto due
                   volte a due taglie diverse nella stessa schermata insegna
                   all'occhio a non fidarsi di nessuna delle due. */}
-              {vista !== "dashboard" && (
+              {vista !== "dashboard" && !senzaSoldi && (
                 <>
                   <div className="text-right">
                     <Micro>Costo del periodo</Micro>
@@ -4134,7 +4146,7 @@ export default function App() {
               passaggio del mouse non esiste — DESIGN.md, «La Regola del title
               che non è una Spiegazione». Il motivo si legge nella scatola qui
               sotto, e quando la scatola non c'è non c'è motivo da leggere. */}
-          {riep && riep.invariante && (
+          {riep && riep.invariante && !senzaSoldi && (
             <div className="md:hidden mb-7">
               <Pillola tono={verdetto.tono}>
                 <span className="rounded-full" style={{ width: 5, height: 5, background: "currentColor" }} />
