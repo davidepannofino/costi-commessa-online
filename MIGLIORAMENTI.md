@@ -191,6 +191,60 @@ gratis insieme.
 
 ---
 
+## 7. Il 412 chiede di ricaricare: se dà fastidio, deve rimediare da solo
+
+**Cosa manca.** Con la multiutenza, `PUT /api/stato` rifiuta il salvataggio di
+una scheda che ha letto i dati prima di una scrittura altrui: risponde **412**,
+e chi la riceve deve ricaricare a mano. È onesto e semplice — la pagina è
+vecchia, sul server i dati ci sono tutti — ma è l'utente a pagare il rimedio.
+
+La cura, se servisse, è che **sia il client a rimediare**: ricarica lo stato
+fresco, riapplica la modifica in sospeso, risalva. Chi scrive non si accorge di
+niente, e il 412 resta un fatto interno.
+
+**Chi ne soffre.** Il titolare, che è quello con la scheda aperta tutto il
+giorno mentre il cantiere inserisce. Il capocantiere no: lui apre, scrive otto
+righe, chiude.
+
+**Perché non è stato fatto.** Perché **non sappiamo se il problema esiste**. Nel
+caso vero le ore dal cantiere arrivano a raffiche, una volta al giorno: due o
+tre 412 al giorno non sono un problema, sono un promemoria giusto. Riapplicare
+una modifica in sospeso invece è delicato — vuol dire decidere cosa fare quando
+la riga che stavi modificando nel frattempo è stata cancellata da un altro, e
+quella decisione presa senza dati è una funzione costruita su un'ipotesi.
+
+**Come si misura, invece di discuterne a sensazione.** Il rifiuto per scheda
+vecchia è un `If-Match` fallito e risponde **412**, non 409: il 409 resta al
+cancello delle cancellazioni. `registroRichieste.js` scrive già metodo, rotta e
+stato, quindi i due casi si separano senza aggiungere un campo — e senza toccare
+un file la cui regola è «quattro campi e nient'altro»:
+
+```
+PUT /api/stato 409   → cancellerebbe troppe registrazioni
+PUT /api/stato 412   → la scheda aveva letto una versione superata
+```
+
+Il registro delle richieste non scrive **quale** azienda, ed è deliberato. Per
+quello c'è la riga che il gestore scrive di suo, come fa già il rifiuto della
+soglia (`SALVATAGGIO RIFIUTATO per <azienda>`): il 412 scrive la sua, con
+l'azienda e l'orario. Il registro resta anonimo, la diagnosi resta possibile.
+
+**La soglia per intervenire, decisa prima e non dopo.**
+
+Il segnale è **un 412 seguito da un altro 412 per la stessa azienda a pochi
+minuti di distanza**. Vuol dire che la persona ha ricaricato ed è stata bloccata
+di nuovo: quello è lo stato fastidioso, ed è quello che la cura toglierebbe. Se
+succede con regolarità, la cura va fatta.
+
+**Un 412 isolato non si conta come problema**: è il sistema che fa esattamente
+il suo mestiere. Qualcuno ha ricaricato, ha ritrovato le righe dell'altro, e ha
+ripreso a lavorare — che è tutto quello che gli si chiedeva.
+
+E non si guarda il rapporto fra 412 e 409: misurano cose diverse, e i 409
+devono essere quasi sempre zero. Un multiplo di zero non è un numero.
+
+---
+
 ## Fatte
 
 - **Cancellare un dipendente distruggeva le sue ore** (6 agosto 2026). Chi ha
