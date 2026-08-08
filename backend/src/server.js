@@ -1811,6 +1811,10 @@ app.post("/api/ddt/scansione/:id/conferma", richiedeAuth, richiedeAbbonamentoAtt
 });
 
 app.get("/api/fornitori", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) => {
+  /* I fornitori sono un dato di spesa: chi non vede i soldi non li vede. La
+     guardia sta QUI e non solo nel browser — un dato che non deve arrivare non
+     si nasconde a schermo, non si manda. */
+  if (!vedeISoldi(req.ruolo)) return res.status(403).json({ errore: "Accesso non autorizzato." });
   try {
     const ris = await pool.query(
       `SELECT nome FROM (

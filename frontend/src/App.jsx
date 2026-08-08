@@ -2626,8 +2626,22 @@ export default function App() {
   /* Cosa il server ci ha DETTO di aver trattenuto. Elenco positivo: chi legge
      un campo che non c'e' puo' chiedere se manca o se gliel'hanno tolto, e
      tacere invece di concludere. Vedi stampoStato in backend/src/ruoli.js. */
+  /* ══ UN RUOLO SI APPLICA A CIO' CHE L'APPLICAZIONE FA DA SOLA ══
+     Non solo a cio' che mostra. E' la regola nata da tre difetti dello stesso
+     tipo, in tre giorni: il ruolo applicato al menu' e non a cio' che il menu'
+     apriva; poi a cio' che si vedeva e non al salvataggio automatico, che
+     partiva da solo e prendeva un 403 mostrandolo come guasto; poi ai due
+     ripieghi su "dashboard", che riportano un utente `ore` su una schermata
+     che non ha — e QUELLI NON PRODUCONO NESSUN ERRORE, quindi nessun controllo
+     visivo li avrebbe trovati.
+     Chi aggiunge un ruolo deve passare in rassegna effetti, intervalli,
+     richieste all'avvio e ripieghi, non solo le schermate. */
   const [trattenuti, setTrattenuti] = useState([]);
   const senzaSoldi = trattenuti.includes("lordi");
+  /* Dove si torna quando una vista non e' raggiungibile. Per chi registra le
+     ore la Dashboard non esiste: rimbalzarcelo sarebbe rientrare dalla porta
+     laterale nella schermata da cui lo si e' appena tolto. */
+  const vistaDiPartenza = ruolo === "ore" ? "dati" : "dashboard";
   const [dal, setDal] = useState(() => leggiStatoDaURL().dal ?? "2026-07-01");
   const [al, setAl] = useState(() => leggiStatoDaURL().al ?? "2026-07-31");
   const [azienda, setAzienda] = useState("");
@@ -2756,7 +2770,7 @@ export default function App() {
    *  comunque quello lato server sulle rotte /api/admin/*. */
   useEffect(() => {
     if (vista === "admin" && !isAdmin) {
-      setVista("dashboard");
+      setVista(vistaDiPartenza);
       notifica("Non hai accesso a questa sezione.", "avviso");
     }
   }, [vista, isAdmin, notifica]);
@@ -2852,7 +2866,9 @@ export default function App() {
       setCaricamento(false);
       // I fornitori già visti servono solo a riempire una tendina: si chiedono
       // dopo, e se non arrivano non cambia niente di quello che si può fare.
-      datiAPI.elencoFornitori().then((f) => { if (!annullato) setFornitoriNoti(f); });
+      /* I fornitori sono documenti di spesa: chi non vede i soldi non li chiede.
+         La guardia vera sta sulla rotta — questa e' la seconda. */
+      if (!senzaSoldi)       datiAPI.elencoFornitori().then((f) => { if (!annullato) setFornitoriNoti(f); });
     })();
     return () => { annullato = true; };
   }, [token, notifica, verificandoPagamento, versioneAccesso]);
@@ -2921,6 +2937,11 @@ export default function App() {
   }, [notifica]);
 
   useEffect(() => {
+    /* IL SALVATAGGIO AUTOMATICO NON PARTE PER CHI HA LA ROTTA STRETTA. Manda
+       l'anagrafica intera, quindi il server gli risponde 403 — e il browser lo
+       mostrava come «le modifiche non vengono salvate», falso e allarmante,
+       con il consiglio di scaricare un backup da una sezione che non ha. */
+    if (ruolo === "ore") return;
     if (!pronto.current) return;
     const t = setTimeout(() => {
       datiAPI.salva(null, { dipendenti, commesse, registrazioni, azienda }).then(registraEsitoSalvataggio);
@@ -3180,7 +3201,7 @@ export default function App() {
   useEffect(() => {
     const alPopstate = () => {
       const s = leggiStatoDaURL();
-      setVista(s.vista ?? "dashboard");
+      setVista(s.vista ?? vistaDiPartenza);
       if (s.dal) setDal(s.dal);
       if (s.al) setAl(s.al);
       setIdDettaglio(s.commessa);
