@@ -3611,19 +3611,27 @@ export default function App() {
             {/* Il periodo era una fila di controlli sciolti sul fondo. Ora è un
                 oggetto solo, con l'icona del calendario a dire cos'è: i
                 controlli dentro sono gli stessi, uno per uno. */}
-            <div className="flex items-center gap-1 pl-2.5 pr-1 py-1 box">
+            {/* A 390px questa barra deve ADATTARSI, non restare della sua
+                larghezza naturale: con le frecce portate a 48px per il dito, il
+                contenuto naturale misura 400px contro i 380 disponibili e
+                sborda. Prende tutta la riga e i due campi data si stringono
+                (min-w-0, senza cui un input non scende mai sotto la sua
+                larghezza intrinseca). Col mouse resta l'oggetto compatto di
+                prima. Trovato misurando: la regressione l'aveva introdotta
+                l'allargamento delle frecce, dieci minuti prima. */}
+            <div className="flex items-center gap-1 pl-2.5 pr-1 py-1 box w-full sm:w-auto">
               <CalendarDays size={14} strokeWidth={1.75} className="shrink-0 mr-1" style={{ color: "var(--txt-tenue)" }} />
-              <button onClick={() => scorriMese(-1)} aria-label="Mese precedente" className="p-1.5 btn"
+              <button onClick={() => scorriMese(-1)} aria-label="Mese precedente" className="p-1.5 btn tocco-min shrink-0"
                 style={{ borderRadius: "var(--r-xs)", color: "var(--txt-attenuato)" }}>
                 <ChevronLeft size={14} strokeWidth={1.75} />
               </button>
               <input type="date" value={dal} onChange={(e) => setDal(e.target.value)} aria-label="Inizio intervallo"
-                className="f-mono t-piccolo px-1.5 py-1 outline-none campo-nudo" />
-              <span style={{ color: "var(--txt-tenue)" }}>–</span>
+                className="f-mono t-piccolo px-1.5 py-1 outline-none campo-nudo min-w-0 flex-1 sm:flex-none" />
+              <span className="shrink-0" style={{ color: "var(--txt-tenue)" }}>–</span>
               <input type="date" value={al} onChange={(e) => setAl(e.target.value)} aria-label="Fine intervallo"
-                className="f-mono t-piccolo px-1.5 py-1 outline-none campo-nudo"
+                className="f-mono t-piccolo px-1.5 py-1 outline-none campo-nudo min-w-0 flex-1 sm:flex-none"
                 style={erroreIntervallo ? { color: "var(--errore)" } : undefined} />
-              <button onClick={() => scorriMese(1)} aria-label="Mese successivo" className="p-1.5 btn"
+              <button onClick={() => scorriMese(1)} aria-label="Mese successivo" className="p-1.5 btn tocco-min shrink-0"
                 style={{ borderRadius: "var(--r-xs)", color: "var(--txt-attenuato)" }}>
                 <ChevronRight size={14} strokeWidth={1.75} />
               </button>
@@ -7594,6 +7602,32 @@ function StileGlobale() {
          Sopra i 1024px la barra non c'e' e si torna al ritmo normale. */
       .pavimento-nav{ padding-bottom:calc(88px + env(safe-area-inset-bottom, 0px)); }
       @media (min-width:1024px){ .pavimento-nav{ padding-bottom:40px; } }
+
+      /* --- LA BARRA NON DEVE COPRIRE IL CAMPO SU CUI STAI SCRIVENDO ---
+             Misurato l'8 agosto 2026 a 390x400, cioe' quello che resta dello
+             schermo con la tastiera alzata: la barra occupa da 335 a 400, e sei
+             campi su otto — la data e le ore dell'inserimento, il filtro, e i
+             tre campi di anagrafica — finivano coperti per tutti i 65 pixel.
+
+             Non e' che il campo sia "sotto la tastiera": il browser ce lo porta
+             lui dentro l'area visibile. E' che ce lo porta ESATTAMENTE al bordo
+             basso, e li' c'e' la barra, che essendo fissa non fa parte dello
+             scorrimento e non si sposta.
+
+             scroll-margin-bottom e' la risposta esatta: dice al browser quanto
+             spazio lasciare SOTTO l'elemento quando lo porta in vista. Con la
+             stessa misura del pavimento, il campo si ferma sopra la barra
+             invece che dentro. Vale per lo scorrimento automatico del fuoco e
+             per scrollIntoView, senza toccare niente altro e senza codice. */
+      input, textarea, select{ scroll-margin-bottom:calc(88px + env(safe-area-inset-bottom, 0px)); }
+
+      /* Bersaglio minimo dove si tocca con il dito. La costante in JS
+         (ALTO_TOCCO) vale dove la misura si scrive inline; questa vale dove
+         serve solo sotto il dito, senza cambiare la densita' col mouse — le
+         frecce del mese erano 26px, ed e' il comando piu' usato di tutti. */
+      @media (pointer:coarse), (max-width:640px){
+        .tocco-min{ min-width:48px; min-height:48px; }
+      }
 
       /* --- VOCI DELLA BARRA LATERALE: la voce attiva ha già il suo fondo,
              quindi l'effetto del mouse serve solo alle inattive. --- */
