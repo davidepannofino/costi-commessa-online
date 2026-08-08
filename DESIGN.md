@@ -233,6 +233,14 @@ Il sistema responsive usa i punti di rottura di Tailwind (`sm` 640, `md` 768, `l
 
 **La Regola della Tabella che si Arrende.** Sotto i 640px una tabella con azioni di riga diventa un elenco. Se un bottone finisce fuori dallo schermo, la tabella ha perso — non l'utente.
 
+**La Regola del `title` che non è una Spiegazione.** Col dito non esiste il passaggio del mouse, quindi un attributo `title` non è una spiegazione: è una decorazione. Un comando la cui unica spiegazione è un `title`, sul telefono è **un comando senza spiegazione**. Ogni bottone a sola icona deve portarsi dietro un'etichetta che si vede, o un modo di scoprire cosa fa che non richieda un mouse — `aria-label` risolve per chi usa un lettore di schermo, non per chi guarda.
+
+Il `title` resta ammesso come *aggiunta* per chi ha il mouse. Non come unica strada.
+
+Trovato due volte nello stesso esame, l'8 agosto 2026, e sono due facce della stessa cosa. La pillola del timbro era `hidden md:inline-flex` **e** teneva il numero osservato dentro un `title`: sotto i 768px spariva il verdetto, e sopra i 768px il motivo si scopriva solo passandoci sopra. Alla riga «rinomina commessa» il bottone era un'icona da 10px con `p-0.5` — quattordici pixel di bersaglio — e la parola «Rinomina» esisteva unicamente nel `title`. Su un telefono quel bottone è un quadratino grigio che non si sa cosa faccia e che si fatica a colpire.
+
+È lo stesso errore di forma di **Nessun ripiego che afferma** in `PRODUCT.md`, spostato dall'informazione al comando: qualcosa che sembra esserci perché in una condizione c'è, e che in un'altra sparisce senza lasciare un buco visibile.
+
 ## Elevation & Depth
 
 **Piatto per principio: la luce fa la profondità.** Non ci sono ombre diffuse. Su un fondo a `#08080A` un'ombra non ha niente da scurire, e chi ne mette una sta imitando un tema chiaro. La gerarchia si legge da due cose sole: la **luminosità del fondo** — sei livelli da `#08080A` a `#18181C` — e un **filo di mezzo pixel**.
@@ -308,5 +316,6 @@ Il componente che apre le schermate di riepilogo: etichetta in maiuscoletto, la 
 - **Don't** aggiungere ombre diffuse per fingere profondità. Su questo fondo non hanno niente da scurire: si cambia il livello del fondo.
 - **Don't** riempire un vuoto con un numero inventato — barre piene quando il totale è zero, tariffe plausibili al posto di un dato mancante, contatori fermi a zero. Se non c'è, si dice che non c'è.
 - **Don't** mettere un'etichetta in maiuscoletto sopra un titolo di schermata.
+- **Don't** affidare a un `title` l'unica spiegazione di un bottone a sola icona. Col dito il passaggio del mouse non esiste: quel bottone diventa un quadratino che non si sa cosa faccia.
 - **Don't** usare glifi di testo (`▲`, `↓`) al posto di un'icona disegnata, né affidare un significato al solo colore.
 - **Don't** lasciare che un componente si dichiari `aria-modal` senza trattenere il fuoco al suo interno e restituirlo alla chiusura.

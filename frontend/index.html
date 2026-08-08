@@ -2,7 +2,11 @@
 <html lang="it">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover non e' decorativo: senza, env(safe-area-inset-*)
+         vale ZERO su iOS e le regole che tengono la barra di navigazione sopra
+         la barra di sistema non fanno niente. Le due cose vanno insieme:
+         vedi .nav-sicura e .pavimento-nav in App.jsx. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Commexa — costi di commessa</title>
 
     <!-- Il carattere sta QUI e non dentro l'applicazione. Prima era un @import

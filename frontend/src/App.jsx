@@ -2859,6 +2859,18 @@ export default function App() {
      nome invece di dipingere di rosso tutta la schermata. */
   const scartoVero = Boolean(riep?.invariante?.completo && !riep.invariante.ok);
 
+  /* IL VERDETTO, IN UN POSTO SOLO. Lo dicono due elementi — la pillola in
+     testata da 768px in su, e la riga che la sostituisce sotto — e finche' era
+     scritto due volte bastava toccarne uno per farli divergere. E' lo stesso
+     difetto da cui e' nato statoAbbonamento.js, dove barra laterale e pannello
+     decidevano l'etichetta ognuno per conto suo e il 6 agosto 2026 hanno
+     scritto due cose diverse sullo stesso schermo. */
+  const verdetto = scartoVero
+    ? { tono: "accento", testo: "Non quadra" }
+    : daGuardare.quante > 0
+      ? { tono: "ambra", testo: "Da controllare" }
+      : { tono: "euro", testo: "Quadra" };
+
   /* A che punto è il primo giorno. Si ricava dai dati veri a ogni disegno:
      nessuna spunta salvata da qualche parte, che potrebbe andare fuori
      sincrono con la realtà e mostrare come fatto un passo disfatto. */
@@ -3659,9 +3671,9 @@ export default function App() {
                   scartoVero
                     ? "Quadratura non verificata: controlla lordi e dati"
                     : daGuardare.primo ?? "Il costo del periodo coincide con la somma dei lordi mensili"}>
-                  <Pillola tono={scartoVero ? "accento" : daGuardare.quante > 0 ? "ambra" : "euro"}>
+                  <Pillola tono={verdetto.tono}>
                     <span className="rounded-full" style={{ width: 5, height: 5, background: "currentColor" }} />
-                    {scartoVero ? "Non quadra" : daGuardare.quante > 0 ? "Da controllare" : "Quadra"}
+                    {verdetto.testo}
                   </Pillola>
                 </span>
               )}
@@ -3700,7 +3712,11 @@ export default function App() {
 
         {/* Su schermi larghi il contenuto non si spalma da bordo a bordo: resta
             entro una misura leggibile e centrato, col respiro ai lati. */}
-        <main key={vista} className="flex-1 px-5 md:px-10 py-10 max-w-[1180px] w-full mx-auto noprint anim-vista">
+        {/* `pavimento-nav` invece di `py-10`: la barra di navigazione sotto i
+            1024px e' `fixed`, quindi non occupa spazio nel flusso e senza un
+            pavimento l'ultima riga di ogni schermata le finisce sotto. Il
+            padding di sopra resta quello di sempre. */}
+        <main key={vista} className="flex-1 px-5 md:px-10 pt-10 pavimento-nav max-w-[1180px] w-full mx-auto noprint anim-vista">
           {/* Finché il salvataggio non riesce, questa fascia resta lì: è
               l'unico modo perché nessuno continui a lavorare credendo che i
               dati vengano registrati mentre non lo sono. */}
@@ -3770,6 +3786,28 @@ export default function App() {
                   scarica un backup dalla sezione Dati; l'avviso sparirà da solo appena il salvataggio tornerà a funzionare.
                 </span>
               </Avviso>
+            </div>
+          )}
+
+          {/* IL VERDETTO ANCHE DA TELEFONO.
+              La pillola in testata è `hidden md:inline-flex`: sotto i 768px
+              spariva, e restavano i motivi senza il verdetto che li riassume —
+              cioè la parte che dice se al numero grande si può credere. Qui la
+              stessa pillola, con la stessa `verdetto`, in una riga sua: non
+              spinta dentro la barra in alto, dove a 390px accanto alla cifra
+              non c'è posto.
+
+              E il motivo NON sta in un `title`. In testata ci sta come aggiunta
+              per chi ha il mouse; qui sarebbe l'unica strada, e col dito il
+              passaggio del mouse non esiste — DESIGN.md, «La Regola del title
+              che non è una Spiegazione». Il motivo si legge nella scatola qui
+              sotto, e quando la scatola non c'è non c'è motivo da leggere. */}
+          {riep && riep.invariante && (
+            <div className="md:hidden mb-7">
+              <Pillola tono={verdetto.tono}>
+                <span className="rounded-full" style={{ width: 5, height: 5, background: "currentColor" }} />
+                {verdetto.testo}
+              </Pillola>
             </div>
           )}
 
@@ -3860,7 +3898,7 @@ export default function App() {
       </div>
 
       {/* ---- navigazione mobile ---- */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 grid noprint superficie-scura"
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 grid noprint superficie-scura nav-sicura"
         style={{ borderTop: ".5px solid var(--scuro-linea)", gridTemplateColumns: `repeat(${NAV.length}, minmax(0, 1fr))` }} aria-label="Navigazione">
         {NAV.map(({ id, nome, icona: Icona }) => (
           <button key={id} onClick={() => setVista(id)} aria-current={vista === id ? "page" : undefined}
@@ -4555,15 +4593,72 @@ function VistaCommesse({ riep, costi, dal, al, apri, esportaCsv, esportaXlsx, es
           azione={<Bottone onClick={vaiDati}><Plus size={14} strokeWidth={1.75} /> Registra ore</Bottone>} />
       ) : (
         <div className="card overflow-hidden">
-          <div className="px-7 py-5 flex items-center justify-between gap-4" style={{ borderBottom: ".5px solid var(--hairline)" }}>
+          {/* A 390px questa riga sbordava: la data per esteso piu' il conteggio
+              non stanno accanto a un campo largo 190px fissi. Sotto i 640px le
+              due cose vanno una sopra l'altra e il campo prende tutta la
+              larghezza — che e' anche il bersaglio piu' comodo da toccare. */}
+          <div className="px-5 sm:px-7 py-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4" style={{ borderBottom: ".5px solid var(--hairline)" }}>
             <p className="t-piccolo f-mono" style={{ color: "var(--muted)" }}>{fmtData(dal)} – {fmtData(al)} · {righe.length} commesse</p>
-            <div className="relative">
+            <div className="relative shrink-0">
               <Search size={14} strokeWidth={1.75} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--tenue)" }} />
               <input value={cerca} onChange={(e) => setCerca(e.target.value)} placeholder="Cerca…"
-                className="pl-9 pr-3 py-2 text-sm outline-none campo" style={{ width: 190, background: "var(--tela-alt)" }} aria-label="Cerca commessa" />
+                className="pl-9 pr-3 py-2 text-sm outline-none campo w-full sm:w-[190px]"
+                style={{ background: "var(--tela-alt)", minHeight: ALTO_TOCCO }} aria-label="Cerca commessa" />
             </div>
           </div>
-          <div className="overflow-x-auto">
+
+          {/* SOTTO I 640px LA TABELLA SI ARRENDE.
+              Otto colonne, di cui due gia' nascoste sopra lg e xl: a 390px ne
+              restano sei, dentro uno scorrimento laterale infilato in una
+              pagina che scorre in verticale. DESIGN.md lo dice gia' — «sotto i
+              640px le tabelle con piu' di tre colonne smettono di essere
+              tabelle» — e questa era l'ultima schermata a non averlo fatto,
+              proprio la principale. Non si stringe: si affianca.
+              La forma e' quella che VistaDati e VistaDipendenti hanno da
+              prima: davanti il dato per cui si scorre — qui il totale — e
+              sotto la riga che lo scompone. */}
+          <ul className="sm:hidden">
+            {righe.map((r, i) => (
+              <li key={r.commessa.id} style={{ borderTop: i > 0 ? ".5px solid var(--bordo-tenue)" : "none" }}>
+                <button onClick={() => apri(r)}
+                  className="w-full text-left px-5 py-4 flex items-center gap-3 btn riga"
+                  style={{ minHeight: ALTO_TOCCO }}>
+                  <span className="min-w-0 flex-1 block">
+                    <span className="flex items-baseline gap-2.5">
+                      <span className={"badge-codice" + (r.commessa.id === idPiuCostosa ? " badge-codice-primo" : "")}>
+                        {r.commessa.codice}
+                      </span>
+                      <span className="f-mono t-piccolo" style={{ color: "var(--txt-tenue)" }}>{fmtOre.format(r.ore)} h</span>
+                    </span>
+                    {r.commessa.descrizione && (
+                      <span className="t-piccolo mt-1 truncate block" style={{ color: "var(--txt-attenuato)" }}>
+                        {r.commessa.descrizione}
+                      </span>
+                    )}
+                    <span className="t-piccolo f-mono mt-1 block" style={{ color: "var(--txt-tenue)" }}>
+                      manodopera {euro(r.costoManodopera)}
+                      {r.costoMateriali > 0 && <> · materiali {euro(r.costoMateriali)}</>}
+                    </span>
+                  </span>
+                  <span className="shrink-0 flex items-center gap-1.5">
+                    <span className="f-mono" style={{ fontSize: 15, fontWeight: 500, color: "var(--euro)" }}>
+                      {euro(r.costoTotale)}
+                    </span>
+                    <ChevronRight size={14} strokeWidth={1.75} style={{ color: "var(--tenue)" }} />
+                  </span>
+                </button>
+              </li>
+            ))}
+            {/* Il totale non si perde con la tabella: era in `tfoot`, qui e'
+                l'ultima riga dell'elenco, con lo stesso fondo rialzato. */}
+            <li className="px-5 py-4 flex items-baseline justify-between gap-3"
+              style={{ borderTop: ".5px solid var(--bordo-input)", background: "var(--bg-elevato)" }}>
+              <span className="t-micro">Totale · {fmtOre.format(riep.totOre)} h</span>
+              <span className="f-mono" style={{ fontSize: 15, fontWeight: 500 }}>{euro(costi.totTotale)}</span>
+            </li>
+          </ul>
+
+          <div className="hidden sm:block overflow-x-auto">
             <table className="tabella text-sm">
               <thead>
                 <tr>
@@ -6908,14 +7003,59 @@ function VistaDati({ dipendenti, dipendentiAttivi, commesse, registrazioni, setC
           </div>
           <Bottone variante="fantasma" onClick={creaCommessa}><Plus size={14} strokeWidth={1.75} /> Nuova commessa</Bottone>
           {commesse.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 mt-6 pt-6" style={{ borderTop: ".5px solid var(--bordo-tenue)" }}>
-              {commesse.map((c) => (
-                <span key={c.id} className="inline-flex items-center gap-1.5 pl-2.5 pr-1 py-1 box" title={c.descrizione}>
-                  <span className="f-mono t-piccolo" style={{ fontWeight: 500, color: "var(--txt-medio)" }}>{c.codice}</span>
-                  <button onClick={() => setRinomina(c)} aria-label={"Rinomina commessa " + c.codice} title="Rinomina" className="p-0.5 rounded btn" style={{ color: "var(--txt-tenue)" }}><Pencil size={10} strokeWidth={1.75} /></button>
-                  <button onClick={() => eliminaCommessa(c)} aria-label={"Elimina commessa " + c.codice} className="p-0.5 rounded btn" style={{ color: "var(--txt-tenue)" }}><X size={11} strokeWidth={1.75} /></button>
-                </span>
-              ))}
+            <div className="mt-6 pt-6" style={{ borderTop: ".5px solid var(--bordo-tenue)" }}>
+              {aDito ? (
+                /* COL DITO LA NUVOLA DI PASTIGLIE SI APRE IN UN ELENCO, e sono
+                   due difetti diversi risolti dalla stessa mossa.
+
+                   I BERSAGLI. I due comandi erano `p-0.5` attorno a un'icona da
+                   10-11px: quattordici pixel. Con ventidue commesse fanno
+                   quarantaquattro bersagli grandi come una capocchia di spillo,
+                   appaiati a coppie. La costante ALTO_TOCCO dice 48 dal giorno
+                   in cui e' stata scritta, e qui non era mai arrivata.
+
+                   LA DESCRIZIONE. Stava SOLO nel `title` della pastiglia. Col
+                   dito il passaggio del mouse non esiste, quindi «PC24» restava
+                   «PC24» e per sapere quale cantiere fosse bisognava andarlo a
+                   cercare altrove — DESIGN.md, «La Regola del title che non e'
+                   una Spiegazione». Adesso si legge.
+
+                   Sopra i 640px, e con un mouse, la nuvola resta: li' e' densa e
+                   comoda, e il `title` e' un'aggiunta e non l'unica strada. */
+                <ul>
+                  {commesse.map((c, i) => (
+                    <li key={c.id} className="flex items-center gap-3 py-1.5"
+                      style={{ borderTop: i > 0 ? ".5px solid var(--bordo-tenue)" : "none" }}>
+                      <span className="min-w-0 flex-1 block">
+                        <span className="f-mono t-piccolo block" style={{ fontWeight: 500, color: "var(--txt-medio)" }}>{c.codice}</span>
+                        {c.descrizione && (
+                          <span className="t-piccolo truncate block" style={{ color: "var(--txt-tenue)" }}>{c.descrizione}</span>
+                        )}
+                      </span>
+                      <button onClick={() => setRinomina(c)} aria-label={"Rinomina commessa " + c.codice}
+                        className="shrink-0 inline-flex items-center justify-center btn btn-fantasma"
+                        style={{ width: ALTO_TOCCO, height: ALTO_TOCCO, borderRadius: "var(--r-sm)" }}>
+                        <Pencil size={15} strokeWidth={1.75} />
+                      </button>
+                      <button onClick={() => eliminaCommessa(c)} aria-label={"Elimina commessa " + c.codice}
+                        className="shrink-0 inline-flex items-center justify-center btn btn-riga-elimina"
+                        style={{ width: ALTO_TOCCO, height: ALTO_TOCCO, borderRadius: "var(--r-sm)" }}>
+                        <X size={15} strokeWidth={1.75} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {commesse.map((c) => (
+                    <span key={c.id} className="inline-flex items-center gap-1.5 pl-2.5 pr-1 py-1 box" title={c.descrizione}>
+                      <span className="f-mono t-piccolo" style={{ fontWeight: 500, color: "var(--txt-medio)" }}>{c.codice}</span>
+                      <button onClick={() => setRinomina(c)} aria-label={"Rinomina commessa " + c.codice} title="Rinomina" className="p-0.5 rounded btn" style={{ color: "var(--txt-tenue)" }}><Pencil size={10} strokeWidth={1.75} /></button>
+                      <button onClick={() => eliminaCommessa(c)} aria-label={"Elimina commessa " + c.codice} className="p-0.5 rounded btn" style={{ color: "var(--txt-tenue)" }}><X size={11} strokeWidth={1.75} /></button>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </Sezione>
@@ -7424,6 +7564,36 @@ function StileGlobale() {
 
       /* --- BOX: il contenitore rialzato di icone, campi, contatori --- */
       .box{ background:var(--bg-elevato); border:.5px solid var(--bordo-input); border-radius:var(--r-sm); }
+
+      /* --- LO SPAZIO DI SICUREZZA IN FONDO ---
+             (Niente apici inversi in questo commento: sta dentro un template
+             literal, e uno solo chiude il blocco. Successo scrivendolo.)
+
+             Sui telefoni con la barra di sistema in fondo allo schermo (iPhone
+             senza tasto, e diversi Android), un elemento ancorato a bottom:0
+             finisce SOTTO quella barra: il dito preme il sistema, non il
+             bottone. La funzione env(safe-area-inset-bottom) vale esattamente
+             l'altezza di quella barra, e ZERO dove non c'e' — quindi non toglie
+             niente a nessun altro telefono e non va condizionata.
+
+             NON SI PUO' PROVARE QUI: non abbiamo un iPhone, e il simulatore del
+             browser non riproduce l'inset. E' un caso noto e documentato, la
+             riga costa poco, e il modo di scoprirlo altrimenti e' che qualcuno
+             apra il programma dal proprio telefono e non riesca a premere
+             l'ultima voce.
+
+             DIPENDE DA viewport-fit=cover nel meta viewport di index.html:
+             senza quello env() vale zero sempre e queste due regole sono
+             inerti. Le due cose si tengono, e se una sparisce sparisce anche
+             il senso dell'altra. */
+      .nav-sicura{ padding-bottom:env(safe-area-inset-bottom, 0px); }
+
+      /* Il pavimento del contenuto: la barra di navigazione e' in posizione
+         fissa, quindi fuori dal flusso, e senza questo l'ultima riga di ogni
+         schermata le finisce sotto. 88px = i ~61 della barra piu' il respiro.
+         Sopra i 1024px la barra non c'e' e si torna al ritmo normale. */
+      .pavimento-nav{ padding-bottom:calc(88px + env(safe-area-inset-bottom, 0px)); }
+      @media (min-width:1024px){ .pavimento-nav{ padding-bottom:40px; } }
 
       /* --- VOCI DELLA BARRA LATERALE: la voce attiva ha già il suo fondo,
              quindi l'effetto del mouse serve solo alle inattive. --- */
