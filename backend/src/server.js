@@ -7,6 +7,7 @@ import { registroRichieste } from "./registroRichieste.js";
 import { cifraPassword, verificaPassword, generaToken, richiedeAuth } from "./auth.js";
 import { inviaEmailResetPassword, inviaAvvisoProva } from "./email.js";
 import { avvisoDaMandare, SETTE, ULTIMO, SCADUTA } from "./avvisiProva.js";
+import { schedaVecchia } from "./freschezza.js";
 import {
   TITOLARE, ORE, ruoloValido, vedeISoldi, scriveTutto, scriveLeOre,
   gestisceGliUtenti, toccaLeRigheAltrui, stampoStato,
@@ -800,15 +801,21 @@ app.put("/api/stato", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) 
        separati e' anche il modo di CONTARLI separati nei log — vedi
        MIGLIORAMENTI.md, voce 7.
 
-       Se If-Match non arriva affatto non si blocca niente: e' la stessa
-       concessione dei token vecchi, per la finestra in cui il browser ha
-       ancora il codice di ieri. Il nostro client lo manda sempre. */
-    const attesa = String(req.get("If-Match") ?? "").replace(/"/g, "").trim();
+       SE If-Match NON ARRIVA, NON SI BLOCCA NIENTE, e non e' una comodita': e'
+       la regola in cima a schema.sql spostata dall'SQL all'API — il codice
+       nuovo deve restare sicuro per la versione PRECEDENTE del client. Backend
+       e frontend sono due servizi separati su Render e non vanno in linea nello
+       stesso istante, e un browser puo' tenersi il pacchetto vecchio in cache
+       per ore. Se l'assenza fosse un errore, per tutta quella finestra nessuno
+       potrebbe salvare — e il guasto somiglierebbe a un guasto del database.
+       Il giudizio sta in freschezza.js, dove c'e' anche la prova che lo
+       pretende. */
+    const attesa = req.get("If-Match");
     const bloccata = await client.query(
       "SELECT versione_dati FROM aziende WHERE id = $1 FOR UPDATE", [aziendaId]
     );
     const adesso = String(bloccata.rows[0]?.versione_dati ?? 0);
-    if (attesa && attesa !== adesso) {
+    if (schedaVecchia(attesa, adesso)) {
       await client.query("ROLLBACK");
       /* Rumoroso apposta, e con l'azienda dentro: il registro delle richieste
          scrive lo stato ma non dice QUALE azienda, per progetto. Il criterio
