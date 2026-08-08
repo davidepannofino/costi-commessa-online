@@ -36,6 +36,14 @@ const ATTESE = [
   { tipo: "colonna", tabella: "dipendenti", nome: "archiviato" },
   { tipo: "colonna", tabella: "aziende", nome: "tolleranza_fino_al" },
   { tipo: "colonna", tabella: "aziende", nome: "primo_fallimento_il" },
+  /* Le tre date degli avvisi di scadenza della prova. Finché non ci sono, il
+     giro degli avvisi fallisce la query e non manda niente — l'errore resta nei
+     log e nessuna richiesta si rompe, ma nemmeno un'email parte. È la ragione
+     per cui queste tre righe contano più delle altre: sono la differenza fra
+     «distribuito» e «funzionante». */
+  { tipo: "colonna", tabella: "aziende", nome: "avviso_prova_7g_il" },
+  { tipo: "colonna", tabella: "aziende", nome: "avviso_prova_1g_il" },
+  { tipo: "colonna", tabella: "aziende", nome: "avviso_prova_scaduta_il" },
   /* Non basta che il vincolo esista: esisteva anche prima, con CASCADE. Quello
      che si verifica è la REGOLA di cancellazione, perché è lì che sta la
      differenza fra "le ore restano" e "le ore spariscono". */
