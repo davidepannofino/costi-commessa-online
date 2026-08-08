@@ -21,6 +21,41 @@ caricamento. Vale anche per una modifica «di solo testo»: il costo di guardare
 
 ---
 
+## Valvola di sicurezza: il secondo utente non passa la notte da solo
+
+**Vale finché la multiutenza non è pubblicata.** Quando lo sarà, questa sezione
+si cancella — e cancellarla è il modo di sapere che è finita.
+
+Il piano è: schermate → migrazione sulla produzione → il titolare crea l'utente
+del capocantiere → si guarda l'inserimento ore a 390 pixel → **si pubblica
+subito dopo**. La migrazione da sola è innocua: è additiva e allentante, e il
+codice vecchio la ignora — verificato, nessun `SELECT *` e nessun `INSERT`
+posizionale.
+
+**Il pericolo non è la migrazione, è il secondo utente.** Il codice in
+produzione ha ancora i sei punti che prendono «la prima riga» di una `JOIN
+utenti`. Con un utente solo «la prima» è «l'unica»; con due diventa arbitraria,
+e allora: l'azienda può risultare in prova invece che esente, il pannello di
+amministrazione può sparire, la fatturazione Stripe può puntare all'indirizzo
+sbagliato, e **l'azienda diventa eleggibile agli avvisi di scadenza della
+prova** — cioè un'email vera a una persona vera, mandata da codice che non sa
+distinguere il titolare.
+
+> **Se la pubblicazione non avviene lo stesso giorno in cui l'utente viene
+> creato, quell'utente si CANCELLA.** Non si lascia lì «tanto domani
+> pubblichiamo». Due utenti sotto il codice vecchio, per una notte, no.
+
+Cancellarlo non costa niente in questa finestra: non ha ancora scritto nessuna
+riga di ore, quindi non c'è niente da congelare. Si ricrea il giorno della
+pubblicazione, con lo stesso nome.
+
+**La data che rende urgente tutto questo:** la prova di PIEMME finisce il **19
+agosto 2026** e il primo avviso parte a sette giorni, cioè il **12 agosto**.
+Prima di quella data la finestra è innocua perché nessun avviso è dovuto; da lì
+in poi non lo è più.
+
+---
+
 Cose sapute e non ancora fatte. Ogni voce dice **cosa manca**, **chi ne
 soffre** e **perché non è stato fatto** — senza quest'ultimo pezzo una lista di
 miglioramenti diventa una lista dei desideri.
