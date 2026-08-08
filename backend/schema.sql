@@ -322,6 +322,35 @@ ALTER TABLE utenti ADD COLUMN IF NOT EXISTS ruolo TEXT NOT NULL DEFAULT 'titolar
 --    le ore che ha inserito. E' il Principio 6 di PRODUCT.md applicato agli
 --    utenti invece che ai dipendenti -- un costo gia' registrato non si cancella
 --    insieme a chi l'ha prodotto.
+--
+--    VERIFICATO, non dedotto (9 agosto 2026, schema usa-e-getta prova_fk): tre
+--    righe prima, tre dopo, zero ore perse. Le due righe dell'utente cancellato
+--    passano a NULL, quella dell'altro utente non si tocca.
+--
+--    LA CONSEGUENZA VA SAPUTA: una riga con inserita_da a NULL non e' di nessun
+--    utente `ore`, quindi da quel momento NESSUNO di loro puo' piu' correggerla
+--    o cancellarla -- solo il titolare. E' il comportamento giusto (le ore di
+--    chi se n'e' andato non sono di chi resta) ma non e' ovvio, e chi cancella
+--    un utente sta anche congelando le righe che quello aveva scritto.
+--
+--    ────────────────────────────────────────────────────────────────────────
+--    QUESTA COLONNA E' UN PERMESSO, NON UNA PROVA. Leggila prima di costruirci
+--    sopra un registro di chi ha fatto cosa.
+--
+--    Serve a una domanda sola: «questa riga la puo' correggere chi sta
+--    chiedendo?». Non risponde a «chi l'ha scritta davvero», e non puo': il
+--    titolare imposta lui la password degli utenti che crea e puo' reimpostarla
+--    quando vuole -- e' l'unico modo di far entrare chi non ha un'email vera.
+--    Quindi puo' entrare come chiunque, in qualsiasi momento, e scrivere righe
+--    che risultano di un altro.
+--
+--    Non e' un difetto da chiudere: e' la conseguenza di una scelta presa per
+--    il caso vero, dove il capocantiere riceve la password a voce. Ma un
+--    registro di responsabilita' costruito su questa colonna sarebbe
+--    falsificabile dal titolare PER COSTRUZIONE, e sembrerebbe attendibile.
+--    Se un giorno servira' davvero sapere chi ha scritto cosa, servira' prima
+--    che le password non passino piu' dalle mani del titolare.
+--    ────────────────────────────────────────────────────────────────────────
 ALTER TABLE registrazioni ADD COLUMN IF NOT EXISTS inserita_da INTEGER REFERENCES utenti(id) ON DELETE SET NULL;
 
 -- 4. LA VERSIONE DEI DATI. Un contatore che sale a ogni scrittura, qualunque

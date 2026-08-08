@@ -2466,6 +2466,81 @@ app.post("/api/utenti", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res
   }
 });
 
+/**
+ * IL TITOLARE RIMETTE LA PASSWORD A UN SUO UTENTE.
+ *
+ * Senza questa rotta un account senza email vera e' un account che muore alla
+ * prima password dimenticata: «password dimenticata» manda un messaggio a un
+ * indirizzo inventato, e quel percorso non completera' mai. Il rimedio sarebbe
+ * cancellare l'utente e rifarlo — che pero' porta a NULL l'autore di tutte le
+ * sue righe, congelandole per chiunque altro abbia il ruolo `ore`.
+ *
+ * Vale solo DENTRO la propria azienda, e non su se stessi: per la propria c'e'
+ * il cambio password, che chiede quella vecchia. Qui la vecchia non si chiede,
+ * ed e' il punto — chi ha dimenticato la password non ce l'ha.
+ */
+app.post("/api/utenti/:id/password", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) => {
+  if (!gestisceGliUtenti(req.ruolo)) return res.status(403).json({ errore: "Accesso non autorizzato." });
+  const id = Number(req.params.id);
+  const password = String(req.body?.password ?? "");
+  if (!Number.isInteger(id)) return res.status(400).json({ errore: "Utente non valido." });
+  if (id === req.utenteId) {
+    return res.status(400).json({ errore: "Per la tua password usa «Cambia la tua password»." });
+  }
+  if (password.length < 8) return res.status(400).json({ errore: "La password deve avere almeno 8 caratteri." });
+
+  try {
+    const hash = await cifraPassword(password);
+    const esito = await pool.query(
+      "UPDATE utenti SET password_hash = $1 WHERE id = $2 AND azienda_id = $3 RETURNING email",
+      [hash, id, req.aziendaId]
+    );
+    if (esito.rowCount === 0) return res.status(404).json({ errore: "Utente non trovato." });
+    res.json({ ok: true, email: esito.rows[0].email });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ errore: "Impossibile reimpostare la password." });
+  }
+});
+
+/**
+ * CIASCUNO CAMBIA LA PROPRIA, e per farlo deve sapere quella di adesso.
+ *
+ * Serve perche' il titolare imposta la prima password degli utenti che crea e
+ * gliela consegna a voce: senza questa rotta quella password resterebbe
+ * immutabile per sempre, visto che chi non ha un'email non puo' usare il
+ * recupero. Non e' debole: sarebbe debole E per sempre.
+ *
+ * Il cambio OBBLIGATORIO al primo accesso resta fuori di proposito. Obbligarlo
+ * senza dare prima lo strumento per farlo sarebbe un obbligo senza rimedio; con
+ * lo strumento in mano, quella decisione si prende quando si vuole e costa una
+ * colonna.
+ */
+app.post("/api/password", richiedeAuth, async (req, res) => {
+  const vecchia = String(req.body?.vecchia ?? "");
+  const nuova = String(req.body?.nuova ?? "");
+  if (nuova.length < 8) return res.status(400).json({ errore: "La nuova password deve avere almeno 8 caratteri." });
+  if (req.utenteId == null) {
+    /* Token emesso prima che esistesse utenteId: non si sa CHI cambiare. Si
+       chiede di rientrare, che rifa' il token con tutti i campi. */
+    return res.status(409).json({ errore: "Esci e rientra, poi riprova: la sessione è di una versione precedente." });
+  }
+  try {
+    const ris = await pool.query(
+      "SELECT password_hash FROM utenti WHERE id = $1 AND azienda_id = $2", [req.utenteId, req.aziendaId]
+    );
+    if (ris.rowCount === 0) return res.status(404).json({ errore: "Utente non trovato." });
+    if (!(await verificaPassword(vecchia, ris.rows[0].password_hash))) {
+      return res.status(401).json({ errore: "La password attuale non è corretta." });
+    }
+    await pool.query("UPDATE utenti SET password_hash = $1 WHERE id = $2", [await cifraPassword(nuova), req.utenteId]);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ errore: "Impossibile cambiare la password." });
+  }
+});
+
 app.delete("/api/utenti/:id", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) => {
   if (!gestisceGliUtenti(req.ruolo)) return res.status(403).json({ errore: "Accesso non autorizzato." });
   const id = Number(req.params.id);
@@ -2496,8 +2571,15 @@ app.delete("/api/utenti/:id", richiedeAuth, richiedeAbbonamentoAttivo, async (re
         return res.status(409).json({ errore: "È l'ultimo titolare dell'azienda: non si può togliere." });
       }
     }
-    /* Le sue righe di ore restano, e perdono l'autore (ON DELETE SET NULL):
-       un costo gia' registrato non si cancella insieme a chi l'ha prodotto. */
+    /* Le sue righe di ore restano, e perdono l'autore (ON DELETE SET NULL): un
+       costo gia' registrato non si cancella insieme a chi l'ha prodotto.
+       Verificato su schema di prova: tre righe prima, tre dopo, zero ore perse.
+
+       MA LE CONGELA, e chi preme questo bottone deve saperlo: una riga senza
+       autore non e' di nessun utente `ore`, quindi da adesso solo il titolare
+       puo' correggerla. Se serve solo rimettere la password, c'e' la rotta
+       apposta: cancellare e rifare l'utente costa il congelamento di tutto
+       quello che aveva scritto. */
     await client.query("DELETE FROM utenti WHERE id = $1 AND azienda_id = $2", [id, req.aziendaId]);
     await client.query("COMMIT");
     res.json({ ok: true });

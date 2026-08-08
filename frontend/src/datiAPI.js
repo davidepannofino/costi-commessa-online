@@ -352,6 +352,17 @@ export const datiAPI = {
   async eliminaUtente(id) {
     return chiamaMateriali("DELETE", `/api/utenti/${encodeURIComponent(id)}`, null, "Impossibile togliere l'utente.", () => true);
   },
+  /** Il titolare rimette la password a un suo utente: e' l'unico rimedio per
+   *  chi ha un'email inventata e non puo' usare il recupero. */
+  async reimpostaPassword(id, password) {
+    return chiamaMateriali("POST", `/api/utenti/${encodeURIComponent(id)}/password`, { password },
+      "Impossibile reimpostare la password.", (d) => d);
+  },
+  /** Ciascuno cambia la propria, sapendo quella di adesso. */
+  async cambiaPassword(vecchia, nuova) {
+    return chiamaMateriali("POST", "/api/password", { vecchia, nuova },
+      "Impossibile cambiare la password.", (d) => d);
+  },
 
   /**
    * Rinomina una commessa (codice e/o descrizione). Il server è l'autorità:
