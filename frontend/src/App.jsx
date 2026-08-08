@@ -869,9 +869,15 @@ function useAltezzaVisibile() {
  */
 const ALTO_TOCCO = 48;   // il minimo per un bersaglio da dito: 44 è la soglia, 48 sta comodo
 
+/* `etichettaNascosta` serve alla griglia della giornata, dove l'etichetta la
+   porta l'intestazione di colonna e ripeterla dodici volte sarebbe rumore.
+   NASCOSTA ALLA VISTA, NON TOLTA: resta nel documento con `sr-only`, perché è
+   il nome accessibile del campo — un combobox senza nome, per chi legge con lo
+   schermo, è una casella che non si sa cosa chieda. */
 const CampoScelta = React.forwardRef(function CampoScelta(
-  { etichetta, voci, valore, onCambia, errore, segnaposto, onAvanti, nome }, riferimento
+  { etichetta, voci, valore, onCambia, errore, segnaposto, onAvanti, nome, etichettaNascosta = false }, riferimento
 ) {
+  const clsEtichetta = etichettaNascosta ? "sr-only" : "block t-micro mb-2";
   const aDito = useMedia("(pointer: coarse), (max-width: 640px)");
   const altezzaVisibile = useAltezzaVisibile();
   const cercaRef = useRef(null);
@@ -990,7 +996,7 @@ const CampoScelta = React.forwardRef(function CampoScelta(
   if (aDito) {
     return (
       <div>
-        <span className="block t-micro mb-2" id={`${idElenco}-et`}>{etichetta}</span>
+        <span className={clsEtichetta} id={`${idElenco}-et`}>{etichetta}</span>
         <button type="button" ref={riferimento} name={nome}
           aria-haspopup="listbox" aria-expanded={aperto} aria-labelledby={`${idElenco}-et`}
           aria-invalid={errore ? true : undefined}
@@ -1065,7 +1071,7 @@ const CampoScelta = React.forwardRef(function CampoScelta(
   return (
     <div>
       <label className="block">
-        <span className="block t-micro mb-2">{etichetta}</span>
+        <span className={clsEtichetta}>{etichetta}</span>
         <div className="relative">
           <input
             ref={riferimento}
@@ -1248,7 +1254,11 @@ function CampoPassword({ value, onChange, placeholder, minLength, required, auto
  * Al passaggio del mouse cambia il colore, non la dimensione: gli elementi che
  * si gonfiano sotto il puntatore fanno sembrare l'interfaccia un giocattolo.
  */
-function Bottone({ variante = "primario", className = "", ...p }) {
+/* forwardRef perché la griglia della giornata ci porta sopra il fuoco: l'Invio
+   sulle ore dell'ultima riga finisce qui, così l'Invio dopo registra senza
+   dover cercare il bottone col mouse. Per tutti gli altri usi non cambia
+   niente — il ref, se non lo si passa, non esiste. */
+const Bottone = React.forwardRef(function Bottone({ variante = "primario", className = "", ...p }, riferimento) {
   /* "primario" e "accento" sono lo stesso bottone: entrambi vogliono dire
      "questa è l'azione della schermata", e di azioni così ce n'è una per
      schermata. Restano due nomi perché sono chiamati per nome in venti punti;
@@ -1258,12 +1268,13 @@ function Bottone({ variante = "primario", className = "", ...p }) {
   const classe = { primario: "btn-pieno", accento: "btn-pieno", fantasma: "btn-fantasma", pericolo: "btn-pericolo" }[variante] || "btn-pieno";
   return (
     <button
+      ref={riferimento}
       className={`inline-flex items-center justify-center gap-2 t-corpo font-medium btn ${classe} ${className}`}
       style={{ padding: "9px 15px", borderRadius: "var(--r-sm)", letterSpacing: "-.005em" }}
       {...p}
     />
   );
-}
+});
 
 /**
  * Fuoco prigioniero, per tutto ciò che dichiara aria-modal.
@@ -3318,6 +3329,63 @@ export default function App() {
   };
 
   /**
+   * UNA GIORNATA INTERA, IN UN COLPO SOLO.
+   *
+   * ─────────────────────────────────────────────────────────────────────────
+   * DODICI RIGHE INSIEME NON SONO DODICI SALVATAGGI.
+   *
+   * La domanda giusta da farsi guardando questa funzione è «e se una riga su
+   * dodici viene rifiutata?». La risposta è che non può succedere, e non
+   * perché ci si stia attenti: `PUT /api/stato` manda l'insieme intero e lo
+   * scrive dentro una transazione sola — o entrano tutte o non entra
+   * nessuna. Sta scritto nel server, accanto al cancello delle cancellazioni:
+   * «il salvataggio è già tutto-o-niente». Non esiste uno stato in cui undici
+   * righe sono nel database e una si è persa per strada.
+   *
+   * NON SI ASPETTA IL SALVATAGGIO AUTOMATICO, e qui sta la differenza col
+   * modulo riga per riga. Quello scrive nello stato e lascia che il
+   * salvataggio parta da solo dopo 600 ms: se fallisce, la fascia in alto lo
+   * dice, ma il lavoro è già «dentro» l'applicazione e chi ha appena battuto
+   * dodici righe non ha modo di rimetterle in coda. Qui si fa il contrario:
+   *
+   *     si salva PRIMA, si aspetta la risposta, e lo stato si tocca DOPO.
+   *
+   * È la stessa disciplina della rotta stretta delle ore, applicata a un
+   * gruppo: se il server non conferma, l'applicazione resta esattamente com'era
+   * — nessuna riga a metà, niente da riconciliare — e la griglia resta
+   * compilata com'è, perché quello che l'utente ha battuto non è mai uscito da
+   * lì. Ripremere è l'unica cosa da fare, e non produce doppioni.
+   *
+   * `cancellazioniPreviste: 0` è la verità: qui si aggiunge soltanto. Se questo
+   * salvataggio facesse sparire delle righe, il cancello sul server deve
+   * fermarlo — dichiarare un numero più alto «per sicurezza» sarebbe spegnere
+   * l'unica protezione che c'è.
+   * ─────────────────────────────────────────────────────────────────────────
+   *
+   * @param nuove  righe già validate: { id, dipendenteId, commessaId, data, ore }
+   * @returns l'esito di datiAPI.salva, così chi ha chiamato può dire cos'è
+   *          successo nel punto in cui è successo, invece di un avviso generico.
+   */
+  const registraGiornata = useCallback(async (nuove) => {
+    if (!Array.isArray(nuove) || nuove.length === 0) return { ok: true };
+    const unite = [...registrazioni, ...nuove];
+    const ris = await datiAPI.salva(null, {
+      dipendenti, commesse, registrazioni: unite, azienda, cancellazioniPreviste: 0,
+    });
+    if (ris?.ok) {
+      setRegistrazioni(unite);
+      /* Solo in caso di riuscita: se prima c'era un guasto in corso, adesso è
+         passato e la fascia va tolta. Al contrario NON si segnala il
+         fallimento da qui — la fascia dice «le modifiche restano solo su
+         questo schermo», e qui sarebbe falsa: nell'applicazione non è entrato
+         niente, quindi non c'è niente di non salvato. Il motivo vero lo mostra
+         la griglia, dove le righe si vedono ancora. */
+      registraEsitoSalvataggio(ris);
+    }
+    return ris;
+  }, [dipendenti, commesse, registrazioni, azienda, registraEsitoSalvataggio]);
+
+  /**
    * Togliere un dipendente dagli elenchi.
    *
    * Chi ha ore registrate si ARCHIVIA: sparisce da dove si inseriscono le ore,
@@ -4265,6 +4333,7 @@ export default function App() {
               svuota={svuotaTutto} esempio={ricaricaEsempio} azienda={azienda} setAzienda={setAzienda} notifica={notifica}
               esportaTutto={() => esportaCompletoXLSX({ dipendenti, commesse, registrazioni }, dal, al)}
               soloOre={soloOre}
+              registraGiornata={soloOre ? undefined : registraGiornata}
             />
           )}
           {vista === "ddt" && (
@@ -6991,7 +7060,386 @@ function EditorDipendente({ iniziale, onSalva, onChiudi }) {
    - `dipendentiAttivi` per SCEGLIERE: il campo con cui si registrano ore nuove.
    Sono due domande diverse — "di chi erano queste ore" e "a chi le sto dando
    adesso" — e una lista sola risponderebbe male a una delle due. */
-function VistaDati({ dipendenti, dipendentiAttivi, commesse, registrazioni, setCommesse, aggiungi, eliminaReg, aggiornaReg, eliminaCommessa, rinominaCommessa, caricaExcel, backup, ripristina, svuota, esempio, azienda, setAzienda, notifica, esportaTutto, soloOre = false }) {
+/* ═══════════════════════════════════════════════════════════════════════════
+   LA GRIGLIA DELLA GIORNATA.
+
+   L'UNITÀ È LA GIORNATA, E LO DICONO I NUMERI. Su 318 passaggi fra una riga e
+   la successiva, in una giornata vera, cambia: la data il 9% delle volte, la
+   commessa il 38%, il dipendente l'83%. Il modulo riga per riga fa pagare
+   ogni volta la cosa che cambia quasi sempre — la persona. Qui la persona non
+   si sceglie: è la riga. Si sceglie il giorno, si hanno davanti tutti, e si
+   scende mettendo commessa e ore.
+
+   PERCHÉ ESISTE IL «+», che sembra un di più e non lo è. Contato sulle 50
+   giornate vere di PIEMME (624 righe): l'81,7% delle coppie persona-giorno ha
+   una riga sola, ma **30 giornate su 50** hanno almeno una persona su più di
+   una commessa. Una griglia con una riga fissa a testa coprirebbe 20 giornate
+   su 50 e per le altre 30 rimanderebbe al modulo riga per riga: cioè
+   fallirebbe il 60% delle volte proprio nel suo mestiere. Il «+» aggiunge una
+   riga per la stessa persona e la porta a coprirle tutte, senza toccare il
+   giro normale — nell'82% dei casi non si preme.
+
+   LA COMMESSA SCENDE, e la regola è scritta per essere prevedibile: quando la
+   scegli si posa su tutte le righe SOTTO che non hanno ancora ore. Le righe
+   già battute sono protette, quindi si può cambiare cantiere a metà elenco e
+   quello che sta sopra non si muove. È il modo in cui la giornata si compila
+   davvero — quattro commesse in media, a gruppi di persone — e vale ~6 righe
+   su 12 non ridigitate.
+
+   QUELLO CHE C'È GIÀ si vede riga per riga («già 8 h»). Senza, chi torna sulla
+   stessa giornata per aggiungere due righe non ha modo di sapere chi ha già
+   caricato, e la somma raddoppia in silenzio.
+
+   PER IL TITOLARE, AL COMPUTER. Chi ha il ruolo `ore` non passa di qui: il suo
+   salvataggio è la rotta stretta, una riga alla volta, e una griglia che manda
+   l'anagrafica intera per lui è una strada chiusa (403). Il telefono verrà
+   quando si saprà che serve: la forma regge, cambia il vestito.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Le giornate compilate e non ancora registrate, per giorno. Stanno qui e non
+   nello stato di React perché il rimedio al 412 — «ricarica la pagina» — non
+   deve costare dodici righe battute a mano. Sopravvivono anche a una scheda
+   chiusa per sbaglio. Si cancellano appena la giornata è registrata. */
+const CHIAVE_GIORNATE = "commexa.giornateInCorso";
+
+function leggiGiornateInCorso() {
+  try { return JSON.parse(localStorage.getItem(CHIAVE_GIORNATE) || "{}") || {}; }
+  catch (e) { return {}; }
+}
+function scriviGiornataInCorso(giorno, righe) {
+  /* Se non si può scrivere (spazio finito, navigazione privata) la griglia
+     funziona lo stesso: si perde il recupero, non l'inserimento. */
+  try {
+    const tutte = leggiGiornateInCorso();
+    const daTenere = (righe || []).filter((r) => String(r.ore).trim() !== "" || r.commessaId);
+    if (daTenere.length > 0) {
+      tutte[giorno] = daTenere.map((r) => ({ dipendenteId: r.dipendenteId, commessaId: r.commessaId, ore: r.ore }));
+    } else {
+      delete tutte[giorno];
+    }
+    localStorage.setItem(CHIAVE_GIORNATE, JSON.stringify(tutte));
+  } catch (e) { /* nessun recupero, nessun danno */ }
+}
+
+/** Il motivo del mancato salvataggio, detto dove è successo e con la cura giusta. */
+function motivoDelRifiuto(ris) {
+  if (!ris || ris.ok) return null;
+  if (ris.gestito) return null; // sessione scaduta o abbonamento: hanno la loro schermata
+  if (ris.schedaVecchia) {
+    return {
+      titolo: "Qualcun altro ha salvato mentre compilavi",
+      testo: "Non è un errore tuo e non hai perso niente: la giornata qui sotto è ancora " +
+        "compilata, e resta anche se ricarichi. Ricarica la pagina per vedere le righe " +
+        "dell'altro, poi premi di nuovo Registra la giornata.",
+    };
+  }
+  if (ris.rifiutatoPerCancellazioni) {
+    return {
+      titolo: "Il server ha rifiutato: cancellerebbe delle righe",
+      testo: `Questa giornata aggiunge soltanto, quindi non dovrebbe succedere. ` +
+        `Il server dice che sparirebbero ${ris.cancellerebbe ?? "?"} righe su ${ris.esistenti ?? "?"}: ` +
+        "ricarica la pagina prima di riprovare, e non premere di nuovo finché non l'hai fatto.",
+    };
+  }
+  return {
+    titolo: "Non sono riuscito a salvare la giornata",
+    testo: `Nessuna riga è entrata — o entrano tutte o nessuna. Le tue sono ancora qui sotto: ` +
+      `riprova fra un momento. (${ris.motivo || "motivo sconosciuto"})`,
+  };
+}
+
+function GrigliaGiornata({ giorno, dipendentiAttivi, commesse, registrazioni, onRegistra, notifica }) {
+  const vociCommesse = useMemo(
+    () => commesse.map((c) => ({ id: c.id, etichetta: `${c.codice} — ${c.descrizione}`, cerca: `${c.codice} ${c.descrizione}` })),
+    [commesse]
+  );
+
+  /* Una riga per persona attiva, nell'ordine dell'anagrafica; le righe in più
+     di una stessa persona stanno subito sotto la sua. Le `chiave` si generano
+     una volta e non dipendono dalla posizione: se dipendessero, inserire una
+     riga in mezzo rimonterebbe tutte quelle sotto e porterebbe via il fuoco
+     proprio mentre si sta scrivendo. */
+  const componiRighe = useCallback((salvate) => {
+    const perDip = new Map();
+    for (const r of salvate || []) {
+      if (!perDip.has(r.dipendenteId)) perDip.set(r.dipendenteId, []);
+      perDip.get(r.dipendenteId).push(r);
+    }
+    const fuori = [];
+    for (const d of dipendentiAttivi) {
+      const sue = perDip.get(d.id);
+      const lista = sue && sue.length ? sue : [{ commessaId: "", ore: "" }];
+      for (const r of lista) {
+        fuori.push({ chiave: uid("g"), dipendenteId: d.id, commessaId: r.commessaId || "", ore: r.ore ?? "" });
+      }
+    }
+    return fuori;
+  }, [dipendentiAttivi]);
+
+  const [righe, setRighe] = useState(() => componiRighe(leggiGiornateInCorso()[giorno]));
+  const [errori, setErrori] = useState({});      // chiave -> messaggio
+  const [rifiuto, setRifiuto] = useState(null);  // esito dell'ultimo salvataggio fallito
+  const [inCorso, setInCorso] = useState(false);
+  const rifBottone = useRef(null);
+  const rifCampi = useRef(new Map());
+
+  /* Cambiando giorno si riparte da quello che c'era in sospeso per QUEL
+     giorno, non da un foglio vuoto: chi salta avanti e indietro fra due date
+     non perde niente. */
+  useEffect(() => {
+    setRighe(componiRighe(leggiGiornateInCorso()[giorno]));
+    setErrori({}); setRifiuto(null);
+  }, [giorno, componiRighe]);
+
+  useEffect(() => { scriviGiornataInCorso(giorno, righe); }, [giorno, righe]);
+
+  const dammiRif = (chiave) => {
+    if (!rifCampi.current.has(chiave)) rifCampi.current.set(chiave, { com: React.createRef(), ore: React.createRef() });
+    return rifCampi.current.get(chiave);
+  };
+
+  const haOre = (v) => String(v ?? "").trim() !== "";
+
+  const cambiaOre = (chiave, v) => setRighe((rs) => rs.map((r) => (r.chiave === chiave ? { ...r, ore: v } : r)));
+
+  /** La commessa scelta scende sulle righe sotto che non hanno ancora ore. */
+  const cambiaCommessa = (indice, id) => setRighe((rs) => rs.map((r, j) => {
+    if (j === indice) return { ...r, commessaId: id };
+    if (id && j > indice && !haOre(r.ore)) return { ...r, commessaId: id };
+    return r;
+  }));
+
+  const aggiungiRiga = (indice) => setRighe((rs) => {
+    const copia = [...rs];
+    const sopra = copia[indice];
+    /* La riga nuova NON eredita le ore — quelle sono il dato che distingue le
+       due righe — ma nemmeno la commessa: se una persona sta su due commesse,
+       la seconda è per definizione un'altra. */
+    copia.splice(indice + 1, 0, { chiave: uid("g"), dipendenteId: sopra.dipendenteId, commessaId: "", ore: "" });
+    return copia;
+  });
+
+  const togliRiga = (chiave) => setRighe((rs) => rs.filter((r) => r.chiave !== chiave));
+
+  /* Quello che su questo giorno è GIÀ registrato, persona per persona. */
+  const gia = useMemo(() => {
+    const m = new Map();
+    let righeTot = 0, oreTot = 0;
+    for (const r of registrazioni) {
+      if (r.data !== giorno) continue;
+      m.set(r.dipendenteId, (m.get(r.dipendenteId) ?? 0) + Number(r.ore || 0));
+      righeTot += 1; oreTot += Number(r.ore || 0);
+    }
+    return { perDip: m, righe: righeTot, ore: oreTot };
+  }, [registrazioni, giorno]);
+
+  /* Quello che si sta battendo adesso. */
+  const inCompilazione = useMemo(() => {
+    let n = 0, ore = 0;
+    for (const r of righe) {
+      if (!haOre(r.ore)) continue;
+      const v = parseNumIt(r.ore);
+      n += 1; if (!isNaN(v)) ore += v;
+    }
+    return { righe: n, ore };
+  }, [righe]);
+
+  const registraTutto = async () => {
+    const e = {};
+    const nuove = [];
+    for (const r of righe) {
+      if (!haOre(r.ore)) continue;               // riga non compilata: si salta, non è un errore
+      const ore = parseNumIt(r.ore);
+      if (isNaN(ore) || ore <= 0) { e[r.chiave] = "Ore non valide (es. 8 o 0,5)."; continue; }
+      if (!r.commessaId) { e[r.chiave] = "Scegli la commessa."; continue; }
+      nuove.push({ id: uid("r"), dipendenteId: r.dipendenteId, commessaId: r.commessaId, data: giorno, ore });
+    }
+    setErrori(e);
+    if (Object.keys(e).length > 0) {
+      notifica("Ci sono righe da sistemare: sono segnate qui sotto.", "errore");
+      return;
+    }
+    if (nuove.length === 0) {
+      notifica("Non c'è niente da registrare: scrivi le ore di almeno una persona.", "avviso");
+      return;
+    }
+
+    setInCorso(true);
+    setRifiuto(null);
+    const ris = await onRegistra(nuove);
+    setInCorso(false);
+
+    if (ris?.ok) {
+      /* Il foglio si azzera solo ADESSO, che il server ha confermato. */
+      scriviGiornataInCorso(giorno, []);
+      setRighe(componiRighe(null));
+      notifica(
+        `Giornata registrata: ${nuove.length} ${nuove.length === 1 ? "riga" : "righe"}, ` +
+        `${fmtOre.format(nuove.reduce((s, r) => s + r.ore, 0))} ore.`
+      );
+      return;
+    }
+    setRifiuto(ris);
+  };
+
+  const nome = (id) => {
+    const d = dipendentiAttivi.find((x) => x.id === id);
+    return d ? `${d.nome} ${d.cognome}`.trim() : "—";
+  };
+
+  if (dipendentiAttivi.length === 0 || commesse.length === 0) return null;
+
+  const avvisoRifiuto = motivoDelRifiuto(rifiuto);
+
+  return (
+    <div className="px-6 py-5">
+      {gia.righe > 0 && (
+        <p className="t-piccolo mb-4 flex items-start gap-2" style={{ color: "var(--txt-attenuato)" }}>
+          <Info size={14} strokeWidth={1.75} className="shrink-0 mt-0.5" />
+          <span>
+            Su questa giornata ci sono già <span className="f-mono">{gia.righe}</span>{" "}
+            {gia.righe === 1 ? "riga" : "righe"} per <span className="f-mono">{fmtOre.format(gia.ore)}</span> ore.
+            Quello che scrivi qui si aggiunge.
+          </span>
+        </p>
+      )}
+
+      {/* Intestazioni di colonna: le etichette dei campi stanno qui una volta
+          sola, non dodici volte dentro le righe. */}
+      <div className="hidden lg:grid gap-3 items-end pb-2"
+        style={{ gridTemplateColumns: "minmax(0,1fr) minmax(0,1.5fr) 110px 44px" }}>
+        <span className="t-micro">Persona</span>
+        <span className="t-micro">Commessa</span>
+        <span className="t-micro text-right">Ore</span>
+        <span className="t-micro sr-only">Aggiungi una riga</span>
+      </div>
+
+      <div className="flex flex-col" style={{ borderTop: ".5px solid var(--bordo)" }}>
+        {righe.map((r, i) => {
+          const primaDellaPersona = i === 0 || righe[i - 1].dipendenteId !== r.dipendenteId;
+          const oreGia = gia.perDip.get(r.dipendenteId);
+          const rif = dammiRif(r.chiave);
+          return (
+            <div key={r.chiave} className="grid gap-3 items-center py-2"
+              style={{
+                gridTemplateColumns: "minmax(0,1fr) minmax(0,1.5fr) 110px 44px",
+                borderBottom: ".5px solid var(--bordo)",
+              }}>
+              <div className="min-w-0">
+                {primaDellaPersona ? (
+                  <>
+                    <span className="block t-corpo truncate" style={{ color: "var(--txt-chiaro)" }}>{nome(r.dipendenteId)}</span>
+                    {oreGia > 0 && (
+                      <span className="block t-micro mt-0.5" style={{ color: "var(--txt-tenue)" }}>
+                        già <span className="f-mono">{fmtOre.format(oreGia)}</span> h
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  /* La seconda riga di una persona non ripete il nome: dice che
+                     è ancora lei, e questo la distingue da una riga nuova. */
+                  <span className="t-piccolo truncate flex items-center gap-1.5" style={{ color: "var(--txt-tenue)" }}>
+                    <span aria-hidden="true">↳</span> stessa persona
+                    <span className="sr-only">{nome(r.dipendenteId)}, riga in più</span>
+                  </span>
+                )}
+              </div>
+
+              <div className="min-w-0">
+                <CampoScelta etichetta={`Commessa di ${nome(r.dipendenteId)}`} etichettaNascosta
+                  ref={rif.com} voci={vociCommesse} valore={r.commessaId}
+                  onCambia={(id) => cambiaCommessa(i, id)}
+                  segnaposto="codice o cantiere"
+                  onAvanti={() => rif.ore.current?.focus()} />
+              </div>
+
+              <div>
+                <input ref={rif.ore} value={r.ore} placeholder="—" inputMode="decimal"
+                  aria-label={`Ore di ${nome(r.dipendenteId)}`}
+                  aria-invalid={errori[r.chiave] ? true : undefined}
+                  className={inputCls + " f-mono text-right"}
+                  style={{ minHeight: 42 }}
+                  onChange={(ev) => cambiaOre(r.chiave, ev.target.value)}
+                  onFocus={(ev) => ev.target.select()}
+                  onKeyDown={(ev) => {
+                    if (ev.key !== "Enter") return;
+                    ev.preventDefault();
+                    /* Invio scende: è il giro della giornata. Sull'ultima riga
+                       porta al bottone, così l'Invio successivo registra. */
+                    const dopo = righe[i + 1];
+                    if (dopo) dammiRif(dopo.chiave).com.current?.focus();
+                    else rifBottone.current?.focus();
+                  }} />
+              </div>
+
+              <div className="flex justify-end">
+                {primaDellaPersona ? (
+                  <button type="button" onClick={() => aggiungiRiga(i)}
+                    aria-label={`Aggiungi una seconda commessa per ${nome(r.dipendenteId)}`}
+                    title="Un'altra commessa per questa persona"
+                    className="btn btn-fantasma flex items-center justify-center"
+                    style={{ width: 36, height: 36, borderRadius: "var(--r-sm)", color: "var(--txt-tenue)" }}>
+                    <Plus size={15} strokeWidth={1.75} />
+                  </button>
+                ) : (
+                  <button type="button" onClick={() => togliRiga(r.chiave)}
+                    aria-label={`Togli la riga in più di ${nome(r.dipendenteId)}`}
+                    title="Togli questa riga"
+                    className="btn btn-fantasma flex items-center justify-center"
+                    style={{ width: 36, height: 36, borderRadius: "var(--r-sm)", color: "var(--txt-tenue)" }}>
+                    <X size={15} strokeWidth={1.75} />
+                  </button>
+                )}
+              </div>
+
+              {errori[r.chiave] && (
+                <span role="alert" className="t-piccolo" style={{ gridColumn: "1 / -1", color: "var(--errore)" }}>
+                  {errori[r.chiave]}
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {avvisoRifiuto && (
+        <div role="alert" className="mt-4 px-4 py-3"
+          style={{ background: "var(--ambra-bg)", border: ".5px solid var(--ambra-bordo)", borderRadius: "var(--r-sm)" }}>
+          <p className="t-corpo" style={{ color: "var(--ambra)", fontWeight: 500 }}>
+            <AlertTriangle size={14} strokeWidth={1.75} className="inline-block mr-1.5 -mt-0.5" />
+            {avvisoRifiuto.titolo}
+          </p>
+          <p className="t-piccolo mt-1.5" style={{ color: "var(--txt-attenuato)" }}>{avvisoRifiuto.testo}</p>
+        </div>
+      )}
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
+        <p className="t-piccolo" style={{ color: "var(--txt-tenue)" }}>
+          {inCompilazione.righe === 0
+            ? "Scrivi le ore di chi ha lavorato: le righe vuote non si salvano."
+            : <>Pronte <span className="f-mono" style={{ color: "var(--txt-chiaro)" }}>{inCompilazione.righe}</span>{" "}
+                {inCompilazione.righe === 1 ? "riga" : "righe"} per{" "}
+                <span className="f-mono" style={{ color: "var(--txt-chiaro)" }}>{fmtOre.format(inCompilazione.ore)}</span> ore.
+                Entrano tutte insieme o nessuna.</>}
+        </p>
+        <Bottone ref={rifBottone} onClick={registraTutto} className="min-h-[44px] px-5"
+          disabled={inCorso || inCompilazione.righe === 0}>
+          {inCorso
+            ? <><Loader2 size={16} strokeWidth={1.75} className="animate-spin" /> Salvo…</>
+            : <><Save size={16} strokeWidth={1.75} /> Registra la giornata</>}
+        </Bottone>
+      </div>
+
+      <p className="t-piccolo mt-3" style={{ color: "var(--txt-tenue)" }}>
+        Da tastiera: scrivi un pezzo del codice di commessa, Invio conferma e passa alle ore,
+        Invio sulle ore scende alla persona dopo. La commessa che scegli si posa sulle righe
+        sotto che non hanno ancora ore. Il «+» apre una seconda commessa per la stessa persona.
+      </p>
+    </div>
+  );
+}
+
+function VistaDati({ dipendenti, dipendentiAttivi, commesse, registrazioni, setCommesse, aggiungi, eliminaReg, aggiornaReg, eliminaCommessa, rinominaCommessa, caricaExcel, backup, ripristina, svuota, esempio, azienda, setAzienda, notifica, esportaTutto, soloOre = false, registraGiornata }) {
   const [form, setForm] = useState({ dipendenteId: "", commessaId: "", data: oggiISO(), ore: "" });
   const [erroriForm, setErroriForm] = useState({});
   const [nuovaCom, setNuovaCom] = useState({ codice: "", descrizione: "" });
@@ -7007,6 +7455,25 @@ function VistaDati({ dipendenti, dipendentiAttivi, commesse, registrazioni, setC
   // Stessa condizione di CampoScelta: la spiegazione sotto il modulo deve
   // descrivere il modo in cui i campi si comportano DAVVERO su questo schermo.
   const aDito = useMedia("(pointer: coarse), (max-width: 640px)");
+
+  /* LA GRIGLIA È PER IL COMPUTER, e per il titolare.
+     Non è una preferenza estetica: dodici righe con due campi ciascuna vogliono
+     larghezza, e sotto i 1024px diventerebbero dodici schede impilate — cioè
+     l'esatto contrario di «hai davanti le persone». Chi arriva da uno schermo
+     stretto trova il modulo riga per volta, che a 390px è già misurato e verde.
+     Il ruolo `ore` non la vede affatto: il suo salvataggio è la rotta stretta,
+     una riga alla volta, e la griglia manda l'insieme intero — per lui è una
+     strada chiusa dal server, non una schermata da nascondere. */
+  const alComputer = useMedia("(min-width: 1024px)");
+  const puoGriglia = !soloOre && alComputer && typeof registraGiornata === "function";
+  const [modo, setModo] = useState(() => {
+    try { return localStorage.getItem("commexa.modoInserimento") === "riga" ? "riga" : "griglia"; }
+    catch (e) { return "griglia"; }
+  });
+  const scegliModo = (id) => {
+    setModo(id);
+    try { localStorage.setItem("commexa.modoInserimento", id); } catch (e) { /* si ricomincia dalla griglia */ }
+  };
 
   const dipById = useMemo(() => new Map(dipendenti.map((d) => [d.id, d])), [dipendenti]);
   const comById = useMemo(() => new Map(commesse.map((c) => [c.id, c])), [commesse]);
@@ -7154,6 +7621,44 @@ function VistaDati({ dipendenti, dipendentiAttivi, commesse, registrazioni, setC
               )}
             </div>
 
+            {/* --- DUE MODI DI RIEMPIRE LA STESSA GIORNATA ---
+                La giornata sta sopra ed è una sola: qui si sceglie solo come
+                riempirla. Il modulo riga per riga NON viene sostituito — chi
+                deve mettere una riga sola, o correggere il giorno sbagliato di
+                una settimana fa, non deve attraversare dodici caselle vuote
+                per farlo. La scelta si ricorda, perché rifarla a ogni
+                apertura sarebbe un costo fisso su una decisione presa una
+                volta. */}
+            {puoGriglia && (
+              <div className="px-6 pt-4" role="group" aria-label="Come riempire la giornata">
+                <div className="inline-flex p-0.5" style={{ background: "var(--bg)", borderRadius: "var(--r-sm)", border: ".5px solid var(--bordo)" }}>
+                  {[
+                    { id: "griglia", testo: "Tutta la giornata", icona: Layers },
+                    { id: "riga", testo: "Una riga per volta", icona: Plus },
+                  ].map(({ id, testo, icona: Icona }) => (
+                    <button key={id} type="button" onClick={() => scegliModo(id)}
+                      aria-pressed={modo === id}
+                      className="btn inline-flex items-center gap-2 px-3.5 py-2 t-piccolo"
+                      style={{
+                        borderRadius: "calc(var(--r-sm) - 2px)",
+                        fontWeight: modo === id ? 500 : 400,
+                        background: modo === id ? "var(--bg-elevato)" : "transparent",
+                        color: modo === id ? "var(--txt)" : "var(--txt-tenue)",
+                        boxShadow: modo === id ? "0 1px 2px rgba(0,0,0,.25)" : "none",
+                      }}>
+                      <Icona size={14} strokeWidth={1.75} /> {testo}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {puoGriglia && modo === "griglia" ? (
+              <GrigliaGiornata giorno={form.data} dipendentiAttivi={dipendentiAttivi}
+                commesse={commesse} registrazioni={registrazioni}
+                onRegistra={registraGiornata} notifica={notifica} />
+            ) : (
+              <>
             {/* --- IL GIRO CHE SI RIPETE --- */}
             <div className="px-6 py-5">
               <div className="grid gap-4 items-start lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1.6fr)_110px_auto]">
@@ -7234,6 +7739,8 @@ function VistaDati({ dipendenti, dipendentiAttivi, commesse, registrazioni, setC
                   })}
                 </ul>
               </div>
+            )}
+              </>
             )}
           </>
         )}
