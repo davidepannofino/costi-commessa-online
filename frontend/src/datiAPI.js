@@ -10,7 +10,10 @@
  */
 import { leggiToken } from "./auth.js";
 
-export const API_BASE = import.meta.env.VITE_API_URL || "";
+/* `?.` perche' fuori da Vite — nelle prove, che girano con node — `import.meta`
+   non ha `env`. Senza, il modulo non si potrebbe nemmeno importare, e il pezzo
+   piu' delicato di questo file resterebbe senza prove. */
+export const API_BASE = import.meta.env?.VITE_API_URL || "";
 
 /** Impostata da App.jsx: chiamata quando il server rifiuta il token (scaduto
  *  o non valido), per riportare l'utente alla schermata di accesso. */
@@ -50,7 +53,33 @@ let versioneNota = null;
 let ruoloNoto = null;
 
 export const versioneLetta = () => versioneNota;
-export const ruoloCorrente = () => ruoloNoto;
+
+/**
+ * IL RUOLO SI LEGGE DAL TOKEN, non solo dalla risposta del server.
+ *
+ * Sembra un dettaglio ed e' il perno di tutto il ripiego asimmetrico qui sotto.
+ * Se il backend torna indietro, /api/stato smette di mandare `ruolo`: leggendolo
+ * solo da li', un utente `ore` risulterebbe «ruolo sconosciuto» e il ripiego sul
+ * salvataggio completo si RIAPRIREBBE DA SOLO, proprio nel momento in cui deve
+ * restare chiuso. Il token invece ce l'ha dentro e sopravvive al server.
+ *
+ * Non si verifica la firma, e non serve: questo valore si usa SOLO per
+ * RIFIUTARE. Chi si modificasse il token scrivendoci «titolare» non guadagna
+ * niente — il server rifiuta lo stesso, perche' li' la firma la controlla.
+ * E' un uso in direzione sicura: nel dubbio si fa di meno.
+ */
+function ruoloDalToken() {
+  try {
+    const parti = String(leggiToken() || "").split(".");
+    if (parti.length !== 3) return null;
+    const json = atob(parti[1].replace(/-/g, "+").replace(/_/g, "/"));
+    return JSON.parse(json)?.ruolo ?? null;
+  } catch (e) {
+    return null;
+  }
+}
+
+export const ruoloCorrente = () => ruoloNoto ?? ruoloDalToken();
 /** Vero se il backend che risponde conosce le rotte nuove. */
 export const backendConosceIRuoli = () => versioneNota !== null;
 
@@ -273,7 +302,7 @@ export const datiAPI = {
 
   /** Vero se le ore si possono scrivere adesso, con il ruolo che si ha. */
   oreScrivibili() {
-    return backendConosceIRuoli() || ruoloNoto !== "ore";
+    return backendConosceIRuoli() || ruoloCorrente() !== "ore";
   },
 
   async _chiamaOre(metodo, percorso, corpo) {
