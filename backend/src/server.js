@@ -7,6 +7,10 @@ import { registroRichieste } from "./registroRichieste.js";
 import { cifraPassword, verificaPassword, generaToken, richiedeAuth } from "./auth.js";
 import { inviaEmailResetPassword, inviaAvvisoProva } from "./email.js";
 import { avvisoDaMandare, SETTE, ULTIMO, SCADUTA } from "./avvisiProva.js";
+import {
+  TITOLARE, ORE, ruoloValido, vedeISoldi, scriveTutto, scriveLeOre,
+  gestisceGliUtenti, toccaLeRigheAltrui, stampoStato,
+} from "./ruoli.js";
 import { stripe, prezzoStripeDi } from "./stripe.js";
 import { chiaveListinoDellaSottoscrizione, letturaSottoscrizione, letturaFattura } from "./sottoscrizioneStripe.js";
 import { decidiTolleranza } from "./tolleranza.js";
@@ -236,13 +240,19 @@ app.post("/api/registrazione", async (req, res) => {
       "INSERT INTO aziende (id, nome, prova_fino_al) VALUES ($1, $2, now() + make_interval(days => $3::int))",
       [aziendaId, nome, GIORNI_PROVA]
     );
-    await client.query(
-      "INSERT INTO utenti (azienda_id, email, password_hash) VALUES ($1, $2, $3)",
-      [aziendaId, mail, hash]
+    /* Chi si registra apre la propria azienda, quindi e' titolare per
+       definizione. Il ruolo si scrive esplicitamente invece di affidarsi al
+       valore predefinito della colonna: qui e' una decisione, non un ripiego. */
+    const nuovo = await client.query(
+      "INSERT INTO utenti (azienda_id, email, password_hash, ruolo) VALUES ($1, $2, $3, $4) RETURNING id",
+      [aziendaId, mail, hash, TITOLARE]
     );
     await client.query("COMMIT");
 
-    res.status(201).json({ token: generaToken(aziendaId), nomeAzienda: nome });
+    res.status(201).json({
+      token: generaToken({ aziendaId, utenteId: nuovo.rows[0].id, ruolo: TITOLARE }),
+      nomeAzienda: nome,
+    });
   } catch (e) {
     await client.query("ROLLBACK");
     console.error(e);
@@ -259,14 +269,18 @@ app.post("/api/login", async (req, res) => {
 
   try {
     const ris = await pool.query(
-      "SELECT u.password_hash, u.azienda_id, a.nome FROM utenti u JOIN aziende a ON a.id = u.azienda_id WHERE u.email = $1",
+      "SELECT u.id, u.password_hash, u.azienda_id, u.ruolo, a.nome FROM utenti u JOIN aziende a ON a.id = u.azienda_id WHERE u.email = $1",
       [mail]
     );
     const riga = ris.rows[0];
     const ok = riga ? await verificaPassword(password, riga.password_hash) : false;
     if (!ok) return res.status(401).json({ errore: "Email o password non corretti." });
 
-    res.json({ token: generaToken(riga.azienda_id), nomeAzienda: riga.nome });
+    res.json({
+      token: generaToken({ aziendaId: riga.azienda_id, utenteId: riga.id, ruolo: riga.ruolo }),
+      nomeAzienda: riga.nome,
+      ruolo: riga.ruolo,
+    });
   } catch (e) {
     console.error(e);
     res.status(500).json({ errore: "Impossibile effettuare l'accesso." });
@@ -380,7 +394,12 @@ app.get("/api/abbonamento/stato", richiedeAuth, async (req, res) => {
        senza ricopiarsi nessun prezzo: gli euro restano in piani.js. */
     res.json({
       ...info,
-      admin: await eAdmin(req.aziendaId),
+      admin: await eAdmin(req.aziendaId, req.utenteId),
+      /* Il ruolo viaggia con lo stato: la schermata deve sapere quali voci
+         disegnare. Resta cosmesi — chi lo falsificasse nel browser otterrebbe
+         menu che portano a rotte che rispondono 403, e soprattutto a dati che
+         il server non ha mai mandato. */
+      ruolo: req.ruolo,
       ...(capienza ? { capienza, piani: elencoPiani() } : {}),
     });
   } catch (e) {
@@ -408,7 +427,18 @@ app.get("/api/abbonamento/stato", richiedeAuth, async (req, res) => {
 app.post("/api/abbonamento/checkout", richiedeAuth, async (req, res) => {
   try {
     const ris = await pool.query(
-      "SELECT a.stripe_customer_id, a.piano, u.email FROM aziende a JOIN utenti u ON u.azienda_id = a.id WHERE a.id = $1",
+      /* L'email che diventa il cliente su Stripe e' quella del TITOLARE di
+         riferimento, non di chi sta premendo il bottone: la fattura
+         dell'abbonamento va a chi ha aperto l'azienda, non al capocantiere che
+         per caso ha aperto la schermata. */
+      `SELECT a.stripe_customer_id, a.piano, u.email
+         FROM aziende a
+         JOIN LATERAL (
+           SELECT email FROM utenti
+            WHERE azienda_id = a.id AND ruolo = 'titolare'
+            ORDER BY id LIMIT 1
+         ) u ON true
+        WHERE a.id = $1`,
       [req.aziendaId]
     );
     const riga = ris.rows[0];
@@ -582,15 +612,27 @@ app.use("/api/admin", richiedeAuth, richiedeAdmin, adminRouter);
  */
 app.get("/api/stato", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) => {
   const aziendaId = req.aziendaId;
+  /* CHI NON VEDE I SOLDI NON LI CHIEDE NEMMENO AL DATABASE.
+     La difesa vera e' questa riga, non il filtro sulla risposta: l'applicazione
+     manda al browser tutto il dataset e fa i conti li', quindi un lordo che
+     arriva e' un lordo letto, comunque lo si nasconda a schermo. Le query per
+     materiali, allegati e spazio non partono proprio, e quella dei dipendenti
+     non nomina la colonna dei lordi.
+     `stampoStato` piu' sotto rifa' lo stesso taglio sulla forma della risposta:
+     e' voluto che siano due, perche' questa riga vive dentro un file da
+     settemila e quella e' provata. */
+  const soldi = vedeISoldi(req.ruolo);
   try {
     const [azRes, dipRes, comRes, regRes, matRes, allRes, spazio] = await Promise.all([
-      pool.query("SELECT nome FROM aziende WHERE id = $1", [aziendaId]),
+      pool.query("SELECT nome, versione_dati FROM aziende WHERE id = $1", [aziendaId]),
       /* Gli archiviati vengono fuori insieme a tutti gli altri, di proposito:
          le loro ore restano nel calcolo dei costi, quindi il browser ha
          bisogno del loro nome e del loro lordo per attribuirle. A nasconderli
          ci pensa la schermata, dove si inseriscono le ore — mai la lettura. */
       pool.query(
-        "SELECT id, nome, cognome, lordo_mensile, archiviato FROM dipendenti WHERE azienda_id = $1 ORDER BY nome, cognome",
+        soldi
+          ? "SELECT id, nome, cognome, lordo_mensile, archiviato FROM dipendenti WHERE azienda_id = $1 ORDER BY nome, cognome"
+          : "SELECT id, nome, cognome, archiviato FROM dipendenti WHERE azienda_id = $1 ORDER BY nome, cognome",
         [aziendaId]
       ),
       pool.query(
@@ -598,18 +640,19 @@ app.get("/api/stato", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) 
         [aziendaId]
       ),
       pool.query(
-        "SELECT id, dipendente_id, commessa_id, to_char(data, 'YYYY-MM-DD') AS data, ore FROM registrazioni WHERE azienda_id = $1",
+        "SELECT id, dipendente_id, commessa_id, to_char(data, 'YYYY-MM-DD') AS data, ore, inserita_da FROM registrazioni WHERE azienda_id = $1",
         [aziendaId]
       ),
-      pool.query(`${SELECT_MATERIALI} WHERE azienda_id = $1 ORDER BY data DESC, descrizione`, [aziendaId]),
+      soldi ? pool.query(`${SELECT_MATERIALI} WHERE azienda_id = $1 ORDER BY data DESC, descrizione`, [aziendaId]) : { rows: [] },
       // Solo i metadati dei documenti: il contenuto dei file si scarica a
       // parte, una richiesta per documento, quando serve davvero.
-      pool.query(`${SELECT_ALLEGATI} WHERE azienda_id = $1 ORDER BY caricato_il DESC`, [aziendaId]),
-      spazioAllegati(aziendaId),
+      soldi ? pool.query(`${SELECT_ALLEGATI} WHERE azienda_id = $1 ORDER BY caricato_il DESC`, [aziendaId]) : { rows: [] },
+      soldi ? spazioAllegati(aziendaId) : null,
     ]);
 
-    res.json({
+    const corpo = stampoStato(req.ruolo, req.utenteId, {
       azienda: azRes.rows[0]?.nome ?? "",
+      versione: Number(azRes.rows[0]?.versione_dati ?? 0),
       dipendenti: dipRes.rows.map((d) => ({
         id: d.id,
         nome: d.nome,
@@ -617,18 +660,28 @@ app.get("/api/stato", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) 
         lordoMensile: d.lordo_mensile || {},
         archiviato: d.archiviato === true,
       })),
-      commesse: comRes.rows.map((c) => ({ id: c.id, codice: c.codice, descrizione: c.descrizione })),
+      commesse: comRes.rows,
       registrazioni: regRes.rows.map((r) => ({
         id: r.id,
         dipendenteId: r.dipendente_id,
         commessaId: r.commessa_id,
         data: r.data,
         ore: Number(r.ore),
+        inserita_da: r.inserita_da,
       })),
       materiali: matRes.rows.map(mappaMateriale),
       allegati: allRes.rows.map(mappaAllegato),
-      spazioAllegati: spazio,
+      spazio,
     });
+
+    /* La versione viaggia anche come ETag, cosi' chi salva puo' rimandarla in
+       If-Match senza doversela ricordare da un campo del corpo: e' il
+       meccanismo standard, ed e' quello che MIGLIORAMENTI.md chiedeva per nome. */
+    res.set("ETag", `"${corpo.versione}"`);
+    /* `spazioAllegati` con la chiave di prima, per non cambiare il contratto a
+       chi i soldi li vede. Chi non li vede non ha nemmeno la chiave. */
+    if (corpo.spazio !== undefined) { corpo.spazioAllegati = corpo.spazio; delete corpo.spazio; }
+    res.json(corpo);
   } catch (e) {
     console.error(e);
     res.status(500).json({ errore: "Impossibile leggere i dati." });
@@ -660,6 +713,15 @@ app.get("/api/stato", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) 
  */
 app.put("/api/stato", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) => {
   const aziendaId = req.aziendaId;
+
+  /* QUESTA ROTTA MANDA L'ANAGRAFICA INTERA, lordi compresi: e' la strada del
+     titolare e di nessun altro. Chi inserisce le ore ha la rotta stretta, che
+     sa scrivere quattro campi e nient'altro — se potesse passare di qui
+     potrebbe riscrivere le paghe di tutti, o azzerarle. */
+  if (!scriveTutto(req.ruolo)) {
+    return res.status(403).json({ errore: "Per salvare questi dati serve il ruolo di titolare." });
+  }
+
   const {
     dipendenti = [], commesse = [], registrazioni = [], materiali = null, azienda = "",
     /* Quante registrazioni chi salva SI ASPETTA di perdere. Lo mandano solo i
@@ -716,8 +778,58 @@ app.put("/api/stato", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) 
   try {
     await client.query("BEGIN");
 
+    /* ---------------------------------------------------------------------
+       LA SCHEDA E' ANCORA FRESCA?
+
+       Il caso: il capocantiere inserisce otto righe alle 17. Il titolare ha una
+       scheda aperta da stamattina che quelle righe non le ha mai viste; alle 18
+       cambia una cifra qualsiasi e il salvataggio automatico manda un mondo che
+       non le contiene. La soglia guarda le cancellazioni e otto sta sotto
+       dieci, quindi passa: il lavoro dell'altro sparisce in silenzio.
+
+       Con un utente solo era improbabile; con due e' la normalita', ed e'
+       esattamente lo scenario per cui la multiutenza esiste.
+
+       DENTRO LA TRANSAZIONE E CON LA RIGA BLOCCATA (`FOR UPDATE`), non prima:
+       controllare fuori lascerebbe passare due salvataggi simultanei che
+       leggono la stessa versione e la superano entrambi.
+
+       412 E NON 409, e la differenza non e' formale: il 409 dice
+       «cancelleresti troppe righe», questo dice «hai letto una versione
+       superata». Sono due guasti diversi con due rimedi diversi, e tenerli
+       separati e' anche il modo di CONTARLI separati nei log — vedi
+       MIGLIORAMENTI.md, voce 7.
+
+       Se If-Match non arriva affatto non si blocca niente: e' la stessa
+       concessione dei token vecchi, per la finestra in cui il browser ha
+       ancora il codice di ieri. Il nostro client lo manda sempre. */
+    const attesa = String(req.get("If-Match") ?? "").replace(/"/g, "").trim();
+    const bloccata = await client.query(
+      "SELECT versione_dati FROM aziende WHERE id = $1 FOR UPDATE", [aziendaId]
+    );
+    const adesso = String(bloccata.rows[0]?.versione_dati ?? 0);
+    if (attesa && attesa !== adesso) {
+      await client.query("ROLLBACK");
+      /* Rumoroso apposta, e con l'azienda dentro: il registro delle richieste
+         scrive lo stato ma non dice QUALE azienda, per progetto. Il criterio
+         per decidere se questo diventa fastidioso e' «due 412 ravvicinati per
+         la stessa azienda», e senza questa riga non si potrebbe misurare. */
+      console.warn(
+        `SALVATAGGIO RIFIUTATO per ${aziendaId}: la scheda aveva letto la versione ${attesa}, ` +
+        `adesso e' la ${adesso}. Niente e' stato toccato.`
+      );
+      return res.status(412).json({
+        errore: "I dati sono cambiati da quando hai aperto questa pagina.",
+        versioneLetta: attesa,
+        versioneAttuale: adesso,
+      });
+    }
+
+    /* Ogni salvataggio riuscito fa salire la versione: e' quello che rende
+       vecchia la scheda di chiunque altro stesse guardando. */
     await client.query(
-      "INSERT INTO aziende (id, nome) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET nome = $2",
+      `INSERT INTO aziende (id, nome, versione_dati) VALUES ($1, $2, 1)
+       ON CONFLICT (id) DO UPDATE SET nome = $2, versione_dati = aziende.versione_dati + 1`,
       [aziendaId, azienda]
     );
 
@@ -2140,6 +2252,243 @@ app.get("/api/fatture/:id/file", richiedeAuth, richiedeAbbonamentoAttivo, async 
   } catch (e) {
     console.error(e);
     res.status(500).json({ errore: "Impossibile scaricare la fattura." });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LA ROTTA STRETTA DELLE ORE.
+
+   Esiste perche' PUT /api/stato manda l'anagrafica intera, lordi compresi: chi
+   inserisce le ore non puo' passare di li' senza poter riscrivere le paghe. Qui
+   si scrivono QUATTRO campi e nient'altro, e i due che contano — l'azienda e
+   l'autore — non si leggono dal corpo ma dal token: un `inserita_da` che
+   arrivasse dal browser sarebbe una firma falsificabile.
+
+   Chi puo' correggere cosa: il titolare tutto, come sempre; chi inserisce solo
+   le PROPRIE righe. «Proprie» vuol dire `inserita_da = il mio id`, verificato
+   nella WHERE e non con un `if` prima della query — cosi' non esiste un istante
+   fra il controllo e la scrittura in cui la riga possa cambiare padrone.
+
+   Le righe che esistevano prima di questa colonna hanno `inserita_da` a NULL:
+   non sono di nessun utente `ore`, quindi nessuno di loro le tocca, e non e'
+   servito nessuno script di riempimento.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/** Legge dal corpo SOLO i campi ammessi, uno per uno. Quello che non e' in
+ *  elenco non viene ripulito: non viene proprio letto. */
+function rigaOreDalCorpo(corpo = {}) {
+  const dipendenteId = String(corpo.dipendenteId ?? "").trim();
+  const commessaId = String(corpo.commessaId ?? "").trim();
+  const data = String(corpo.data ?? "").trim();
+  const ore = Number(corpo.ore);
+  if (!dipendenteId || !commessaId) return { errore: "Servono il dipendente e la commessa." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) return { errore: "Data non valida." };
+  if (!Number.isFinite(ore) || ore <= 0 || ore > 24) return { errore: "Le ore devono essere un numero fra 0 e 24." };
+  return { riga: { dipendenteId, commessaId, data, ore } };
+}
+
+/** Fa salire la versione dei dati: qualunque scrittura rende vecchia la scheda
+ *  di chiunque altro stesse guardando, non solo quelle di PUT /api/stato. */
+const alzaLaVersione = (client, aziendaId) =>
+  client.query("UPDATE aziende SET versione_dati = versione_dati + 1 WHERE id = $1", [aziendaId]);
+
+app.post("/api/ore", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) => {
+  if (!scriveLeOre(req.ruolo)) return res.status(403).json({ errore: "Non puoi registrare ore." });
+  const { riga, errore } = rigaOreDalCorpo(req.body);
+  if (errore) return res.status(400).json({ errore });
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    /* Dipendente e commessa devono essere DELL'AZIENDA di chi scrive: senza
+       questi due controlli si potrebbero attaccare ore a righe di un'altra
+       impresa passando i loro id. */
+    const ok = await client.query(
+      `SELECT (SELECT 1 FROM dipendenti WHERE id = $1 AND azienda_id = $3) AS d,
+              (SELECT 1 FROM commesse   WHERE id = $2 AND azienda_id = $3) AS c`,
+      [riga.dipendenteId, riga.commessaId, req.aziendaId]
+    );
+    if (!ok.rows[0].d || !ok.rows[0].c) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ errore: "Dipendente o commessa non trovati." });
+    }
+    const id = String(req.body?.id ?? "").trim() || randomUUID();
+    await client.query(
+      `INSERT INTO registrazioni (id, azienda_id, dipendente_id, commessa_id, data, ore, inserita_da)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [id, req.aziendaId, riga.dipendenteId, riga.commessaId, riga.data, riga.ore, req.utenteId]
+    );
+    await alzaLaVersione(client, req.aziendaId);
+    await client.query("COMMIT");
+    res.status(201).json({ id, ...riga, mia: true });
+  } catch (e) {
+    await client.query("ROLLBACK");
+    console.error(e);
+    res.status(500).json({ errore: "Impossibile registrare le ore." });
+  } finally {
+    client.release();
+  }
+});
+
+app.patch("/api/ore/:id", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) => {
+  if (!scriveLeOre(req.ruolo)) return res.status(403).json({ errore: "Non puoi modificare le ore." });
+  const { riga, errore } = rigaOreDalCorpo(req.body);
+  if (errore) return res.status(400).json({ errore });
+
+  /* La proprieta' della riga sta nella WHERE. Chi tocca tutto non porta la
+     condizione; chi tocca solo le proprie la porta, e se la riga non e' sua
+     l'UPDATE non trova niente — stessa risposta di una riga che non esiste,
+     che e' anche giusto: non si dice a nessuno cosa c'e' e di chi e'. */
+  const soloMie = !toccaLeRigheAltrui(req.ruolo);
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const esito = await client.query(
+      `UPDATE registrazioni SET dipendente_id = $1, commessa_id = $2, data = $3, ore = $4
+        WHERE id = $5 AND azienda_id = $6 ${soloMie ? "AND inserita_da = $7" : ""}
+       RETURNING id`,
+      soloMie
+        ? [riga.dipendenteId, riga.commessaId, riga.data, riga.ore, req.params.id, req.aziendaId, req.utenteId]
+        : [riga.dipendenteId, riga.commessaId, riga.data, riga.ore, req.params.id, req.aziendaId]
+    );
+    if (esito.rowCount === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ errore: "Riga non trovata, o non è tua." });
+    }
+    await alzaLaVersione(client, req.aziendaId);
+    await client.query("COMMIT");
+    res.json({ id: req.params.id, ...riga, mia: true });
+  } catch (e) {
+    await client.query("ROLLBACK");
+    console.error(e);
+    res.status(500).json({ errore: "Impossibile modificare la riga." });
+  } finally {
+    client.release();
+  }
+});
+
+app.delete("/api/ore/:id", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) => {
+  if (!scriveLeOre(req.ruolo)) return res.status(403).json({ errore: "Non puoi cancellare ore." });
+  const soloMie = !toccaLeRigheAltrui(req.ruolo);
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const esito = await client.query(
+      `DELETE FROM registrazioni
+        WHERE id = $1 AND azienda_id = $2 ${soloMie ? "AND inserita_da = $3" : ""}
+       RETURNING id`,
+      soloMie ? [req.params.id, req.aziendaId, req.utenteId] : [req.params.id, req.aziendaId]
+    );
+    if (esito.rowCount === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ errore: "Riga non trovata, o non è tua." });
+    }
+    await alzaLaVersione(client, req.aziendaId);
+    await client.query("COMMIT");
+    res.json({ ok: true });
+  } catch (e) {
+    await client.query("ROLLBACK");
+    console.error(e);
+    res.status(500).json({ errore: "Impossibile cancellare la riga." });
+  } finally {
+    client.release();
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   GLI UTENTI DELL'AZIENDA. Li crea il titolare, non si invitano per email.
+   Costa una rotta invece di una tabella, due rotte, un'email e una pagina
+   pubblica — e soprattutto riusa il recupero password, che gia' funziona: si
+   crea l'utente, la persona usa «password dimenticata» e se la sceglie.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+app.get("/api/utenti", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) => {
+  if (!gestisceGliUtenti(req.ruolo)) return res.status(403).json({ errore: "Accesso non autorizzato." });
+  try {
+    const ris = await pool.query(
+      "SELECT id, email, ruolo, creato_il FROM utenti WHERE azienda_id = $1 ORDER BY id",
+      [req.aziendaId]
+    );
+    res.json({ utenti: ris.rows.map((u) => ({ ...u, io: u.id === req.utenteId })) });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ errore: "Impossibile leggere gli utenti." });
+  }
+});
+
+app.post("/api/utenti", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) => {
+  if (!gestisceGliUtenti(req.ruolo)) return res.status(403).json({ errore: "Accesso non autorizzato." });
+  const mail = String(req.body?.email ?? "").trim().toLowerCase();
+  const ruolo = String(req.body?.ruolo ?? "").trim();
+  const password = String(req.body?.password ?? "");
+
+  if (!EMAIL_RE.test(mail)) return res.status(400).json({ errore: "Email non valida." });
+  /* Il ruolo si verifica contro ruoli.js, che e' l'unico posto dove l'elenco
+     esiste. Un valore non riconosciuto non si interpreta e non si ripiega sul
+     piu' piccolo: si rifiuta. */
+  if (!ruoloValido(ruolo)) return res.status(400).json({ errore: "Ruolo non riconosciuto." });
+  if (password.length < 8) return res.status(400).json({ errore: "La password deve avere almeno 8 caratteri." });
+
+  try {
+    /* L'email e' unica in TUTTO il sistema, non solo dentro l'azienda: e' con
+       quella che si entra, quindi due persone non possono averla uguale
+       nemmeno in imprese diverse. */
+    const gia = await pool.query("SELECT id FROM utenti WHERE email = $1", [mail]);
+    if (gia.rows.length > 0) return res.status(409).json({ errore: "Esiste già un account con questa email." });
+
+    const hash = await cifraPassword(password);
+    const nuovo = await pool.query(
+      "INSERT INTO utenti (azienda_id, email, password_hash, ruolo) VALUES ($1, $2, $3, $4) RETURNING id, email, ruolo, creato_il",
+      [req.aziendaId, mail, hash, ruolo]
+    );
+    res.status(201).json({ utente: nuovo.rows[0] });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ errore: "Impossibile creare l'utente." });
+  }
+});
+
+app.delete("/api/utenti/:id", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) => {
+  if (!gestisceGliUtenti(req.ruolo)) return res.status(403).json({ errore: "Accesso non autorizzato." });
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ errore: "Utente non valido." });
+  if (id === req.utenteId) return res.status(400).json({ errore: "Non puoi togliere te stesso." });
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    /* L'ULTIMO TITOLARE NON SI TOGLIE. Un'azienda senza titolare e' un'azienda
+       di cui non si sa piu' chi e' esente, a chi mandare l'avviso di scadenza e
+       chi risulta cliente su Stripe: quelle tre letture cercano il titolare di
+       riferimento e senza di lui non tornano niente. Meglio impedirlo qui che
+       spiegarlo dopo. */
+    const vittima = await client.query(
+      "SELECT ruolo FROM utenti WHERE id = $1 AND azienda_id = $2 FOR UPDATE", [id, req.aziendaId]
+    );
+    if (vittima.rowCount === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ errore: "Utente non trovato." });
+    }
+    if (vittima.rows[0].ruolo === TITOLARE) {
+      const quanti = await client.query(
+        "SELECT count(*)::int AS n FROM utenti WHERE azienda_id = $1 AND ruolo = $2", [req.aziendaId, TITOLARE]
+      );
+      if (quanti.rows[0].n <= 1) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ errore: "È l'ultimo titolare dell'azienda: non si può togliere." });
+      }
+    }
+    /* Le sue righe di ore restano, e perdono l'autore (ON DELETE SET NULL):
+       un costo gia' registrato non si cancella insieme a chi l'ha prodotto. */
+    await client.query("DELETE FROM utenti WHERE id = $1 AND azienda_id = $2", [id, req.aziendaId]);
+    await client.query("COMMIT");
+    res.json({ ok: true });
+  } catch (e) {
+    await client.query("ROLLBACK");
+    console.error(e);
+    res.status(500).json({ errore: "Impossibile togliere l'utente." });
+  } finally {
+    client.release();
   }
 });
 

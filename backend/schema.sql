@@ -266,6 +266,79 @@ CREATE INDEX IF NOT EXISTS idx_registrazioni_azienda ON registrazioni(azienda_id
 CREATE INDEX IF NOT EXISTS idx_registrazioni_dipendente ON registrazioni(dipendente_id);
 CREATE INDEX IF NOT EXISTS idx_registrazioni_commessa ON registrazioni(commessa_id);
 
+-- ===========================================================================
+-- PIU' UTENTI PER AZIENDA (tappa 1).
+--
+-- Quattro modifiche, tutte compatibili con la versione PRECEDENTE del codice
+-- come pretende la regola in cima a questo file: si allenta un vincolo e si
+-- aggiungono tre colonne con un valore predefinito. Nessuna riga viene
+-- riscritta, e il codice vecchio nella finestra fra migrazione e deploy non si
+-- accorge di niente.
+-- ===========================================================================
+
+-- 1. VIA L'UNICITA' DI azienda_id. Era lei a dire "un utente per azienda", ed e'
+--    la riga che PRODUCT.md citava come prova che il multiutente fosse un cambio
+--    di modello dati. Si cerca il vincolo per FORMA e non per nome: il nome
+--    predefinito di Postgres e' utenti_azienda_id_key, ma un database creato a
+--    mano potrebbe averne un altro, e un DROP per nome fallirebbe in silenzio
+--    lasciando il vincolo dov'e'.
+DO $$
+DECLARE nome_vincolo TEXT;
+BEGIN
+  SELECT c.conname INTO nome_vincolo
+    FROM pg_constraint c
+    JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY (c.conkey)
+   WHERE c.conrelid = to_regclass('utenti')
+     AND c.contype = 'u'
+     AND a.attname = 'azienda_id'
+     AND array_length(c.conkey, 1) = 1
+   LIMIT 1;
+  IF nome_vincolo IS NOT NULL THEN
+    EXECUTE format('ALTER TABLE utenti DROP CONSTRAINT %I', nome_vincolo);
+  END IF;
+END $$;
+
+-- L'indice che serviva a quel vincolo se ne va con lui, ma le letture per
+-- azienda restano — abbonamento.js e admin.js ci passano a ogni richiesta.
+CREATE INDEX IF NOT EXISTS idx_utenti_azienda ON utenti(azienda_id);
+
+-- 2. IL RUOLO. 'titolare' | 'ore'. I valori ammessi stanno in src/ruoli.js e non
+--    qui, per la stessa ragione dei piani: un CHECK con l'elenco sarebbe una
+--    seconda copia delle stesse regole, e due copie divergono al primo ruolo
+--    nuovo. Il valore predefinito e' 'titolare' perche' chi esiste gia' E'
+--    titolare: nessun riempimento da eseguire, e chi si registra domani apre
+--    la propria azienda, quindi lo e' per definizione.
+ALTER TABLE utenti ADD COLUMN IF NOT EXISTS ruolo TEXT NOT NULL DEFAULT 'titolare';
+
+-- 3. CHI HA SCRITTO UNA RIGA DI ORE. Serve al permesso, non alla statistica: chi
+--    inserisce puo' correggere e cancellare le PROPRIE righe e nessun'altra.
+--
+--    Resta NULL-abile, e le righe che esistono oggi restano a NULL: sono di
+--    nessun utente `ore`, quindi nessuno di loro puo' toccarle. La difesa nasce
+--    dalla forma del dato invece che da uno script di riempimento -- come la
+--    finestra di sette giorni degli avvisi di prova.
+--
+--    ON DELETE SET NULL e non CASCADE: togliere un utente non deve portarsi via
+--    le ore che ha inserito. E' il Principio 6 di PRODUCT.md applicato agli
+--    utenti invece che ai dipendenti -- un costo gia' registrato non si cancella
+--    insieme a chi l'ha prodotto.
+ALTER TABLE registrazioni ADD COLUMN IF NOT EXISTS inserita_da INTEGER REFERENCES utenti(id) ON DELETE SET NULL;
+
+-- 4. LA VERSIONE DEI DATI. Un contatore che sale a ogni scrittura, qualunque
+--    strada l'abbia fatta.
+--
+--    A cosa serve: con due persone che lavorano insieme, una scheda aperta da
+--    stamattina afferma un mondo intero che non contiene le righe scritte nel
+--    frattempo dall'altra. Il salvataggio riesce, e quelle righe spariscono. La
+--    soglia delle cancellazioni non lo intercetta -- otto righe stanno sotto
+--    dieci -- e comunque non vedrebbe le SOVRASCRITTURE, che non cancellano
+--    niente.
+--
+--    Chi salva rimanda la versione che aveva letto, in un'intestazione If-Match;
+--    se non coincide il server risponde 412 e non tocca niente. E' la voce 1 di
+--    MIGLIORAMENTI.md, che quell'intestazione la chiede per nome.
+ALTER TABLE aziende ADD COLUMN IF NOT EXISTS versione_dati BIGINT NOT NULL DEFAULT 0;
+
 -- Tappa materiali: costo dei materiali per commessa, inseriti a mano.
 -- È una voce di costo AGGIUNTIVA e separata dalla manodopera: non entra mai nel
 -- calcolo della tariffa oraria dei dipendenti (che resta lordo mensile / ore del

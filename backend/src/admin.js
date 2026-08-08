@@ -10,17 +10,41 @@ const EMAIL_ADMIN = new Set([
   "pannofino.work@gmail.com",
 ]);
 
-async function emailDiAzienda(aziendaId) {
-  const ris = await pool.query("SELECT email FROM utenti WHERE azienda_id = $1", [aziendaId]);
-  return ris.rows[0]?.email || null;
+/**
+ * L'EMAIL DI CHI STA BUSSANDO — non dell'azienda.
+ *
+ * Prima era `SELECT email FROM utenti WHERE azienda_id = $1` con `rows[0]`, e
+ * con un utente per azienda voleva dire «l'unico». Con più utenti sarebbe
+ * diventato «quello che il database restituisce per primo»: i permessi di
+ * amministratore decisi da un `ORDER BY` che non c'è. Fra tutti i punti che la
+ * multiutenza rompeva, questo era l'unico che rompeva un controllo di sicurezza.
+ *
+ * Adesso il token dice chi sei, quindi si guarda l'email TUA. È anche più
+ * corretto nel merito: essere amministratore di piattaforma è una proprietà
+ * della persona, non dell'impresa a cui appartiene.
+ *
+ * Il ripiego sul titolare serve ai token emessi prima che esistesse `utenteId`,
+ * che valgono ancora per trenta giorni: quelle aziende hanno un utente solo,
+ * quindi il titolare È chi sta bussando. Scade da sé insieme ai token.
+ */
+async function emailDiChiChiede(aziendaId, utenteId) {
+  if (utenteId != null) {
+    const r = await pool.query("SELECT email FROM utenti WHERE id = $1 AND azienda_id = $2", [utenteId, aziendaId]);
+    return r.rows[0]?.email || null;
+  }
+  const r = await pool.query(
+    "SELECT email FROM utenti WHERE azienda_id = $1 AND ruolo = 'titolare' ORDER BY id LIMIT 1",
+    [aziendaId]
+  );
+  return r.rows[0]?.email || null;
 }
 
 /** Da applicare dopo richiedeAuth: blocca con 403 chi non è nell'elenco admin.
- *  Il controllo legge sempre l'email dal database in base all'aziendaId del
- *  token verificato — mai da un valore mandato dal client. */
+ *  Il controllo legge sempre l'email dal database in base al token verificato —
+ *  mai da un valore mandato dal client. */
 export async function richiedeAdmin(req, res, next) {
   try {
-    const email = await emailDiAzienda(req.aziendaId);
+    const email = await emailDiChiChiede(req.aziendaId, req.utenteId);
     if (!email || !EMAIL_ADMIN.has(email.trim().toLowerCase())) {
       return res.status(403).json({ errore: "Accesso non autorizzato." });
     }
@@ -46,10 +70,26 @@ export async function richiedeAdmin(req, res, next) {
  * VEDE, il middleware cosa si può FARE — e l'email si legge sempre dal
  * database partendo dall'aziendaId del token verificato, mai dal client.
  */
-export async function eAdmin(aziendaId) {
-  const email = await emailDiAzienda(aziendaId);
+export async function eAdmin(aziendaId, utenteId = null) {
+  const email = await emailDiChiChiede(aziendaId, utenteId);
   return !!email && EMAIL_ADMIN.has(email.trim().toLowerCase());
 }
+
+/**
+ * Il titolare di riferimento, per le due letture di riepilogo qui sotto.
+ *
+ * Senza, `JOIN utenti` restituisce una riga PER UTENTE: nell'elenco ogni azienda
+ * comparirebbe due volte, e nelle statistiche i quattro numeri conterebbero due
+ * volte la stessa impresa smettendo di sommare al totale. Non e' un difetto
+ * visibile — sono numeri plausibili e sbagliati, che e' il modo peggiore.
+ */
+const TITOLARE_DI_RIFERIMENTO = `
+  JOIN LATERAL (
+    SELECT email, creato_il FROM utenti
+     WHERE azienda_id = a.id AND ruolo = 'titolare'
+     ORDER BY id
+     LIMIT 1
+  ) u ON true`;
 
 export const adminRouter = Router();
 
@@ -62,8 +102,9 @@ export const adminRouter = Router();
 adminRouter.get("/aziende", async (req, res) => {
   try {
     const ris = await pool.query(
-      `SELECT a.id, a.nome, u.email, u.creato_il, a.stato_abbonamento, a.prova_fino_al
-       FROM aziende a JOIN utenti u ON u.azienda_id = a.id
+      `SELECT a.id, a.nome, u.email, u.creato_il, a.stato_abbonamento, a.prova_fino_al,
+              (SELECT count(*)::int FROM utenti x WHERE x.azienda_id = a.id) AS utenti
+       FROM aziende a ${TITOLARE_DI_RIFERIMENTO}
        ORDER BY u.creato_il DESC`
     );
     const aziende = ris.rows.map((r) => {
@@ -80,6 +121,10 @@ adminRouter.get("/aziende", async (req, res) => {
         registratoIl: r.creato_il,
         stato: info.stato,
         giorniProvaRestanti: info.giorniProvaRestanti,
+        /* Quanti utenti ha l'azienda. L'email resta quella del titolare di
+           riferimento — è quella che conta per esenzione e fatturazione — e
+           questo numero dice se dietro ce n'è più di uno. */
+        utenti: r.utenti,
       };
     });
     res.json({ aziende });
@@ -96,7 +141,7 @@ adminRouter.get("/statistiche", async (req, res) => {
   try {
     const ris = await pool.query(
       `SELECT u.email, u.creato_il, a.stato_abbonamento, a.prova_fino_al
-       FROM aziende a JOIN utenti u ON u.azienda_id = a.id`
+       FROM aziende a ${TITOLARE_DI_RIFERIMENTO}`
     );
     const settimanaFa = Date.now() - 7 * 24 * 60 * 60 * 1000;
     let totale = 0, inProva = 0, attive = 0, scadute = 0, nuoveUltimi7Giorni = 0;

@@ -44,6 +44,14 @@ const ATTESE = [
   { tipo: "colonna", tabella: "aziende", nome: "avviso_prova_7g_il" },
   { tipo: "colonna", tabella: "aziende", nome: "avviso_prova_1g_il" },
   { tipo: "colonna", tabella: "aziende", nome: "avviso_prova_scaduta_il" },
+  /* Piu' utenti per azienda. Il ruolo e l'autore di una riga di ore sono
+     colonne come le altre; l'assenza dell'unicita' no, e per quella c'e' un
+     controllo apposta qui sotto — e' l'unica cosa in questo elenco che si
+     verifica per la sua MANCANZA, e senza di lei tutto il resto non serve. */
+  { tipo: "colonna", tabella: "utenti", nome: "ruolo" },
+  { tipo: "colonna", tabella: "registrazioni", nome: "inserita_da" },
+  { tipo: "colonna", tabella: "aziende", nome: "versione_dati" },
+  { tipo: "senza-vincolo-unico", tabella: "utenti", colonna: "azienda_id" },
   /* Non basta che il vincolo esista: esisteva anche prima, con CASCADE. Quello
      che si verifica è la REGOLA di cancellazione, perché è lì che sta la
      differenza fra "le ore restano" e "le ore spariscono". */
@@ -66,6 +74,27 @@ async function main() {
         [a.nome]
       );
       esiti.push({ cosa: `tabella ${a.nome}`, presente: r.rows.length > 0 ? "SI" : "NO" });
+    } else if (a.tipo === "senza-vincolo-unico") {
+      /* Si verifica che un vincolo NON ci sia. E' il contrario di tutto il
+         resto dell'elenco, e vale la pena spiegare perche': l'unicita' su
+         utenti.azienda_id era la riga che imponeva «un utente per azienda». Se
+         un giorno tornasse — un database ricreato da uno schema vecchio, un
+         ripristino, una migrazione rieseguita nell'ordine sbagliato — la
+         creazione del secondo utente fallirebbe con un errore di chiave
+         duplicata, e il messaggio parlerebbe di un vincolo invece che del
+         permesso. Meglio saperlo qui. */
+      const r = await pool.query(
+        `SELECT c.conname FROM pg_constraint c
+           JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY (c.conkey)
+          WHERE c.conrelid = to_regclass($1) AND c.contype = 'u'
+            AND a.attname = $2 AND array_length(c.conkey, 1) = 1`,
+        [a.tabella, a.colonna]
+      );
+      esiti.push({
+        cosa: `${a.tabella}.${a.colonna} SENZA vincolo unico`,
+        presente: r.rows.length === 0 ? "SI" : "NO",
+        tipo: r.rows.length === 0 ? "—" : `c'e' ancora: ${r.rows[0].conname}`,
+      });
     } else if (a.tipo === "vincolo") {
       /* to_regclass invece di ::regclass: se la tabella non c'è ancora
          restituisce NULL, mentre il cast solleverebbe un errore e questo

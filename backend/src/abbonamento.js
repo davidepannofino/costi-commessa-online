@@ -81,10 +81,40 @@ export function calcolaStatoAccesso({ email, stato_abbonamento, creato_il, prova
   return { haAccesso: false, stato: "scaduto", giorniProvaRestanti: 0 };
 }
 
+/**
+ * IL TITOLARE DI RIFERIMENTO DI UN'AZIENDA, e perche' serve dirlo.
+ *
+ * Prima queste letture facevano `JOIN utenti` e prendevano la prima riga. Con un
+ * utente per azienda «la prima» era «l'unica»; con due diventa quella che il
+ * database restituisce per prima, cioe' nessuna in particolare. E da quella
+ * riga esce l'EMAIL, che decide tre cose: se l'azienda e' esente, a chi va
+ * l'avviso di scadenza della prova, e chi risulta cliente su Stripe. Tutte e
+ * tre a caso, e in silenzio.
+ *
+ * Il riferimento e' il titolare piu' VECCHIO, cioe' chi ha aperto l'azienda
+ * registrandosi. Non cambia se ne nascono altri, e non dipende dall'ordine in
+ * cui il database restituisce le righe.
+ *
+ * SE UN'AZIENDA NON HA NESSUN TITOLARE non si ripiega su un altro utente: la
+ * lettura non torna niente e chi chiama risponde «azienda non trovata». Sembra
+ * duro, ma il ripiego sarebbe peggio — l'esenzione si decide sull'email, quindi
+ * cadere su un utente qualsiasi vuol dire concedere o togliere l'accesso in
+ * base a chi capita. E' la situazione che le rotte di gestione utenti
+ * impediscono di creare: l'ultimo titolare non si puo' togliere.
+ */
+const TITOLARE_DI_RIFERIMENTO = `
+  JOIN LATERAL (
+    SELECT email, creato_il FROM utenti
+     WHERE azienda_id = a.id AND ruolo = 'titolare'
+     ORDER BY id
+     LIMIT 1
+  ) u ON true`;
+
 async function leggiRigaAccesso(aziendaId) {
   const ris = await pool.query(
     `SELECT a.stato_abbonamento, a.prova_fino_al, a.tolleranza_fino_al, u.email, u.creato_il
-       FROM aziende a JOIN utenti u ON u.azienda_id = a.id WHERE a.id = $1`,
+       FROM aziende a ${TITOLARE_DI_RIFERIMENTO}
+      WHERE a.id = $1`,
     [aziendaId]
   );
   return ris.rows[0] || null;
@@ -170,7 +200,7 @@ export async function aziendePerAvvisiProva() {
     `SELECT a.id, a.stato_abbonamento, a.prova_fino_al, a.tolleranza_fino_al,
             a.avviso_prova_7g_il, a.avviso_prova_1g_il, a.avviso_prova_scaduta_il,
             u.email, u.creato_il
-       FROM aziende a JOIN utenti u ON u.azienda_id = a.id`
+       FROM aziende a ${TITOLARE_DI_RIFERIMENTO}`
   );
   return ris.rows;
 }
