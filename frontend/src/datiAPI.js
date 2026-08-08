@@ -30,6 +30,32 @@ export function suAbbonamentoRichiesto(fn) {
 
 const headerAuth = () => ({ Authorization: `Bearer ${leggiToken() || ""}` });
 
+/* ───────────────────────────────────────────────────────────────────────────
+   LA VERSIONE CHE QUESTA SCHEDA HA LETTO, E IL RUOLO DI CHI LA GUARDA.
+
+   Ogni scrittura fa salire `versione_dati` sul server. Chi salva rimanda in
+   `If-Match` quella che aveva letto: se nel frattempo un'altra persona ha
+   scritto, il server risponde 412 e non tocca niente. Senza, una scheda aperta
+   da stamattina cancella in silenzio le righe inserite nel frattempo da chi sta
+   in cantiere — otto righe stanno sotto la soglia delle cancellazioni, quindi
+   passerebbero.
+
+   `versione` SERVE ANCHE COME SEGNALE DI CAPACITA'. Se la risposta non la porta,
+   il backend e' quello di ieri: su Render i due servizi non vanno in linea
+   insieme, e il frontend puo' arrivare per primo. E' un segnale POSITIVO —
+   c'e' o non c'e' — invece di dedurlo annusando un 404, che vorrebbe dire
+   confondere «questa rotta non esiste» con «questa riga non e' tua».
+   ─────────────────────────────────────────────────────────────────────────── */
+let versioneNota = null;
+let ruoloNoto = null;
+
+export const versioneLetta = () => versioneNota;
+export const ruoloCorrente = () => ruoloNoto;
+/** Vero se il backend che risponde conosce le rotte nuove. */
+export const backendConosceIRuoli = () => versioneNota !== null;
+
+const headerVersione = () => (versioneNota != null ? { "If-Match": String(versioneNota) } : {});
+
 /**
  * Chiamata alle rotte dei materiali. Gestisce allo stesso modo di tutto il
  * resto la sessione scaduta (401) e l'abbonamento richiesto (402), e propaga
@@ -132,6 +158,11 @@ export const datiAPI = {
       }
       if (!res.ok) throw new Error(`Il server ha risposto con l'errore ${res.status}.`);
       const dati = await res.json();
+      /* Da qui in poi la scheda sa quale versione ha letto e con che permessi.
+         Un backend vecchio non manda nessuna delle due: restano a null, ed e'
+         quello che `backendConosceIRuoli` legge. */
+      versioneNota = dati.versione ?? null;
+      ruoloNoto = dati.ruolo ?? null;
       const vuoto =
         (dati.dipendenti?.length ?? 0) === 0 &&
         (dati.commesse?.length ?? 0) === 0 &&
@@ -164,7 +195,7 @@ export const datiAPI = {
     try {
       res = await fetch(`${API_BASE}/api/stato`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json", ...headerAuth() },
+        headers: { "Content-Type": "application/json", ...headerAuth(), ...headerVersione() },
         body: JSON.stringify(dati),
       });
     } catch (e) {
@@ -190,12 +221,107 @@ export const datiAPI = {
         motivo: "il server ha rifiutato: cancellerebbe troppe registrazioni",
       };
     }
+    /* LA SCHEDA HA LETTO I DATI PRIMA CHE UN ALTRO SCRIVESSE.
+       Come il 409 qui sopra, la cura è ricaricare — sul server i dati sono
+       tutti, ed è la copia nel browser a essere indietro. La differenza è che
+       qui non manca niente al server: c'è di più, ed è roba di qualcun altro. */
+    if (res.status === 412) {
+      const d = await res.json().catch(() => null);
+      return {
+        ok: false,
+        schedaVecchia: true,
+        versioneAttuale: d?.versioneAttuale ?? null,
+        motivo: "un'altra persona ha salvato mentre questa pagina era aperta",
+      };
+    }
     if (!res.ok) {
       const dettaglio = await res.json().catch(() => null);
       console.error("Salvataggio non riuscito:", res.status, dettaglio);
       return { ok: false, motivo: dettaglio?.errore || `errore ${res.status} del server` };
     }
+    const esito = await res.json().catch(() => null);
+    if (esito?.versione != null) versioneNota = esito.versione;
     return { ok: true };
+  },
+
+  /* --- LE ORE, DALLA ROTTA STRETTA ---------------------------------------
+     Scrive quattro campi e nient'altro. Chi ha il ruolo `ore` passa solo di
+     qui: il salvataggio completo manda l'anagrafica intera, lordi compresi.
+
+     ────────────────────────────────────────────────────────────────────────
+     IL RIPIEGO E' ASIMMETRICO, ED E' VOLUTO. NON SISTEMARLO.
+
+     Se il backend non conosce queste rotte — è quello di ieri, o è stato
+     riportato indietro dopo che gli utenti erano già stati creati — allora:
+
+       titolare  → si ripiega sul salvataggio completo. Va bene: quell'utente
+                   può scrivere tutto comunque, quindi il ripiego non gli
+                   concede niente che non avesse già.
+       ruolo ore → NIENTE RIPIEGO. Si dice che il salvataggio non è
+                   disponibile e si chiede di riprovare fra un minuto.
+
+     Sembrerà un'incoerenza da uniformare, e non lo è. Il salvataggio completo
+     accetta l'anagrafica intera: usarlo come ripiego per chi ha il ruolo `ore`
+     aprirebbe, per tutta la finestra in cui il server è vecchio, esattamente il
+     confine che queste rotte esistono per chiudere — quella persona potrebbe
+     riscrivere i lordi di tutti.
+
+     Una difesa che si spegne da sola quando il server è indietro non è una
+     difesa: è una porta di servizio con l'orario di apertura. Meglio un minuto
+     di attesa che un minuto di permessi in più.
+     ──────────────────────────────────────────────────────────────────────── */
+
+  /** Vero se le ore si possono scrivere adesso, con il ruolo che si ha. */
+  oreScrivibili() {
+    return backendConosceIRuoli() || ruoloNoto !== "ore";
+  },
+
+  async _chiamaOre(metodo, percorso, corpo) {
+    if (!this.oreScrivibili()) {
+      const e = new Error(
+        "Il salvataggio non è disponibile in questo momento: riprova fra un minuto."
+      );
+      e.serverIndietro = true;
+      throw e;
+    }
+    let res;
+    try {
+      res = await fetch(`${API_BASE}${percorso}`, {
+        method: metodo,
+        headers: { "Content-Type": "application/json", ...headerAuth() },
+        body: corpo ? JSON.stringify(corpo) : undefined,
+      });
+    } catch (e) {
+      throw new Error("Impossibile contattare il server: riprova.");
+    }
+    if (res.status === 401) { gestoreSessioneScaduta?.(); throw new Error("Sessione scaduta: accedi di nuovo."); }
+    if (res.status === 402) { gestoreAbbonamentoRichiesto?.(); throw new Error("Abbonamento richiesto."); }
+    if (!res.ok) {
+      const d = await res.json().catch(() => null);
+      throw new Error(d?.errore || "Impossibile salvare le ore.");
+    }
+    const d = await res.json();
+    /* Anche una riga di ore fa salire la versione: senza aggiornarla qui, il
+       salvataggio successivo di questa stessa scheda si prenderebbe un 412
+       causato da sé. */
+    if (d?.versione != null) versioneNota = d.versione;
+    return d;
+  },
+
+  aggiungiOre(riga) { return this._chiamaOre("POST", "/api/ore", riga); },
+  modificaOre(id, riga) { return this._chiamaOre("PATCH", `/api/ore/${encodeURIComponent(id)}`, riga); },
+  eliminaOre(id) { return this._chiamaOre("DELETE", `/api/ore/${encodeURIComponent(id)}`, null); },
+
+  /* --- GLI UTENTI DELL'AZIENDA (solo titolare) ---------------------------- */
+
+  async elencoUtenti() {
+    return chiamaMateriali("GET", "/api/utenti", null, "Impossibile leggere gli utenti.", (d) => d.utenti);
+  },
+  async creaUtente(dati) {
+    return chiamaMateriali("POST", "/api/utenti", dati, "Impossibile creare l'utente.", (d) => d.utente);
+  },
+  async eliminaUtente(id) {
+    return chiamaMateriali("DELETE", `/api/utenti/${encodeURIComponent(id)}`, null, "Impossibile togliere l'utente.", () => true);
   },
 
   /**

@@ -834,11 +834,15 @@ app.put("/api/stato", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) 
 
     /* Ogni salvataggio riuscito fa salire la versione: e' quello che rende
        vecchia la scheda di chiunque altro stesse guardando. */
-    await client.query(
+    const salita = await client.query(
       `INSERT INTO aziende (id, nome, versione_dati) VALUES ($1, $2, 1)
-       ON CONFLICT (id) DO UPDATE SET nome = $2, versione_dati = aziende.versione_dati + 1`,
+       ON CONFLICT (id) DO UPDATE SET nome = $2, versione_dati = aziende.versione_dati + 1
+       RETURNING versione_dati`,
       [aziendaId, azienda]
     );
+    /* La versione nuova torna a chi ha salvato, cosi' non deve indovinarla ne'
+       rileggere tutto per sapere cosa mandare in If-Match la volta dopo. */
+    const versioneNuova = String(salita.rows[0].versione_dati);
 
     /* Ordine di cancellazione che rispetta i vincoli di chiave esterna: le
        registrazioni per prime, così quando più sotto si cancellano i
@@ -1067,7 +1071,9 @@ app.put("/api/stato", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) 
     await client.query("COMMIT");
     // Solo ora che il database è a posto si tolgono i file rimasti orfani.
     await eliminaFileInBlocco(fileDaTogliere);
-    res.json({ ok: true });
+    /* La versione nuova torna a chi ha salvato: senza, dovrebbe indovinarla o
+       rileggere tutto per sapere cosa mandare in If-Match la volta dopo. */
+    res.json({ ok: true, versione: versioneNuova });
   } catch (e) {
     await client.query("ROLLBACK");
     console.error(e);
@@ -2296,8 +2302,13 @@ function rigaOreDalCorpo(corpo = {}) {
 
 /** Fa salire la versione dei dati: qualunque scrittura rende vecchia la scheda
  *  di chiunque altro stesse guardando, non solo quelle di PUT /api/stato. */
-const alzaLaVersione = (client, aziendaId) =>
-  client.query("UPDATE aziende SET versione_dati = versione_dati + 1 WHERE id = $1", [aziendaId]);
+async function alzaLaVersione(client, aziendaId) {
+  const r = await client.query(
+    "UPDATE aziende SET versione_dati = versione_dati + 1 WHERE id = $1 RETURNING versione_dati",
+    [aziendaId]
+  );
+  return String(r.rows[0]?.versione_dati ?? 0);
+}
 
 app.post("/api/ore", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) => {
   if (!scriveLeOre(req.ruolo)) return res.status(403).json({ errore: "Non puoi registrare ore." });
@@ -2325,9 +2336,9 @@ app.post("/api/ore", richiedeAuth, richiedeAbbonamentoAttivo, async (req, res) =
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
       [id, req.aziendaId, riga.dipendenteId, riga.commessaId, riga.data, riga.ore, req.utenteId]
     );
-    await alzaLaVersione(client, req.aziendaId);
+    const versione = await alzaLaVersione(client, req.aziendaId);
     await client.query("COMMIT");
-    res.status(201).json({ id, ...riga, mia: true });
+    res.status(201).json({ id, ...riga, mia: true, versione });
   } catch (e) {
     await client.query("ROLLBACK");
     console.error(e);
@@ -2362,9 +2373,9 @@ app.patch("/api/ore/:id", richiedeAuth, richiedeAbbonamentoAttivo, async (req, r
       await client.query("ROLLBACK");
       return res.status(404).json({ errore: "Riga non trovata, o non è tua." });
     }
-    await alzaLaVersione(client, req.aziendaId);
+    const versione = await alzaLaVersione(client, req.aziendaId);
     await client.query("COMMIT");
-    res.json({ id: req.params.id, ...riga, mia: true });
+    res.json({ id: req.params.id, ...riga, mia: true, versione });
   } catch (e) {
     await client.query("ROLLBACK");
     console.error(e);
@@ -2390,9 +2401,9 @@ app.delete("/api/ore/:id", richiedeAuth, richiedeAbbonamentoAttivo, async (req, 
       await client.query("ROLLBACK");
       return res.status(404).json({ errore: "Riga non trovata, o non è tua." });
     }
-    await alzaLaVersione(client, req.aziendaId);
+    const versione = await alzaLaVersione(client, req.aziendaId);
     await client.query("COMMIT");
-    res.json({ ok: true });
+    res.json({ ok: true, versione });
   } catch (e) {
     await client.query("ROLLBACK");
     console.error(e);
