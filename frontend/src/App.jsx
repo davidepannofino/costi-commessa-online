@@ -11,7 +11,7 @@ import {
   ReceiptText, Link2, CheckCircle, Check, HelpCircle, CircleDot, CalendarDays, TrendingUp, TrendingDown, Layers,
   Archive, ArchiveRestore,
 } from "lucide-react";
-import { datiAPI, suSessioneScaduta, suAbbonamentoRichiesto, API_BASE } from "./datiAPI.js";
+import { datiAPI, suSessioneScaduta, suAbbonamentoRichiesto, API_BASE, ruoloCorrente } from "./datiAPI.js";
 import { statoGruppo, assegnazioneIniziale, NON_IMPORTARE } from "./statoGruppoDDT.js";
 import { filtra, decidiConferma, muoviEvidenziato, CONFERMA, AMBIGUO, VUOTO } from "./sceltaFiltrata.js";
 import { descriviAbbonamento } from "./statoAbbonamento.js";
@@ -2399,6 +2399,10 @@ export default function App() {
   const [versioneAccesso, setVersioneAccesso] = useState(0); // incrementato per forzare un ricaricamento dati
   const [mostraBenvenuto, setMostraBenvenuto] = useState(false); // solo subito dopo una registrazione riuscita
   const [isAdmin, setIsAdmin] = useState(false); // deciso SEMPRE dal server (403 su /api/admin/* se non lo sei)
+  /* Il ruolo dentro l'azienda: "titolare" oppure "ore". Parte da quello che
+     dice il token, così le prime schermate non lampeggiano coi permessi
+     sbagliati mentre la risposta del server è per strada. */
+  const [ruolo, setRuolo] = useState(() => ruoloCorrente() ?? "titolare");
   const [caricamento, setCaricamento] = useState(true);
   const [dipendenti, setDipendenti] = useState([]);
   const [commesse, setCommesse] = useState([]);
@@ -2443,6 +2447,13 @@ export default function App() {
   const applicaStatoAbbonamento = useCallback((info) => {
     setAbbonamentoInfo(info);
     setIsAdmin(!!info?.admin);
+    /* IL RUOLO ARRIVA DAL SERVER, con ripiego sul token. Il ripiego non è una
+       comodità: se il backend è quello di ieri non manda `ruolo`, e senza il
+       token un utente `ore` risulterebbe titolare — cioè vedrebbe un menù che
+       porta a schermate senza numeri, e proverebbe a salvare da una strada che
+       il server gli rifiuta. Il token il ruolo ce l'ha dentro e sopravvive.
+       Vale come COSMESI: quello che si può davvero fare lo decide il server. */
+    setRuolo(info?.ruolo ?? ruoloCorrente() ?? "titolare");
   }, []);
 
   /**
@@ -2962,8 +2973,41 @@ export default function App() {
   }, [registrazioni]);
 
   /* --- azioni sui dati --- */
-  const aggiungiRegistrazione = (reg) => setRegistrazioni((r) => [...r, reg]);
-  const eliminaRegistrazione = (id) => setRegistrazioni((r) => r.filter((x) => x.id !== id));
+  /**
+   * LE TRE OPERAZIONI SULLE ORE, PER DUE STRADE DIVERSE.
+   *
+   * Il titolare cambia lo stato locale e lascia fare al salvataggio
+   * automatico, come ha sempre fatto: quella rotta manda l'anagrafica intera,
+   * ed è la sua.
+   *
+   * Chi ha il ruolo `ore` passa dalla rotta stretta, una riga alla volta. Non è
+   * un'ottimizzazione: il salvataggio completo accetta i lordi, quindi per
+   * quell'utente non è una strada più lenta, è una strada chiusa — il server
+   * risponde 403. Lo stato locale si aggiorna solo DOPO che il server ha
+   * confermato, perché qui non c'è un salvataggio automatico che rimedi: se la
+   * chiamata fallisce e la riga fosse già a schermo, resterebbe lì a dire una
+   * cosa che il database non sa.
+   */
+  const oreDalCantiere = () => ruolo === "ore";
+
+  const aggiungiRegistrazione = async (reg) => {
+    if (!oreDalCantiere()) return setRegistrazioni((r) => [...r, reg]);
+    try {
+      await datiAPI.aggiungiOre(reg);
+      setRegistrazioni((r) => [...r, { ...reg, mia: true }]);
+    } catch (e) {
+      notifica(e.message, "errore");
+    }
+  };
+  const eliminaRegistrazione = async (id) => {
+    if (!oreDalCantiere()) return setRegistrazioni((r) => r.filter((x) => x.id !== id));
+    try {
+      await datiAPI.eliminaOre(id);
+      setRegistrazioni((r) => r.filter((x) => x.id !== id));
+    } catch (e) {
+      notifica(e.message, "errore");
+    }
+  };
 
   /**
    * Eliminare una riga di ore resta immediato — chi ne cancella dieci di
@@ -2983,7 +3027,16 @@ export default function App() {
       },
     });
   }, [notifica]);
-  const aggiornaRegistrazione = (id, patch) => setRegistrazioni((r) => r.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+  const aggiornaRegistrazione = async (id, patch) => {
+    if (!oreDalCantiere()) return setRegistrazioni((r) => r.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+    const riga = registrazioni.find((x) => x.id === id);
+    try {
+      await datiAPI.modificaOre(id, { ...riga, ...patch });
+      setRegistrazioni((r) => r.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+    } catch (e) {
+      notifica(e.message, "errore");
+    }
+  };
 
   /**
    * Togliere un dipendente dagli elenchi.
@@ -3395,16 +3448,28 @@ export default function App() {
      solo che ora sono raggruppate sotto un'etichetta. Il contatore a destra
      non è un dato nuovo — è il numero di righe che la voce apre. Dove un
      numero solo non direbbe la verità (Fatture, Dati) non c'è contatore. */
-  const NAV = [
-    { id: "dashboard", nome: "Dashboard", icona: LayoutDashboard },
-    { id: "commesse", nome: "Commesse", icona: FolderKanban },
-    { id: "dipendenti", nome: "Dipendenti", icona: Users },
-    { id: "ddt", nome: "DDT", icona: Layers },
-    { id: "fatture", nome: "Fatture", icona: ReceiptText },
-    { id: "dati", nome: "Dati", icona: Database },
-    { id: "abbonamento", nome: "Abbonamento", icona: CreditCard },
-    ...(isAdmin ? [{ id: "admin", nome: "Amministrazione", icona: ShieldCheck }] : []),
-  ];
+  /* LE VOCI DI CHI INSERISCE LE ORE SONO UNA SOLA, e non è una restrizione
+     applicata a un menù pensato per altri: è tutto quello che quel ruolo può
+     fare. Dashboard, Commesse e Dipendenti mostrano costi, tariffe e lordi;
+     DDT e Fatture sono documenti di spesa; Abbonamento è del titolare.
+     Resta l'inserimento ore, che è il motivo per cui quell'utente esiste.
+
+     Questa è COSMESI e va detto: la difesa vera è che al ruolo `ore` il server
+     quei dati non li manda proprio. Chi si costruisse la voce di menù a mano
+     troverebbe schermate senza numeri e rotte che rispondono 403. */
+  const soloOre = ruolo === "ore";
+  const NAV = soloOre
+    ? [{ id: "dati", nome: "Ore", icona: Database }]
+    : [
+      { id: "dashboard", nome: "Dashboard", icona: LayoutDashboard },
+      { id: "commesse", nome: "Commesse", icona: FolderKanban },
+      { id: "dipendenti", nome: "Dipendenti", icona: Users },
+      { id: "ddt", nome: "DDT", icona: Layers },
+      { id: "fatture", nome: "Fatture", icona: ReceiptText },
+      { id: "dati", nome: "Dati", icona: Database },
+      { id: "abbonamento", nome: "Abbonamento", icona: CreditCard },
+      ...(isAdmin ? [{ id: "admin", nome: "Amministrazione", icona: ShieldCheck }] : []),
+    ];
   /* Il contatore della barra laterale risponde a "quanti siamo", non a "quante
      schede ci sono in archivio": conta gli attivi. */
   const CONTEGGI = { commesse: commesse.length, dipendenti: dipendentiAttivi.length };
@@ -3886,6 +3951,7 @@ export default function App() {
               eliminaCommessa={eliminaCommessa} rinominaCommessa={rinominaCommessa} caricaExcel={caricaExcel} backup={backupJSON} ripristina={ripristinaJSON}
               svuota={svuotaTutto} esempio={ricaricaEsempio} azienda={azienda} setAzienda={setAzienda} notifica={notifica}
               esportaTutto={() => esportaCompletoXLSX({ dipendenti, commesse, registrazioni }, dal, al)}
+              soloOre={soloOre}
             />
           )}
           {vista === "ddt" && (
@@ -6611,7 +6677,7 @@ function EditorDipendente({ iniziale, onSalva, onChiudi }) {
    - `dipendentiAttivi` per SCEGLIERE: il campo con cui si registrano ore nuove.
    Sono due domande diverse — "di chi erano queste ore" e "a chi le sto dando
    adesso" — e una lista sola risponderebbe male a una delle due. */
-function VistaDati({ dipendenti, dipendentiAttivi, commesse, registrazioni, setCommesse, aggiungi, eliminaReg, aggiornaReg, eliminaCommessa, rinominaCommessa, caricaExcel, backup, ripristina, svuota, esempio, azienda, setAzienda, notifica, esportaTutto }) {
+function VistaDati({ dipendenti, dipendentiAttivi, commesse, registrazioni, setCommesse, aggiungi, eliminaReg, aggiornaReg, eliminaCommessa, rinominaCommessa, caricaExcel, backup, ripristina, svuota, esempio, azienda, setAzienda, notifica, esportaTutto, soloOre = false }) {
   const [form, setForm] = useState({ dipendenteId: "", commessaId: "", data: oggiISO(), ore: "" });
   const [erroriForm, setErroriForm] = useState({});
   const [nuovaCom, setNuovaCom] = useState({ codice: "", descrizione: "" });
@@ -7004,7 +7070,12 @@ function VistaDati({ dipendenti, dipendentiAttivi, commesse, registrazioni, setC
           Anagrafica commesse e travasi di file: non sparite, ma messe a
           fianco e in tono minore, in una griglia asimmetrica. */}
       <div className="grid gap-7 items-start xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
-        <Sezione titolo="Commesse">
+        {/* ANAGRAFICA E TRAVASI SONO DEL TITOLARE. Creare o rinominare una
+            commessa, svuotare tutto, ripristinare un backup: sono le quattro
+            operazioni che cancellano in blocco piu' l'anagrafica. Chi inserisce
+            le ore non le vede — e non le potrebbe eseguire comunque, perche'
+            passano tutte dal salvataggio completo, che il server gli rifiuta. */}
+        {!soloOre && <Sezione titolo="Commesse">
           <div className="grid sm:grid-cols-[1fr_1fr] gap-4 items-end mb-5" onKeyDown={(e) => e.key === "Enter" && creaCommessa()}>
             <Campo etichetta="Codice"><input value={nuovaCom.codice} onChange={(e) => setNuovaCom((c) => ({ ...c, codice: e.target.value }))} placeholder="es. P25" className={inputCls + " f-mono"} /></Campo>
             <Campo etichetta="Descrizione"><input value={nuovaCom.descrizione} onChange={(e) => setNuovaCom((c) => ({ ...c, descrizione: e.target.value }))} placeholder="es. Villa Rossi" className={inputCls} /></Campo>
@@ -7066,9 +7137,9 @@ function VistaDati({ dipendenti, dipendentiAttivi, commesse, registrazioni, setC
               )}
             </div>
           )}
-        </Sezione>
+        </Sezione>}
 
-        <Sezione titolo="File e backup">
+        {!soloOre && <Sezione titolo="File e backup">
           <Campo etichetta="Nome azienda (per l'intestazione del PDF)">
             <input value={azienda} onChange={(e) => setAzienda(e.target.value)} placeholder="es. Rossi Costruzioni S.r.l." className={inputCls} />
           </Campo>
@@ -7097,7 +7168,7 @@ function VistaDati({ dipendenti, dipendentiAttivi, commesse, registrazioni, setC
               «Ricarica esempio» sostituisce i tuoi dati con quelli dimostrativi. Entrambe chiedono conferma.
             </p>
           </div>
-        </Sezione>
+        </Sezione>}
       </div>
 
       {modifica && (
