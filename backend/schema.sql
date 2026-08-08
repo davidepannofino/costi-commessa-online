@@ -71,6 +71,30 @@ ALTER TABLE aziende ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT UNIQUE;
 -- qualcuno. Meglio un giorno di prova in piu' che una porta chiusa in faccia.
 ALTER TABLE aziende ADD COLUMN IF NOT EXISTS prova_fino_al TIMESTAMPTZ;
 
+-- GLI AVVISI SULLA SCADENZA DELLA PROVA, E QUANDO SONO STATI CHIUSI.
+--
+-- Tre avvisi in tutto: sette giorni prima, l'ultimo giorno, a scadenza
+-- avvenuta. Dopo il terzo non parte piu' niente, mai: e' una promessa scritta
+-- dentro il terzo messaggio, e queste tre colonne sono cio' che la mantiene.
+--
+-- SONO DATE E NON BOOLEANI perche' una data dice anche QUANDO, e il giorno che
+-- qualcuno chiedesse "che cosa gli avete mandato e quando", la risposta e' qui
+-- invece che nei log di Resend.
+--
+-- "CHIUSO" E NON "MANDATO", ed e' una differenza voluta. Chi arriva all'ultimo
+-- giorno senza aver ricevuto il primo avviso riceve SOLO l'ultimo: il primo
+-- viene chiuso senza essere mandato, perche' annunciare una scadenza fra sette
+-- giorni a chi ne ha uno sarebbe falso, e mandarne due insieme sarebbe peggio.
+-- La colonna significa "questo avviso non partira' piu'".
+--
+-- Restano NULL-abili: NULL vuol dire "non ancora deciso". Il primo giro dopo
+-- questa migrazione le trova tutte NULL, e non manda niente a chi e' scaduto
+-- da tempo -- la difesa non e' uno script da eseguire una volta, e' la
+-- finestra di sette giorni dentro la condizione (src/avvisiProva.js).
+ALTER TABLE aziende ADD COLUMN IF NOT EXISTS avviso_prova_7g_il TIMESTAMPTZ;
+ALTER TABLE aziende ADD COLUMN IF NOT EXISTS avviso_prova_1g_il TIMESTAMPTZ;
+ALTER TABLE aziende ADD COLUMN IF NOT EXISTS avviso_prova_scaduta_il TIMESTAMPTZ;
+
 -- IL PIANO E COME SI FATTURA. 'cantiere' | 'impresa' | 'struttura', e
 -- 'mensile' | 'annuale'. I valori ammessi, i tetti e i prezzi stanno TUTTI in
 -- src/piani.js e non qui: un CHECK con la lista dei piani sarebbe una seconda

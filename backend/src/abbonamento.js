@@ -5,7 +5,13 @@ import { tolleranzaInCorso } from "./tolleranza.js";
 // Email con accesso completo e illimitato, senza prova né abbonamento.
 // Per aggiungerne altre in futuro basta inserire la stringa qui: nessun'altra
 // modifica alla logica è necessaria.
-const EMAIL_ESENTI = new Set([
+//
+// ESPORTATO PERCHÉ UNA PROVA CI GIRI SOPRA. Chi sta qui dentro non deve mai
+// ricevere un avviso di scadenza della prova: sarebbe falso e allarmerebbe per
+// niente. La prova in avvisiProva.test.js scorre QUESTO insieme, non una copia
+// scritta a mano — una copia direbbe che funziona anche il giorno che qui
+// dentro cambia qualcosa.
+export const EMAIL_ESENTI = new Set([
   "pannofino.work@gmail.com",
 ]);
 
@@ -37,7 +43,7 @@ const MS_GIORNO = 24 * 60 * 60 * 1000;
  * comportamento di prima invece di trattare la riga come scaduta — chiudere
  * fuori qualcuno per una colonna vuota sarebbe il modo peggiore di sbagliare.
  */
-function fineProvaDi({ prova_fino_al, creato_il }) {
+export function fineProvaDi({ prova_fino_al, creato_il }) {
   const scritta = prova_fino_al ? new Date(prova_fino_al).getTime() : NaN;
   if (!isNaN(scritta)) return scritta;
   return new Date(creato_il).getTime() + GIORNI_PROVA * MS_GIORNO;
@@ -144,6 +150,29 @@ export async function richiedeAccessoAiPropriDati(req, res, next) {
     console.error(e);
     res.status(500).json({ errore: "Impossibile verificare l'abbonamento." });
   }
+}
+
+/**
+ * Tutte le aziende, nella forma che serve per decidere gli avvisi di scadenza.
+ *
+ * Le stesse colonne che legge leggiRigaAccesso, più le tre date degli avvisi.
+ * Sta QUI e non in server.js perché l'elenco delle colonne deve stare accanto
+ * a `calcolaStatoAccesso`, che è l'unica cosa autorizzata a interpretarle: una
+ * colonna aggiunta là e dimenticata qui darebbe uno stato calcolato su dati
+ * parziali, e lo darebbe in silenzio.
+ *
+ * Si leggono tutte le righe senza filtrare per stato, di proposito: chi ha
+ * diritto a un avviso lo decide `avvisiProva.js` a partire dallo stato
+ * calcolato, non una WHERE che duplicherebbe quella regola in SQL.
+ */
+export async function aziendePerAvvisiProva() {
+  const ris = await pool.query(
+    `SELECT a.id, a.stato_abbonamento, a.prova_fino_al, a.tolleranza_fino_al,
+            a.avviso_prova_7g_il, a.avviso_prova_1g_il, a.avviso_prova_scaduta_il,
+            u.email, u.creato_il
+       FROM aziende a JOIN utenti u ON u.azienda_id = a.id`
+  );
+  return ris.rows;
 }
 
 export async function statoAbbonamentoDi(aziendaId) {

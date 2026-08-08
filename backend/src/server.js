@@ -1,18 +1,19 @@
 import express from "express";
 import cors from "cors";
 import "dotenv/config";
-import { randomUUID, randomBytes, createHash } from "node:crypto";
+import { randomUUID, randomBytes, createHash, timingSafeEqual } from "node:crypto";
 import { pool } from "./db.js";
 import { registroRichieste } from "./registroRichieste.js";
 import { cifraPassword, verificaPassword, generaToken, richiedeAuth } from "./auth.js";
-import { inviaEmailResetPassword } from "./email.js";
+import { inviaEmailResetPassword, inviaAvvisoProva } from "./email.js";
+import { avvisoDaMandare, SETTE, ULTIMO, SCADUTA } from "./avvisiProva.js";
 import { stripe, prezzoStripeDi } from "./stripe.js";
 import { chiaveListinoDellaSottoscrizione, letturaSottoscrizione, letturaFattura } from "./sottoscrizioneStripe.js";
 import { decidiTolleranza } from "./tolleranza.js";
 import { troppeCancellazioni } from "./sogliaCancellazioni.js";
 import { confrontaRegistrazioni } from "./confrontoRegistrazioni.js";
 import { pianoDi, fatturazioneDi, daChiaveListino, elencoPiani, PIANI, ORDINE } from "./piani.js";
-import { richiedeAbbonamentoAttivo, richiedeAccessoAiPropriDati, statoAbbonamentoDi, capienzaDi, GIORNI_PROVA } from "./abbonamento.js";
+import { richiedeAbbonamentoAttivo, richiedeAccessoAiPropriDati, statoAbbonamentoDi, capienzaDi, GIORNI_PROVA, calcolaStatoAccesso, fineProvaDi, aziendePerAvvisiProva } from "./abbonamento.js";
 import { adminRouter, richiedeAdmin, eAdmin } from "./admin.js";
 import {
   salvaFile, leggiFile, eliminaFile, eliminaFileInBlocco,
@@ -35,6 +36,11 @@ app.use(cors());
    express.json()), e le rotte che rispondono senza arrivare in fondo alla
    catena. Cosa scrive e cosa non scriverà mai è spiegato in registroRichieste.js. */
 app.use(registroRichieste());
+
+/* La RETE degli avvisi di scadenza. Sta qui perché deve vedere qualunque
+   richiesta, anche quelle di chi non è ancora entrato: il giro che fa è
+   globale e non riguarda chi ha bussato. Spiegata sotto, a `reteAvvisiProva`. */
+app.use(reteAvvisiProva);
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const FRONTEND_URL = process.env.FRONTEND_URL || "https://costi-commessa-frontend.onrender.com";
@@ -2136,6 +2142,176 @@ app.get("/api/fatture/:id/file", richiedeAuth, richiedeAbbonamentoAttivo, async 
     res.status(500).json({ errore: "Impossibile scaricare la fattura." });
   }
 });
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   GLI AVVISI SULLA SCADENZA DELLA PROVA.
+
+   Tre email in tutto, e poi mai più: quali e a chi lo decide `avvisiProva.js`,
+   che è puro. Qui c'è solo il lavoro sporco — leggere, prenotare, spedire.
+
+   DUE INNESCHI INDIPENDENTI, PERCHÉ NESSUNO DEI DUE BASTA DA SOLO.
+
+     1. GitHub Actions, una volta al giorno, che chiama la rotta qui sotto. È
+        l'innesco principale, e quando fallisce lo dice: GitHub manda l'email
+        al proprietario del repository. Un lavoro schedulato che smette di
+        funzionare in silenzio è indistinguibile da uno che funziona.
+
+     2. La rete: un giro fatto in coda a una richiesta qualunque, se ne è
+        passato abbastanza dall'ultimo. Copre il caso in cui Actions slitti o
+        venga disattivato. Non basta da sola perché dipende da qualcuno che
+        apra l'applicazione, e in una settimana di ferie non apre nessuno.
+
+   CHE GIRINO TUTTI E DUE INSIEME NON FA DANNO, ed è la ragione per cui la
+   prenotazione avviene PRIMA dell'invio, con un UPDATE condizionato: chi si
+   prende la riga manda, chi arriva secondo trova la colonna già scritta e sta
+   zitto. Vale anche fra processi diversi, perché l'arbitro è il database.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+const COLONNA_AVVISO = {
+  [SETTE]: "avviso_prova_7g_il",
+  [ULTIMO]: "avviso_prova_1g_il",
+  [SCADUTA]: "avviso_prova_scaduta_il",
+};
+
+/**
+ * Un giro completo: chi deve ricevere qualcosa, lo riceve. Al massimo un
+ * messaggio per azienda per giro.
+ *
+ * @returns { considerate, mandati, falliti, perTipo } — da mostrare a chi ha
+ *          chiamato, così una corsa a vuoto si distingue da una andata male.
+ */
+async function mandaAvvisiProva() {
+  const righe = await aziendePerAvvisiProva();
+  const esito = { considerate: righe.length, mandati: 0, falliti: 0, perTipo: {} };
+
+  for (const r of righe) {
+    /* Lo stato lo calcola la funzione VERA, quella che decide anche se sei
+       bloccato: così l'email non può mai dire una cosa diversa da quello che
+       si legge entrando. */
+    const stato = calcolaStatoAccesso(r);
+    const decisione = avvisoDaMandare({
+      stato: stato.stato,
+      giorniProvaRestanti: stato.giorniProvaRestanti,
+      fineProva: fineProvaDi(r),
+      avvisi: {
+        sette: r.avviso_prova_7g_il,
+        ultimo: r.avviso_prova_1g_il,
+        scaduta: r.avviso_prova_scaduta_il,
+      },
+    });
+    if (!decisione) continue;
+
+    /* LA PRENOTAZIONE. I nomi di colonna vengono da COLONNA_AVVISO, che è una
+       tabella fissa scritta qui sopra: niente arriva da fuori, e l'id
+       dell'azienda resta un parametro.
+       Gli avvisi "chiusi di conseguenza" si scrivono con COALESCE, così una
+       data già presente non viene riscritta e resta quella vera. */
+    const principale = COLONNA_AVVISO[decisione.tipo];
+    const conseguenti = decisione.chiude
+      .filter((t) => t !== decisione.tipo)
+      .map((t) => `${COLONNA_AVVISO[t]} = COALESCE(${COLONNA_AVVISO[t]}, now())`);
+    const preso = await pool.query(
+      `UPDATE aziende SET ${[`${principale} = now()`, ...conseguenti].join(", ")}
+        WHERE id = $1 AND ${principale} IS NULL
+       RETURNING id`,
+      [r.id]
+    );
+    if (preso.rowCount === 0) continue; // l'ha già preso l'altro innesco
+
+    try {
+      await inviaAvvisoProva(r.email, decisione.tipo, decisione.fineProva, `${FRONTEND_URL}/`);
+      esito.mandati++;
+      esito.perTipo[decisione.tipo] = (esito.perTipo[decisione.tipo] ?? 0) + 1;
+    } catch (e) {
+      /* L'invio è fallito: si RIAPRE l'avviso, così il giro dopo riprova.
+         Gli avvisi chiusi di conseguenza restano chiusi, ed è giusto — non
+         devono partire comunque vada questo.
+         Rumoroso apposta: un'email persa in silenzio è il guasto peggiore di
+         questa funzione, perché somiglia in tutto al funzionamento. */
+      await pool.query(`UPDATE aziende SET ${principale} = NULL WHERE id = $1`, [r.id]);
+      esito.falliti++;
+      console.error(
+        `AVVISO PROVA NON MANDATO a ${r.email} (${decisione.tipo}): ${e.message}. ` +
+        "L'avviso è stato riaperto: il prossimo giro riprova."
+      );
+    }
+  }
+  return esito;
+}
+
+/**
+ * Il segreto della rotta di manutenzione.
+ *
+ * SENZA SEGRETO CONFIGURATO LA ROTTA È CHIUSA, non aperta. È la direzione
+ * sicura: una variabile d'ambiente dimenticata su un ambiente nuovo lascia
+ * l'avviso non mandato, non la rotta esposta a chiunque.
+ *
+ * Il confronto è a tempo costante perché confrontare due stringhe con === si
+ * ferma al primo carattere diverso, e quel tempo si misura.
+ */
+function segretoManutenzioneValido(dato) {
+  const atteso = process.env.SEGRETO_MANUTENZIONE || "";
+  if (!atteso) return false;
+  const a = Buffer.from(String(dato ?? ""), "utf8");
+  const b = Buffer.from(atteso, "utf8");
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
+
+/**
+ * La rotta che GitHub Actions chiama una volta al giorno.
+ *
+ * CHIAMARLA DUE VOLTE DI FILA NON FA NIENTE la seconda volta, ed è voluto: si
+ * può provare a mano quando si vuole, senza aspettare la scadenza di qualcuno
+ * e senza il timore di mandare qualcosa due volte. Una rotta che si può
+ * esercitare è una rotta di cui si sa se funziona PRIMA che serva davvero.
+ */
+app.post("/api/manutenzione/avvisi-prova", async (req, res) => {
+  if (!segretoManutenzioneValido(req.get("x-segreto-manutenzione"))) {
+    return res.status(401).json({ errore: "Segreto mancante o errato." });
+  }
+  try {
+    const esito = await mandaAvvisiProva();
+    console.log(
+      `Avvisi prova: ${esito.considerate} aziende guardate, ${esito.mandati} mandati, ${esito.falliti} falliti.`
+    );
+    res.json({ ok: true, ...esito });
+  } catch (e) {
+    console.error("Giro degli avvisi di prova fallito:", e);
+    res.status(500).json({ errore: "Giro degli avvisi fallito." });
+  }
+});
+
+/**
+ * LA RETE. Un giro in coda a una richiesta qualunque, al massimo ogni sei ore.
+ *
+ * `next()` è la PRIMA cosa: la richiesta di chi sta lavorando non aspetta
+ * niente e non si accorge di questo. Se il giro fallisce, fallisce da solo —
+ * un avviso non mandato non deve mai diventare una pagina che non si apre.
+ *
+ * La tregua sta in memoria e non nel database di proposito: costa zero, e su
+ * Render il processo si riavvia spesso, quindi al risveglio il primo che bussa
+ * fa scattare un giro. È esattamente il comportamento che serve.
+ */
+const TREGUA_AVVISI_MS = 6 * 60 * 60 * 1000;
+let ultimoGiroAvvisi = 0;
+let giroAvvisiInCorso = false;
+
+function reteAvvisiProva(req, res, next) {
+  next();
+  const adesso = Date.now();
+  if (giroAvvisiInCorso || adesso - ultimoGiroAvvisi < TREGUA_AVVISI_MS) return;
+  ultimoGiroAvvisi = adesso;
+  giroAvvisiInCorso = true;
+  mandaAvvisiProva()
+    .then((e) => {
+      if (e.mandati || e.falliti) {
+        console.log(`Avvisi prova (rete): ${e.mandati} mandati, ${e.falliti} falliti.`);
+      }
+    })
+    .catch((e) => console.error("Giro degli avvisi di prova (rete) fallito:", e.message))
+    .finally(() => { giroAvvisiInCorso = false; });
+}
 
 const port = process.env.PORT || 3001;
 app.listen(port, async () => {

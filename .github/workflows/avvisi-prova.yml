@@ -1,0 +1,68 @@
+# Bussa una volta al giorno alla rotta che manda gli avvisi di scadenza della
+# prova. NON decide niente: la logica sta tutta nel backend, in
+# backend/src/avvisiProva.js, e qui si chiama e basta.
+#
+# PERCHE' GITHUB ACTIONS E NON UN SERVIZIO DI PING ESTERNO. Per due cose che
+# valgono piu' della comodita':
+#   - la schedulazione sta NEL REPOSITORY, versionata e leggibile come il
+#     codice. Un lavoro schedulato dimenticato dentro il pannello di un
+#     servizio terzo e' un lavoro che non si sa dove andare a guardare quando
+#     smette di funzionare;
+#   - QUANDO FALLISCE LO DICE: GitHub manda l'email al proprietario del
+#     repository. E' il monitoraggio che altrimenti bisognerebbe costruirsi, ed
+#     e' quello che distingue un avviso non mandato dal silenzio.
+#
+# DUE COSE DA SAPERE, TUTTE E DUE VOLUTE E NON AGGIRABILI DA QUI:
+#
+#   1. Gli orari slittano. GitHub ritarda le corse schedulate quando ha
+#      traffico, anche di parecchi minuti. Non e' un problema: gli avvisi sono
+#      scritti per non dire mai quanti giorni mancano, ma la DATA, che resta
+#      vera comunque. Il ritardo sposta l'invio, non lo rende falso.
+#
+#   2. Dopo 60 giorni senza attivita' sul repository, GitHub disattiva le
+#      corse schedulate. Su un repository su cui si lavora non succede, ma se
+#      un giorno il progetto si fermasse, questo si fermerebbe con lui. E'
+#      anche il motivo per cui nel backend c'e' una rete che gira in coda alle
+#      richieste vere: vedi `reteAvvisiProva` in server.js.
+
+name: Avvisi scadenza prova
+
+on:
+  schedule:
+    # 07:00 UTC, cioe' le 9 in Italia d'estate e le 8 d'inverno.
+    - cron: "0 7 * * *"
+  # Per poterlo lanciare a mano dalla scheda Actions: la rotta e' scritta per
+  # non fare niente la seconda volta, quindi si puo' premere quando si vuole.
+  workflow_dispatch:
+
+jobs:
+  avvisi:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chiama la rotta degli avvisi
+        env:
+          URL_BACKEND: ${{ secrets.URL_BACKEND }}
+          SEGRETO: ${{ secrets.SEGRETO_MANUTENZIONE }}
+        run: |
+          set -euo pipefail
+          if [ -z "${URL_BACKEND:-}" ] || [ -z "${SEGRETO:-}" ]; then
+            echo "Mancano i segreti URL_BACKEND o SEGRETO_MANUTENZIONE nelle impostazioni del repository." >&2
+            exit 1
+          fi
+          # --max-time largo e tre tentativi: il backend sta sul piano gratuito
+          # di Render e si addormenta, quindi la prima chiamata dopo ore di
+          # silenzio paga il risveglio (30-60 secondi). Un timeout stretto qui
+          # farebbe fallire il lavoro ogni notte per un motivo che non e' un
+          # guasto.
+          #
+          # --fail-with-body fa uscire curl con errore su una risposta 4xx o
+          # 5xx, stampando comunque il corpo. Senza, un 401 per un segreto
+          # sbagliato passerebbe VERDE: il lavoro direbbe di aver funzionato e
+          # non sarebbe partita nessuna email.
+          curl --silent --show-error --fail-with-body \
+               --request POST \
+               --header "x-segreto-manutenzione: ${SEGRETO}" \
+               --max-time 180 \
+               --retry 3 --retry-delay 30 --retry-all-errors \
+               "${URL_BACKEND}/api/manutenzione/avvisi-prova"
+          echo
