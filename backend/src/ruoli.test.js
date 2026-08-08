@@ -16,7 +16,7 @@
 import {
   TITOLARE, ORE, RUOLI, ruoloValido,
   vedeISoldi, scriveTutto, scriveLeOre, gestisceGliUtenti, toccaLeRigheAltrui,
-  CAMPI_DI_UNA_RIGA_ORE, stampoStato,
+  CAMPI_DI_UNA_RIGA_ORE, stampoStato, trattenuto,
 } from "./ruoli.js";
 
 let passati = 0, falliti = 0;
@@ -131,6 +131,48 @@ prova("un ruolo sconosciuto viene trattato come il piu' ristretto", () => {
   const r = stampoStato("capo", 7, datiCompleti);
   vero(!JSON.stringify(r).includes(String(LORDO_SPIA)), "nessun lordo");
   vero(r.materiali === undefined, "nessun materiale");
+});
+
+/* ================================================================== */
+
+console.log("\n2-bis. «TRATTENUTO» E «MANCANTE» DEVONO RESTARE DUE COSE DIVERSE");
+
+prova("al ruolo ore la risposta DICHIARA cosa e' stato tolto", () => {
+  /* Senza questa dichiarazione, un campo assente e un campo trattenuto
+     arrivano identici. Il 9 agosto 2026 buchiNeiDati ha letto il secondo come
+     il primo e ha scritto sullo schermo di un capocantiere «mancano i lordi di
+     14 persone: le loro 2.679,5 ore valgono 0 €». Falso. */
+  const r = stampoStato(ORE, 7, datiCompleti);
+  vero(Array.isArray(r.trattenuti), "l'elenco deve esserci, non essere sottinteso");
+  vero(r.trattenuti.includes("lordi"), `atteso «lordi» dentro ${JSON.stringify(r.trattenuti)}`);
+  uguale(trattenuto(r, "lordi"), true, "e la domanda deve avere risposta si'");
+});
+
+prova("L'ALTRO VERSO: al titolare NON e' stato trattenuto niente", () => {
+  /* E' la meta' della verita' che si perde se si guarda solo il caso rotto.
+     Il rimedio spegne la segnalazione quando i lordi sono trattenuti: se
+     spegnesse anche quando mancano DAVVERO, avremmo tolto una funzione buona
+     — la voce 8 della lista, pubblicata il 6 agosto — per aggiustarne una
+     rotta. Qui si pretende che il titolare resti nel caso in cui la
+     segnalazione DEVE ancora uscire. */
+  const r = stampoStato(TITOLARE, 1, datiCompleti);
+  uguale(r.trattenuti, [], "al titolare non si toglie niente");
+  uguale(trattenuto(r, "lordi"), false, "quindi un lordo assente e' un lordo che MANCA");
+  vero(r.dipendenti[0].lordoMensile != null, "e i lordi arrivano davvero");
+});
+
+prova("un modulo che non sa niente di ruoli puo' distinguere i due casi", () => {
+  /* La prova che il segnale serve a qualcosa: la stessa domanda, sulle due
+     risposte, da' due risposte diverse — e chi la fa non ha bisogno di sapere
+     che esistono i ruoli. */
+  const perOre = stampoStato(ORE, 7, datiCompleti);
+  const perTitolare = stampoStato(TITOLARE, 1, datiCompleti);
+  vero(trattenuto(perOre, "lordi") !== trattenuto(perTitolare, "lordi"),
+    "i due casi devono essere distinguibili senza conoscere il ruolo");
+  for (const nome of ["materiali", "allegati", "costi"]) {
+    uguale(trattenuto(perOre, nome), true, `${nome} trattenuto al ruolo ore`);
+    uguale(trattenuto(perTitolare, nome), false, `${nome} non trattenuto al titolare`);
+  }
 });
 
 /* ================================================================== */
