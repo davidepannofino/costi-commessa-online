@@ -161,6 +161,36 @@ là a rimetterlo a schermo lo legge prima.
 
 ---
 
+## 6. I campi di DDT e Fatture non sono mai stati guardati da telefono
+
+**Cosa manca.** L'esame a 390px dell'8 agosto 2026 ha coperto Dashboard,
+Commesse, dettaglio commessa, Dipendenti, Dati e Abbonamento — sette schermate,
+misurate una per una. **DDT e Fatture no.** In quelle due, allo stato iniziale,
+non esiste nessun campo: sono due zone di caricamento. `CampiDDT` (numero, data,
+fornitore) e le righe di assegnazione della fattura compaiono **solo dopo aver
+caricato un file**.
+
+Resta quindi non verificato: se quei campi finiscano sotto la barra di
+navigazione con la tastiera alzata, se le righe di una fattura stiano in 390px,
+e se i comandi per assegnare un gruppo DDT siano abbastanza grandi da toccare.
+
+**Chi ne soffre.** Chi carica una fattura o una scansione dal telefono — che è
+poi lo scenario naturale: il DDT arriva in cantiere, si fotografa lì.
+
+**Perché non è stato fatto.** Per vederli bisogna caricare un file, e caricare
+**scrive**: crea una riga in `scansioni` o in `fatture`, e per un PDF consuma
+quota Document AI. La sessione di collaudo era in sola lettura sul database di
+produzione. La via d'uscita ci sarebbe — lo schema Neon separato, vedi la
+memoria di progetto — ma il 9 agosto 2026 si è deciso di **non farla**: il
+rapporto fra il costo del giro e quello che ci si aspetta di trovare non la
+giustificava.
+
+Da riprendere quando si toccherà una di quelle due schermate per altri motivi:
+a quel punto il collaudo end-to-end serve comunque, e questo controllo viene
+gratis insieme.
+
+---
+
 ## Fatte
 
 - **Cancellare un dipendente distruggeva le sue ore** (6 agosto 2026). Chi ha
